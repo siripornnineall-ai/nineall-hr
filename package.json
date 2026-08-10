@@ -1,0 +1,24 @@
+{
+  "name": "nineall-hr",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm run dev --workspace=apps/admin-web",
+    "dev:mobile": "npm run start --workspace=apps/employee-mobile",
+    "dev:pwa": "npm run dev --workspace=apps/employee-pwa",
+    "build:admin": "npm run build --workspace=apps/admin-web",
+    "build:pwa": "npm run build --workspace=apps/employee-pwa",
+    "test": "npm run test --workspaces --if-present",
+    "seed:accounts": "node --env-file=apps/admin-web/.env.local scripts/seed-demo-accounts.mjs",
+    "test:payroll": "npm run test --workspace=packages/payroll-engine",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

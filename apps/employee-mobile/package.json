@@ -1,0 +1,48 @@
+{
+  "name": "employee-mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@expo-google-fonts/noto-sans": "^0.4.2",
+    "@expo-google-fonts/noto-sans-lao": "^0.4.2",
+    "@expo-google-fonts/noto-sans-myanmar": "^0.4.2",
+    "@expo-google-fonts/noto-sans-thai": "^0.4.2",
+    "@expo/vector-icons": "^15.1.1",
+    "@nineall-hr/design-tokens": "*",
+    "@nineall-hr/shared-types": "*",
+    "@nineall-hr/shared-validation": "*",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.111.0",
+    "date-fns": "^4.4.0",
+    "expo": "~57.0.9",
+    "expo-camera": "~57.0.3",
+    "expo-constants": "~57.0.8",
+    "expo-font": "~57.0.1",
+    "expo-image-picker": "~57.0.7",
+    "expo-linking": "~57.0.4",
+    "expo-location": "~57.0.7",
+    "expo-notifications": "~57.0.8",
+    "expo-router": "~57.0.9",
+    "expo-secure-store": "~57.0.1",
+    "expo-splash-screen": "^57.0.5",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-url-polyfill": "^4.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "private": true
+}

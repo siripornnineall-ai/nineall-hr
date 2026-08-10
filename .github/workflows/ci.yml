@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test-lint:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Unit tests (payroll-engine + shared-validation)
+        run: npm run test
+
+      - name: Typecheck admin-web
+        run: npm run typecheck --workspace=apps/admin-web
+
+      - name: Lint admin-web
+        run: npm run lint --workspace=apps/admin-web
+
+      - name: Build admin-web
+        run: npm run build:admin
+
+      - name: Typecheck employee-mobile
+        run: npm run typecheck --workspace=apps/employee-mobile

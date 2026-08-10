@@ -1,0 +1,87 @@
+import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { Topbar } from "@/components/Topbar";
+import { Badge } from "@/components/Badge";
+
+export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser();
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { data: employee } = await supabase
+    .from("employees")
+    .select(
+      "id, employee_code, first_name, last_name, nickname, phone, personal_email, hire_date, employment_type, employment_status, photo_url, departments(name), job_positions(title), teams(name)"
+    )
+    .eq("org_id", user.orgId)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!employee) notFound();
+
+  const canSeeSalary = ["super_admin", "hr"].includes(user.role) || user.employeeId === employee.id;
+  let compensation: { base_amount: number; effective_date: string } | null = null;
+  if (canSeeSalary) {
+    const { data } = await supabase
+      .from("employee_compensation")
+      .select("base_amount, effective_date")
+      .eq("employee_id", employee.id)
+      .order("effective_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    compensation = data;
+  }
+
+  const department = (employee.departments as unknown as { name: string } | null)?.name;
+  const position = (employee.job_positions as unknown as { title: string } | null)?.title;
+  const team = (employee.teams as unknown as { name: string } | null)?.name;
+
+  return (
+    <>
+      <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} />
+      <div className="grid grid-cols-1 gap-6 p-4 md:grid-cols-3 md:p-8">
+        <div className="rounded-xl border border-outline-variant bg-white p-6 text-center shadow-sm">
+          <div className="mx-auto mb-4 h-24 w-24 overflow-hidden rounded-full bg-surface-container">
+            {employee.photo_url && <img src={employee.photo_url} alt="" className="h-full w-full object-cover" />}
+          </div>
+          <h3 className="text-lg font-bold">
+            {employee.first_name} {employee.last_name}
+          </h3>
+          {employee.nickname && <p className="text-sm text-on-surface-variant">({employee.nickname})</p>}
+          <p className="mt-1 text-sm text-on-surface-variant">{position ?? "-"}</p>
+          <div className="mt-3">
+            <Badge tone={employee.employment_status === "active" ? "success" : "neutral"}>{employee.employment_status}</Badge>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-xl border border-outline-variant bg-white p-6 shadow-sm md:col-span-2">
+          <h4 className="font-bold">ข้อมูลการทำงาน</h4>
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <Info label="แผนก" value={department ?? "-"} />
+            <Info label="ทีม" value={team ?? "-"} />
+            <Info label="ประเภทการจ้าง" value={employee.employment_type} />
+            <Info label="วันที่เริ่มงาน" value={new Date(employee.hire_date).toLocaleDateString("th-TH")} />
+            <Info label="เบอร์โทร" value={employee.phone ?? "-"} />
+            <Info label="อีเมล" value={employee.personal_email ?? "-"} />
+            {canSeeSalary && (
+              <Info
+                label="เงินเดือน/อัตราค่าจ้าง"
+                value={compensation ? `${compensation.base_amount.toLocaleString("th-TH")} บาท` : "-"}
+              />
+            )}
+          </dl>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-on-surface-variant">{label}</dt>
+      <dd className="font-semibold">{value}</dd>
+    </div>
+  );
+}

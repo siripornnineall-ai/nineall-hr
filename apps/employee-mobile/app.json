@@ -1,0 +1,79 @@
+{
+  "expo": {
+    "name": "Nineall HR",
+    "slug": "nineall-hr",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "nineallhr",
+    "primaryColor": "#C54B38",
+    "backgroundColor": "#F8F7F8",
+    "ios": {
+      "bundleIdentifier": "com.nineallgroup.hr",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "แอปใช้กล้องเพื่อถ่ายภาพเซลฟียืนยันตัวตนตอนลงเวลาเข้า-ออกงาน (Used to take a selfie to verify your identity when clocking in/out).",
+        "NSLocationWhenInUseUsageDescription": "แอปใช้ตำแหน่ง GPS เฉพาะตอนลงเวลาเข้า-ออกงาน เพื่อยืนยันว่าคุณอยู่ในพื้นที่ทำงาน (Location is used only while clocking in/out to confirm you are at a work location).",
+        "NSPhotoLibraryUsageDescription": "แอปขอเข้าถึงคลังภาพเพื่อแนบเอกสารประกอบการลาหรือคำขอ OT (Used to attach documents to leave/OT requests)."
+      }
+    },
+    "android": {
+      "package": "com.nineallgroup.hr",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "READ_MEDIA_IMAGES", "POST_NOTIFICATIONS"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F7F8"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "แอปใช้กล้องเพื่อถ่ายภาพเซลฟียืนยันตัวตนตอนลงเวลาเข้า-ออกงาน"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "แอปใช้ตำแหน่ง GPS เฉพาะตอนลงเวลาเข้า-ออกงาน เพื่อยืนยันว่าคุณอยู่ในพื้นที่ทำงาน"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "แอปขอเข้าถึงคลังภาพเพื่อแนบเอกสารประกอบการลาหรือคำขอ OT"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#C54B38"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {}
+    }
+  }
+}

@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+:root {
+  --color-surface: #f8f7f8;
+  --color-surface-cream: #f8f7f8;
+  --color-surface-dim: #dadadb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f3f4;
+  --color-surface-container: #eeedee;
+  --color-surface-container-high: #e9e8e9;
+  --color-surface-container-highest: #e3e2e3;
+  --color-on-surface: #263638;
+  --color-on-surface-variant: #6f7778;
+  --color-outline: #e5e1e6;
+  --color-outline-variant: #e5e1e6;
+
+  --color-primary: #c54b38;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #a83e30;
+  --color-on-primary-container: #fff9f8;
+
+  --color-secondary: #003942;
+  --color-tertiary: #106752;
+  --color-tertiary-container: #33806a;
+
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --color-sidebar: #003942;
+  --color-row-hover: #f8f2f1;
+  --color-row-zebra: #f9f9f9;
+
+  --color-status-success: #2f7d67;
+  --color-status-success-bg: #e2f1ec;
+  --color-status-warning: #d89b3c;
+  --color-status-warning-bg: #fbf0df;
+  --color-status-danger: #b33a3a;
+  --color-status-danger-bg: #f8e5e5;
+  --color-status-info: #3f7ca6;
+  --color-status-info-bg: #e5eff5;
+  --color-status-holiday: #80639b;
+  --color-status-holiday-bg: #f0ebf4;
+  --color-status-inactive: #8a8a8a;
+  --color-status-inactive-bg: #ededed;
+
+  --shadow-card: 0px 4px 20px rgba(0, 0, 0, 0.05);
+  --shadow-overlay: 0px 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+@theme inline {
+  --color-surface: var(--color-surface);
+  --color-surface-cream: var(--color-surface-cream);
+  --color-surface-dim: var(--color-surface-dim);
+  --color-surface-container-lowest: var(--color-surface-container-lowest);
+  --color-surface-container-low: var(--color-surface-container-low);
+  --color-surface-container: var(--color-surface-container);
+  --color-surface-container-high: var(--color-surface-container-high);
+  --color-surface-container-highest: var(--color-surface-container-highest);
+  --color-on-surface: var(--color-on-surface);
+  --color-on-surface-variant: var(--color-on-surface-variant);
+  --color-outline: var(--color-outline);
+  --color-outline-variant: var(--color-outline-variant);
+  --color-primary: var(--color-primary);
+  --color-on-primary: var(--color-on-primary);
+  --color-primary-container: var(--color-primary-container);
+  --color-on-primary-container: var(--color-on-primary-container);
+  --color-secondary: var(--color-secondary);
+  --color-tertiary: var(--color-tertiary);
+  --color-tertiary-container: var(--color-tertiary-container);
+  --color-error: var(--color-error);
+  --color-error-container: var(--color-error-container);
+  --color-on-error-container: var(--color-on-error-container);
+  --color-sidebar: var(--color-sidebar);
+  --color-row-hover: var(--color-row-hover);
+  --color-row-zebra: var(--color-row-zebra);
+  --color-status-success: var(--color-status-success);
+  --color-status-success-bg: var(--color-status-success-bg);
+  --color-status-warning: var(--color-status-warning);
+  --color-status-warning-bg: var(--color-status-warning-bg);
+  --color-status-danger: var(--color-status-danger);
+  --color-status-danger-bg: var(--color-status-danger-bg);
+  --color-status-info: var(--color-status-info);
+  --color-status-info-bg: var(--color-status-info-bg);
+  --color-status-holiday: var(--color-status-holiday);
+  --color-status-holiday-bg: var(--color-status-holiday-bg);
+  --color-status-inactive: var(--color-status-inactive);
+  --color-status-inactive-bg: var(--color-status-inactive-bg);
+  --font-sans: var(--font-noto-thai), var(--font-noto-sans), var(--font-noto-lao), var(--font-noto-myanmar), sans-serif;
+  --spacing-gutter: 24px;
+  --spacing-container-mobile: 16px;
+  --spacing-container-desktop: 32px;
+  --spacing-section-gap: 48px;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+* {
+  border-color: var(--color-outline-variant);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-container-highest);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  font-size: 22px;
+  line-height: 1;
+}
