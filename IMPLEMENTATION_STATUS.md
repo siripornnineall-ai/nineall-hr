@@ -5,11 +5,20 @@ a module is finished or a decision changes — do not silently let it go
 stale, and do not declare something "done" here if its tests/build aren't
 actually green.
 
-**Session 3 (2026-08-13):** Both apps deployed live to Vercel
-(`nineall-hr-admin-web.vercel.app`, click-tested and working end to end —
-login, dashboard, real data). Code pushed to GitHub
-(`siripornnineall-ai/nineall-hr`, private) via a fresh git init since the
-repo had none before.
+**Session 3 (2026-08-13):** Both apps deployed live to Vercel and
+click-tested end to end (login, dashboard, real data, zero console errors
+on both):
+- Admin web: `nineall-hr-admin-web.vercel.app`
+- Employee PWA: `nineall-hr-employee-pwa.vercel.app` (manifest.webmanifest
+  verified serving correctly — installable)
+
+Code pushed to GitHub (`siripornnineall-ai/nineall-hr`, private) via a
+fresh git init since the repo had none before; both Vercel projects are
+connected to it, so `git push` to `main` auto-deploys both from now on.
+`SUPABASE_SERVICE_ROLE_KEY` is still unset in both — not needed for either
+deployment to work (see the `offboard_employee` RPC pattern below for why
+that's true even for HR-privileged actions), only for admin-web's
+create-employee-with-login-account flow specifically.
 
 Real bugs found and fixed via actual click-testing (not just build/
 typecheck):
