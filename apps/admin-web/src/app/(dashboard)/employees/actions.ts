@@ -117,3 +117,43 @@ export async function createEmployeeAction(
     tempPassword,
   };
 }
+
+/**
+ * Offboarding, not deletion. Master prompt §18/§19: business records are never hard-deleted,
+ * and closing an employee's account must not remove payroll/attendance history needed for
+ * accounting retention. This marks the employee resigned/terminated and deactivates their
+ * login (if any) — the row, and everything referencing it (payslips, attendance, leave
+ * history), stays intact.
+ *
+ * Calls the `offboard_employee` security-definer RPC (0018). A direct `.update()` via the
+ * regular client would also work today — `restrict_employee_self_update()` (a pre-existing
+ * trigger) already lets is_admin_or_hr() users update any column, and 0019 restored the plain
+ * table-level GRANT after 0017's narrower one turned out to double up with that trigger and,
+ * worse, block legitimate HR updates since GRANTs can't distinguish app roles that share one
+ * Postgres role. The RPC is kept because it's already verified working end-to-end and gives an
+ * explicit, single place enforcing "only super_admin/hr may offboard" independent of both the
+ * trigger and RLS — not because either of those is insufficient on its own.
+ */
+export async function offboardEmployeeAction(
+  employeeId: string,
+  status: "resigned" | "terminated",
+  effectiveDate: string,
+  reason: string
+) {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+
+  if (!effectiveDate) throw new Error("กรุณาระบุวันที่มีผล");
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("offboard_employee", {
+    p_employee_id: employeeId,
+    p_status: status,
+    p_effective_date: effectiveDate,
+    p_reason: reason || null,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${employeeId}`);
+}

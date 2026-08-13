@@ -9,20 +9,59 @@ actually green.
 (`nineall-hr-admin-web.vercel.app`, click-tested and working end to end —
 login, dashboard, real data). Code pushed to GitHub
 (`siripornnineall-ai/nineall-hr`, private) via a fresh git init since the
-repo had none before. Found and fixed a real bug: the "create payroll
-period" button had no pending-disabled guard, so impatient re-clicks fired
-a new `payroll_runs` insert every time (33 duplicate runs got created this
-way in production — cleaned up, kept the one with real calculated data).
-Added `apps/admin-web/src/components/SubmitButton.tsx` (uses
-`useFormStatus`) and applied it there; other admin-web action buttons
-already used `useTransition`+`disabled` correctly, this was the one bare
-`<form action={...}>` in the codebase. Also built employee self-service
-profile editing (name, nickname, bio, photo) in `apps/employee-pwa` — see
-§4b — closing a pre-existing gap where `employees_update_self` RLS policy
-existed but had no column-level restriction (an employee could previously
-update *any* column on their own row via a direct API call, not just name/
-photo; now scoped via `GRANT UPDATE (...)` in `0017_employee_self_profile_
-edit.sql`).
+repo had none before.
+
+Real bugs found and fixed via actual click-testing (not just build/
+typecheck):
+- **Payroll double-submit**: "create payroll period" had no pending-disabled
+  guard, so impatient re-clicks fired a new `payroll_runs` insert every time
+  (33 duplicate runs got created in production this way — cleaned up, kept
+  the one with real calculated data). Fixed with a new `SubmitButton`
+  (`useFormStatus`) plus a server-side idempotency check.
+- **Employee detail page 404'd for every employee**: `teams(name)` in the
+  select string is ambiguous — `employees.team_id→teams.id` and
+  `teams.manager_employee_id→employees.id` are both valid embed paths
+  between the same two tables — so PostgREST errored and the page treated
+  every result as "not found". Same bug existed on the Leave page
+  (`leave_requests` has two employee FKs: `employee_id` and
+  `delegate_employee_id`). Both fixed by naming the FK constraint
+  explicitly (`employees!leave_requests_employee_id_fkey(...)` etc.) —
+  worth grepping for elsewhere if a similar "record not found" report comes
+  in on a page that joins a table with 2+ FKs to the same target.
+- **Native `confirm()`/`alert()` are unreliable**: this session's browser
+  tooling suppresses `confirm()` outright (returns `false` silently, so the
+  action just never fires — no error, just nothing happens), and some real
+  browsers/extensions do the same. Found via the new offboard-employee
+  button doing nothing on click. Replaced with an in-page two-step confirm
+  pattern (see `OffboardButton.tsx`, `DeleteKeyButton` in
+  `TranslationGrid.tsx`) instead of `window.confirm()`/`alert()` — better
+  UX anyway (stylable, can't be silently blocked).
+
+New features:
+- **Employee self-service profile editing** (name, nickname, bio, photo) in
+  `apps/employee-pwa` — see §4b.
+- **Employee offboarding** ("mark as resigned/terminated") on the employee
+  detail page, super_admin/hr only. Not a delete — master prompt §18/§19
+  forbid hard-deleting business records and require payroll/attendance
+  history to survive an employee leaving. Sets `employment_status` +
+  resignation/termination date, deactivates their login, logs to
+  `audit_logs`. Implemented as a `security definer` RPC
+  (`offboard_employee`, `0018`) rather than a client-side table update.
+
+**A design detour worth knowing about** (0017 → 0018 → 0019): building the
+profile-editing feature above, this session added a column-level `GRANT`
+restricting what `authenticated` can update on `employees` (0017), to close
+what looked like a real gap — but it turned out a *pre-existing* trigger,
+`restrict_employee_self_update()` (from an earlier, undocumented part of
+this same session), already did this correctly by checking
+`is_admin_or_hr()` inside the trigger. A column GRANT can't express "only
+if you're also HR" — it applies to the whole `authenticated` Postgres role,
+which every app role shares — so 0017 was both redundant with the trigger
+*and* actively broke HR's ability to update `employment_status` (surfaced
+immediately when building the offboarding feature). 0019 reverts 0017's
+GRANT restriction; the trigger is the correct mechanism and was already
+sufficient on its own. Lesson: check for existing triggers before adding a
+new permission layer for the same concern.
 
 **Login is unblocked as of 2026-08-06.** The account owner could not access
 the Supabase account that owns this project (see `scripts/
@@ -77,7 +116,8 @@ TypeScript errors, verified this session).
 | Login / logout / forgot / reset password | ✅ Real, Supabase Auth-backed, **verified live** | **Bug found and fixed this session**: employee-code login was comparing the `employee_id` UUID column against the typed code string (e.g. "EMP-001"), which could never match — email login worked, code login silently didn't. Now calls `lookup_login_email()` (the RPC `0016` added but that nothing actually called until this fix). **Confirmed working end-to-end**: logged in as `EMP-001` in-browser, real dashboard loaded (16 employees, 1 pending leave, 1 pending OT, live announcements), zero console errors |
 | Role gate | ✅ Done | `requireUser()` in `src/lib/auth.ts` — `payroll_admin` role (added `0013`) not yet threaded through role-gate logic, verify before relying on it |
 | Dashboard | ✅ Real queries | |
-| Employee directory / create / detail | ✅ Real (edit form still not built) | |
+| Employee directory / create / detail | ✅ Real (edit form still not built), **detail page 404 bug fixed session 3** | Ambiguous `teams(name)` embed — see session 3 note above |
+| Employee offboarding (mark resigned/terminated) | ✅ Built + click-tested, session 3 | Not a delete — see session 3 note above. `offboard_employee` RPC |
 | Attendance (daily timesheet) | ✅ Real queries, reads-only | Inline edit-with-reason still not built |
 | Leave (list + approve/reject) | ✅ Real | |
 | Overtime (list + approve/reject) | ✅ Real | |

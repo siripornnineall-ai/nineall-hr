@@ -3,16 +3,21 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
+import { OffboardButton } from "./OffboardButton";
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
   const supabase = await createClient();
 
+  // `teams` must be disambiguated: employees.team_id -> teams.id ("my team") and
+  // teams.manager_employee_id -> employees.id ("teams I manage") are both valid FK paths
+  // between these two tables, so a bare `teams(name)` embed is ambiguous to PostgREST and
+  // errors out — which this page was silently swallowing as "employee not found" (404).
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, nickname, phone, personal_email, hire_date, employment_type, employment_status, photo_url, departments(name), job_positions(title), teams(name)"
+      "id, employee_code, first_name, last_name, nickname, phone, personal_email, hire_date, employment_type, employment_status, photo_url, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -53,6 +58,9 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           <div className="mt-3">
             <Badge tone={employee.employment_status === "active" ? "success" : "neutral"}>{employee.employment_status}</Badge>
           </div>
+          {["super_admin", "hr"].includes(user.role) && (
+            <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
+          )}
         </div>
 
         <div className="space-y-4 rounded-xl border border-outline-variant bg-white p-6 shadow-sm md:col-span-2">

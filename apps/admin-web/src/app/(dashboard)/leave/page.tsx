@@ -15,10 +15,14 @@ export default async function LeavePage() {
   const user = await requireUser();
   const supabase = await createClient();
 
+  // employees must be disambiguated: leave_requests has two FKs to employees
+  // (employee_id and delegate_employee_id), so a bare `employees(...)` embed is
+  // ambiguous to PostgREST and errors out silently (same bug as employees/[id]'s
+  // teams embed — see that page's comment).
   const { data } = await supabase
     .from("leave_requests")
     .select(
-      "id, start_date, end_date, total_days, unit, status, reason, created_at, employees(employee_code, first_name, last_name), leave_types(name_th)"
+      "id, start_date, end_date, total_days, unit, status, reason, created_at, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name), leave_types(name_th)"
     )
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false })

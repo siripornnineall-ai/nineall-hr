@@ -293,18 +293,42 @@ export function TranslationGrid({ initialRows }: { initialRows: Row[] }) {
 
 function DeleteKeyButton({ rowId, rowKey }: { rowId: string; rowKey: string }) {
   const [isPending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (confirming) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        {error && <span className="text-xs font-semibold text-status-danger">{error}</span>}
+        <button
+          disabled={isPending}
+          onClick={() => {
+            startTransition(async () => {
+              try {
+                await deleteTranslationKey(rowId);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
+                setConfirming(false);
+              }
+            });
+          }}
+          title={`ยืนยันลบ "${rowKey}"`}
+          className="rounded px-2 py-1 text-xs font-bold text-white bg-status-danger disabled:opacity-50"
+        >
+          {isPending ? "..." : "ยืนยันลบ"}
+        </button>
+        <button onClick={() => setConfirming(false)} disabled={isPending} className="rounded px-2 py-1 text-xs text-on-surface-variant">
+          ยกเลิก
+        </button>
+      </span>
+    );
+  }
+
   return (
     <button
-      disabled={isPending}
       onClick={() => {
-        if (!confirm(`ลบ key "${rowKey}" และคำแปลทั้งหมดของ key นี้?`)) return;
-        startTransition(async () => {
-          try {
-            await deleteTranslationKey(rowId);
-          } catch (e) {
-            alert(e instanceof Error ? e.message : "ลบไม่สำเร็จ");
-          }
-        });
+        setError(null);
+        setConfirming(true);
       }}
       title="ลบ key"
       className="rounded p-1.5 text-on-surface-variant opacity-0 transition-opacity hover:text-status-danger group-hover:opacity-100 disabled:opacity-50"
