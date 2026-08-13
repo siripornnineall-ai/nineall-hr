@@ -14,11 +14,12 @@ interface EditableProfile {
 }
 
 export default function ProfilePage() {
-  const { profile, signOut, refreshProfile } = useAuth();
+  const { profile, loading: authLoading, signOut, refreshProfile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [edit, setEdit] = useState<EditableProfile | null>(null);
+  const [editLoadFailed, setEditLoadFailed] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -30,13 +31,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!profile) return;
+    setEditLoadFailed(false);
     supabase
       .from("employees")
       .select("first_name, last_name, nickname, bio, photo_url")
       .eq("id", profile.employeeId)
       .single()
-      .then(async ({ data }) => {
-        if (!data) return;
+      .then(async ({ data, error }) => {
+        if (error || !data) {
+          setEditLoadFailed(true);
+          return;
+        }
         setEdit({
           firstName: data.first_name ?? "",
           lastName: data.last_name ?? "",
@@ -123,6 +128,14 @@ export default function ProfilePage() {
     }
   }
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <span className="material-symbols-outlined animate-spin text-4xl text-primary">progress_activity</span>
+      </div>
+    );
+  }
+
   return (
     <div className="safe-top space-y-5 px-4 pb-6 pt-4">
       <div className="flex flex-col items-center gap-1">
@@ -153,6 +166,19 @@ export default function ProfilePage() {
         <div className="flex items-center gap-2 rounded-xl bg-status-warning-bg p-3">
           <span className="material-symbols-outlined text-status-warning">warning</span>
           <p className="text-xs text-on-surface">กรุณาเปลี่ยนรหัสผ่านก่อนใช้งานครั้งแรก</p>
+        </div>
+      )}
+
+      {!edit && !editLoadFailed && (
+        <div className="flex items-center justify-center gap-2 rounded-2xl bg-white p-5 text-sm text-on-surface-variant shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+          กำลังโหลดข้อมูลส่วนตัว...
+        </div>
+      )}
+
+      {editLoadFailed && (
+        <div className="rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <p className="text-sm text-status-danger">โหลดข้อมูลส่วนตัวไม่สำเร็จ กรุณารีเฟรชหน้านี้ใหม่</p>
         </div>
       )}
 
