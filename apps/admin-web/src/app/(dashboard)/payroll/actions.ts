@@ -28,6 +28,23 @@ export async function createPayrollRunAction(formData: FormData) {
     .single();
   if (periodError || !period) throw new Error(periodError?.message ?? "สร้างรอบเงินเดือนไม่สำเร็จ");
 
+  // A period can have at most one non-locked run at a time — reuse it instead of creating a
+  // duplicate. This is the safety net for double-submits (slow network, impatient re-clicks,
+  // multiple tabs); the submit button also disables itself while pending, but that alone
+  // doesn't protect against a second in-flight request from a different tab/retry.
+  const { data: existingRun } = await supabase
+    .from("payroll_runs")
+    .select("id")
+    .eq("payroll_period_id", period.id)
+    .neq("status", "locked")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingRun) {
+    redirect(`/payroll/${existingRun.id}`);
+  }
+
   const { data: run, error: runError } = await supabase
     .from("payroll_runs")
     .insert({ org_id: user.orgId, payroll_period_id: period.id, status: "draft", created_by: user.profileId })

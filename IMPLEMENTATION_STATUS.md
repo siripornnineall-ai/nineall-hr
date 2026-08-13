@@ -1,9 +1,28 @@
 # Implementation Status — Nineall HR
 
-Last updated: 2026-08-06 (session 2, continued). Update this file every time
+Last updated: 2026-08-13 (session 3). Update this file every time
 a module is finished or a decision changes — do not silently let it go
 stale, and do not declare something "done" here if its tests/build aren't
 actually green.
+
+**Session 3 (2026-08-13):** Both apps deployed live to Vercel
+(`nineall-hr-admin-web.vercel.app`, click-tested and working end to end —
+login, dashboard, real data). Code pushed to GitHub
+(`siripornnineall-ai/nineall-hr`, private) via a fresh git init since the
+repo had none before. Found and fixed a real bug: the "create payroll
+period" button had no pending-disabled guard, so impatient re-clicks fired
+a new `payroll_runs` insert every time (33 duplicate runs got created this
+way in production — cleaned up, kept the one with real calculated data).
+Added `apps/admin-web/src/components/SubmitButton.tsx` (uses
+`useFormStatus`) and applied it there; other admin-web action buttons
+already used `useTransition`+`disabled` correctly, this was the one bare
+`<form action={...}>` in the codebase. Also built employee self-service
+profile editing (name, nickname, bio, photo) in `apps/employee-pwa` — see
+§4b — closing a pre-existing gap where `employees_update_self` RLS policy
+existed but had no column-level restriction (an employee could previously
+update *any* column on their own row via a direct API call, not just name/
+photo; now scoped via `GRANT UPDATE (...)` in `0017_employee_self_profile_
+edit.sql`).
 
 **Login is unblocked as of 2026-08-06.** The account owner could not access
 the Supabase account that owns this project (see `scripts/
@@ -62,7 +81,7 @@ TypeScript errors, verified this session).
 | Attendance (daily timesheet) | ✅ Real queries, reads-only | Inline edit-with-reason still not built |
 | Leave (list + approve/reject) | ✅ Real | |
 | Overtime (list + approve/reject) | ✅ Real | |
-| Payroll (full flow: create → calculate → submit → approve → lock) | ✅ Real | Bank-file export, printable payslip PDF still not built |
+| Payroll (full flow: create → calculate → submit → approve → lock) | ✅ Real | Bank-file export, printable payslip PDF still not built. **Session 3**: fixed a double-submit bug on "create payroll period" (no pending-disabled guard → 33 duplicate runs created in production, cleaned up); now uses `SubmitButton` + a server-side idempotency check (reuses the existing non-locked run for a period instead of creating another) |
 | Announcements | ✅ Real | |
 | **Translation Management** | ✅ Built and **click-tested this session** | `/translations` (super_admin/hr only) — search, missing/complete filter, inline per-locale editing with autosave + history log (`translation_history`), add-key form, delete-key, JSON export/import (not Excel — see limitation below), missing-translation warning count. Database already had **~75 translation keys** (`auth.*`, `common.*`, `dashboard.*`, `nav.*`, `status.*` namespaces) from earlier in session 2, plus 8 more added via `supabase/seed/004_translations.sql`. **A real bug was caught and fixed here**: `LOCALES`/`Locale` were originally exported from `actions.ts`, a `"use server"` file — Next.js only allows async-function exports from Server Action modules, so the client component received a broken value and the page 500'd (`LOCALES.some is not a function`). Moved the constant to a new `constants.ts` and re-verified — logged in as `EMP-001`, page loads real data cleanly, zero console errors. **Known limitation:** import is JSON, not Excel (master prompt's Stitch reference shows "Import Excel" — parsing .xlsx server-side wasn't attempted this session) |
 | Settings | 🟡 Partial | Same gaps as session 1: branches/teams/positions CRUD, tax/SS version editor, approval-chain config, role-permission matrix UI not built; `custom_roles` table exists but isn't wired into any UI or the RLS permission check yet |
@@ -125,6 +144,7 @@ queries, same Edge Function calls) rather than rebuilt from scratch — read
 | Leave request (submit + history) | ✅ Real | Uses native `<input type="date">` — an actual improvement over the Expo app's plain-text date field |
 | Payslip list + breakdown | ✅ Real queries | Expandable detail per payslip. PIN-gate not implemented (same gap as Expo version) |
 | Profile (change password, privacy note, logout) | ✅ Real | Same as Expo version |
+| **Profile self-editing (name, nickname, bio, photo)** | ✅ Built + click-tested, session 3 | Photo uploads to the pre-existing `avatars` Storage bucket (RLS policies for it already existed from session 1, unused until now) at `{orgId}/{employeeId}/{timestamp}.jpg`, displayed via a signed URL. Editing is scoped server-side to exactly `first_name, last_name, nickname, photo_url, bio, phone, personal_email, address` via a column-level `GRANT` (`0017_employee_self_profile_edit.sql`) — closes a real gap where the existing `employees_update_self` RLS policy had no column restriction at all |
 | Overtime request, Announcements screen | ❌ Not built | Same gap as the Expo app had — not a regression, just not yet ported/built |
 | Forgot password | ❌ Not built | admin-web has one; the PWA login page doesn't link to one yet |
 | Push notifications | ❌ Not built | Web Push is possible (Android Chrome; iOS 16.4+ only after home-screen install) but not wired up |

@@ -3,6 +3,7 @@ import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
+import { SubmitButton } from "@/components/SubmitButton";
 import { createPayrollRunAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral" | "info"; label: string }> = {
@@ -46,9 +47,9 @@ export default async function PayrollPage() {
             <label className="mb-1 block text-xs font-semibold text-on-surface-variant">วันจ่ายเงิน</label>
             <input name="payDate" type="date" required className="h-10 rounded-lg border border-outline-variant px-3 text-sm" />
           </div>
-          <button type="submit" className="h-10 rounded-lg bg-primary px-6 text-sm font-bold text-white">
+          <SubmitButton pendingLabel="กำลังสร้าง..." className="h-10 rounded-lg bg-primary px-6 text-sm font-bold text-white">
             สร้างรอบเงินเดือนใหม่
-          </button>
+          </SubmitButton>
         </form>
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
