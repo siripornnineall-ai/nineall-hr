@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
 import { OffboardButton } from "./OffboardButton";
 import { LeaveBalances } from "./LeaveBalances";
+import { ShiftAssignment } from "./ShiftAssignment";
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -54,17 +55,33 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const canManage = ["super_admin", "hr"].includes(user.role);
   let leaveTypes: { id: string; name_th: string }[] = [];
   let leaveBalances: { id: string; leave_type_id: string; year: number; entitled_days: number; carried_over_days: number; used_days: number; pending_days: number }[] = [];
+  let shifts: { id: string; name: string; start_time: string; end_time: string }[] = [];
+  let workLocations: { id: string; name: string }[] = [];
+  let currentShiftAssignment: { work_date: string; shift_name: string | null } | null = null;
   if (canManage) {
-    const [{ data: types }, { data: balances }] = await Promise.all([
+    const [{ data: types }, { data: balances }, { data: shiftRows }, { data: locationRows }, { data: assignment }] = await Promise.all([
       supabase.from("leave_types").select("id, name_th").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),
       supabase
         .from("leave_balances")
         .select("id, leave_type_id, year, entitled_days, carried_over_days, used_days, pending_days")
         .eq("employee_id", employee.id)
         .order("year", { ascending: false }),
+      supabase.from("work_shifts").select("id, name, start_time, end_time").eq("org_id", user.orgId),
+      supabase.from("work_locations").select("id, name").eq("org_id", user.orgId),
+      supabase
+        .from("shift_assignments")
+        .select("work_date, work_shifts(name)")
+        .eq("employee_id", employee.id)
+        .eq("work_date", new Date().toISOString().slice(0, 10))
+        .maybeSingle(),
     ]);
     leaveTypes = types ?? [];
     leaveBalances = balances ?? [];
+    shifts = shiftRows ?? [];
+    workLocations = locationRows ?? [];
+    currentShiftAssignment = assignment
+      ? { work_date: assignment.work_date, shift_name: (assignment.work_shifts as unknown as { name: string } | null)?.name ?? null }
+      : null;
   }
 
   return (
@@ -119,6 +136,12 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             )}
           </dl>
         </div>
+
+        {canManage && (
+          <div className="md:col-span-3">
+            <ShiftAssignment employeeId={employee.id} shifts={shifts} workLocations={workLocations} currentAssignment={currentShiftAssignment} />
+          </div>
+        )}
 
         {canManage && (
           <div className="md:col-span-3">

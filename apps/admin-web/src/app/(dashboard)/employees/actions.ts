@@ -312,3 +312,50 @@ export async function updateLeaveBalanceAction(id: string, values: LeaveBalanceV
   if (error) return { error: error.message };
   revalidatePath("/employees");
 }
+
+const MAX_SHIFT_ASSIGNMENT_DAYS = 366;
+
+// shift_assignments is one row per employee per work_date (that's how the payroll/
+// attendance engine looks up "what shift is this person on today"), so assigning a
+// shift "going forward" means writing one row per date in the chosen range.
+export async function assignShiftAction(
+  employeeId: string,
+  values: { shiftId?: string; workLocationId?: string; startDate?: string; endDate?: string }
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+
+  if (!values.shiftId) return { error: "กรุณาเลือกกะการทำงาน" };
+  if (!values.startDate || !values.endDate) return { error: "กรุณาระบุวันที่เริ่มและสิ้นสุด" };
+
+  const start = new Date(values.startDate);
+  const end = new Date(values.endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return { error: "ช่วงวันที่ไม่ถูกต้อง" };
+  }
+  const dayCount = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+  if (dayCount > MAX_SHIFT_ASSIGNMENT_DAYS) {
+    return { error: `ช่วงวันที่ยาวเกินไป (สูงสุด ${MAX_SHIFT_ASSIGNMENT_DAYS} วัน)` };
+  }
+
+  const supabase = await createClient();
+  const { data: employee } = await supabase.from("employees").select("org_id").eq("id", employeeId).single();
+  if (!employee) return { error: "ไม่พบพนักงาน" };
+
+  const rows = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    rows.push({
+      org_id: employee.org_id,
+      employee_id: employeeId,
+      work_date: d.toISOString().slice(0, 10),
+      shift_id: values.shiftId,
+      work_location_id: values.workLocationId || null,
+      source: "manual",
+      created_by: user.profileId,
+    });
+  }
+
+  const { error } = await supabase.from("shift_assignments").upsert(rows, { onConflict: "employee_id,work_date" });
+  if (error) return { error: error.message };
+  revalidatePath(`/employees/${employeeId}`);
+}
