@@ -13,6 +13,8 @@ export interface AttendanceRow {
   withinGeofence: boolean | null;
   selfiePath: string | null;
   needsReview: boolean;
+  shiftId: string | null;
+  workLocationId: string | null;
 }
 
 export async function listAttendanceForDate(orgId: string, workDate: string) {
@@ -20,7 +22,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
   const query = supabase
     .from("attendance_records")
     .select(
-      "id, work_date, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, employees(employee_code, first_name, last_name, manager_employee_id)"
+      "id, work_date, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees(employee_code, first_name, last_name, manager_employee_id)"
     )
     .eq("org_id", orgId)
     .eq("work_date", workDate)
@@ -44,6 +46,8 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       withinGeofence: r.clock_in_within_geofence,
       selfiePath: r.clock_in_selfie_path,
       needsReview: r.needs_review,
+      shiftId: r.shift_id,
+      workLocationId: r.work_location_id,
     };
   });
 

@@ -154,7 +154,10 @@ export function calculatePayrollForEmployee(input: PayrollEmployeeInput): Payrol
   const grossEarningsSatang = addSatang(proratedBaseSatang, ...earnings.map((e) => e.amountSatang));
   const preStatutoryDeductionsSatang = addSatang(...deductions.map((d) => d.amountSatang));
 
-  const socialSecuritySatang = computeSocialSecurity(grossEarningsSatang, input.policy.socialSecurity);
+  // Social security contribution is based on wages (base salary) only, per Thai SSO
+  // rules — OT pay and other earnings on top of it don't count toward the base, unlike
+  // withholding tax below which is computed on the full gross.
+  const socialSecuritySatang = computeSocialSecurity(proratedBaseSatang, input.policy.socialSecurity);
   const taxSatang = computeTax(grossEarningsSatang, input.policy.taxBrackets);
 
   const totalDeductionsSatang = addSatang(preStatutoryDeductionsSatang, socialSecuritySatang, taxSatang);

@@ -12,9 +12,6 @@ import {
   createDepartmentAction,
   updateDepartmentAction,
   deleteDepartmentAction,
-  createTeamAction,
-  updateTeamAction,
-  deleteTeamAction,
   createJobPositionAction,
   updateJobPositionAction,
   deleteJobPositionAction,
@@ -44,7 +41,6 @@ export default async function SettingsPage() {
     { data: locations },
     { data: branches },
     { data: departments },
-    { data: teams },
     { data: positions },
   ] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", user.orgId).single(),
@@ -53,7 +49,6 @@ export default async function SettingsPage() {
     supabase.from("work_locations").select("id, name, latitude, longitude, radius_meters").eq("org_id", user.orgId),
     supabase.from("branches").select("id, name, address").eq("org_id", user.orgId),
     supabase.from("departments").select("id, name, name_en").eq("org_id", user.orgId),
-    supabase.from("teams").select("id, name, department_id, departments(name)").eq("org_id", user.orgId),
     supabase.from("job_positions").select("id, title, title_en, department_id, departments(name)").eq("org_id", user.orgId),
   ]);
 
@@ -204,54 +199,30 @@ export default async function SettingsPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <EditableList
-            title="ทีม"
-            fields={[
-              { key: "name", label: "ชื่อทีม", type: "text" },
-              { key: "departmentId", label: "แผนก", type: "select", options: departmentOptions, optional: true },
-            ]}
-            rows={(teams ?? []).map((t) => {
-              const departmentName = (t.departments as unknown as { name: string } | null)?.name ?? "";
-              return {
-                id: t.id,
-                name: t.name,
-                departmentId: t.department_id,
-                label: t.name,
-                subLabel: departmentName,
-              };
-            })}
-            onCreate={createTeamAction}
-            onSave={updateTeamAction}
-            onDelete={deleteTeamAction}
-            emptyLabel="ยังไม่มีทีม"
-            addLabel="เพิ่มทีม"
-          />
-          <EditableList
-            title="ตำแหน่งงาน"
-            fields={[
-              { key: "title", label: "ชื่อตำแหน่ง", type: "text" },
-              { key: "titleEn", label: "ชื่อภาษาอังกฤษ", type: "text", optional: true },
-              { key: "departmentId", label: "แผนก", type: "select", options: departmentOptions, optional: true },
-            ]}
-            rows={(positions ?? []).map((p) => {
-              const departmentName = (p.departments as unknown as { name: string } | null)?.name ?? "";
-              return {
-                id: p.id,
-                title: p.title,
-                titleEn: p.title_en,
-                departmentId: p.department_id,
-                label: p.title,
-                subLabel: departmentName,
-              };
-            })}
-            onCreate={createJobPositionAction}
-            onSave={updateJobPositionAction}
-            onDelete={deleteJobPositionAction}
-            emptyLabel="ยังไม่มีตำแหน่งงาน"
-            addLabel="เพิ่มตำแหน่ง"
-          />
-        </div>
+        <EditableList
+          title="ตำแหน่งงาน"
+          fields={[
+            { key: "title", label: "ชื่อตำแหน่ง", type: "text" },
+            { key: "titleEn", label: "ชื่อภาษาอังกฤษ", type: "text", optional: true },
+            { key: "departmentId", label: "แผนก", type: "select", options: departmentOptions, optional: true },
+          ]}
+          rows={(positions ?? []).map((p) => {
+            const departmentName = (p.departments as unknown as { name: string } | null)?.name ?? "";
+            return {
+              id: p.id,
+              title: p.title,
+              titleEn: p.title_en,
+              departmentId: p.department_id,
+              label: p.title,
+              subLabel: departmentName,
+            };
+          })}
+          onCreate={createJobPositionAction}
+          onSave={updateJobPositionAction}
+          onDelete={deleteJobPositionAction}
+          emptyLabel="ยังไม่มีตำแหน่งงาน"
+          addLabel="เพิ่มตำแหน่ง"
+        />
 
         <EditableList
           title="วันหยุดบริษัท"

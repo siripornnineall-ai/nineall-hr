@@ -238,38 +238,6 @@ export async function deleteDepartmentAction(id: string): Promise<{ error?: stri
   revalidatePath("/settings");
 }
 
-// --- Teams --------------------------------------------------------------------
-export async function createTeamAction(values: FormValues) {
-  const user = await requireSettingsUser();
-  if (!str(values, "name")) throw new Error("กรุณากรอกชื่อทีม");
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("teams")
-    .insert({ org_id: user.orgId, name: str(values, "name"), department_id: strOrNull(values, "departmentId") });
-  if (error) throw new Error(error.message);
-  revalidatePath("/settings");
-}
-
-export async function updateTeamAction(id: string, values: FormValues) {
-  const user = await requireSettingsUser();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("teams")
-    .update({ name: str(values, "name"), department_id: strOrNull(values, "departmentId") })
-    .eq("id", id)
-    .eq("org_id", user.orgId);
-  if (error) throw new Error(error.message);
-  revalidatePath("/settings");
-}
-
-export async function deleteTeamAction(id: string): Promise<{ error?: string } | void> {
-  const user = await requireSettingsUser();
-  const supabase = await createClient();
-  const { error } = await supabase.from("teams").delete().eq("id", id).eq("org_id", user.orgId);
-  if (error) return { error: error.code === "23503" ? fkMessage("ทีม") : error.message };
-  revalidatePath("/settings");
-}
-
 // --- Job positions --------------------------------------------------------------
 export async function createJobPositionAction(values: FormValues) {
   const user = await requireSettingsUser();
