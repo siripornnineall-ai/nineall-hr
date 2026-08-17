@@ -41,7 +41,6 @@ export const employeeUpdateSchema = z.object({
   // real integrity guard is the database foreign key, not client-side format validation.
   branchId: z.string().optional(),
   departmentId: z.string().optional(),
-  teamId: z.string().optional(),
   jobPositionId: z.string().optional(),
   managerEmployeeId: z.string().optional(),
   employmentType: z.enum(["monthly", "daily", "hourly", "part_time", "contract"]),

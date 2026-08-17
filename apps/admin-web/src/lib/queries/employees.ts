@@ -13,6 +13,7 @@ export interface EmployeeListRow {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  nickname: string | null;
   photoUrl: string | null;
   positionTitle: string | null;
   departmentName: string | null;
@@ -31,7 +32,7 @@ export async function listEmployees(orgId: string, filters: EmployeeListFilters)
   let query = supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, photo_url, employment_type, employment_status, hire_date, job_positions(title), departments(name)",
+      "id, employee_code, first_name, last_name, nickname, photo_url, employment_type, employment_status, hire_date, job_positions(title), departments(name)",
       { count: "exact" }
     )
     .eq("org_id", orgId)
@@ -50,18 +51,30 @@ export async function listEmployees(orgId: string, filters: EmployeeListFilters)
   const { data, count, error } = await query;
   if (error) throw error;
 
-  const rows: EmployeeListRow[] = (data ?? []).map((e) => ({
-    id: e.id,
-    employeeCode: e.employee_code,
-    firstName: e.first_name,
-    lastName: e.last_name,
-    photoUrl: e.photo_url,
-    positionTitle: (e.job_positions as unknown as { title: string } | null)?.title ?? null,
-    departmentName: (e.departments as unknown as { name: string } | null)?.name ?? null,
-    employmentType: e.employment_type,
-    employmentStatus: e.employment_status,
-    hireDate: e.hire_date,
-  }));
+  // photo_url is a private-bucket storage path, not a fetchable URL — resolve each to a
+  // short-lived signed URL here so callers can drop it straight into an <img src>.
+  const rows: EmployeeListRow[] = await Promise.all(
+    (data ?? []).map(async (e) => {
+      let photoUrl: string | null = null;
+      if (e.photo_url) {
+        const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(e.photo_url, 3600);
+        photoUrl = signed?.signedUrl ?? null;
+      }
+      return {
+        id: e.id,
+        employeeCode: e.employee_code,
+        firstName: e.first_name,
+        lastName: e.last_name,
+        nickname: e.nickname,
+        photoUrl,
+        positionTitle: (e.job_positions as unknown as { title: string } | null)?.title ?? null,
+        departmentName: (e.departments as unknown as { name: string } | null)?.name ?? null,
+        employmentType: e.employment_type,
+        employmentStatus: e.employment_status,
+        hireDate: e.hire_date,
+      };
+    })
+  );
 
   return { rows, total: count ?? 0, page, pageSize };
 }

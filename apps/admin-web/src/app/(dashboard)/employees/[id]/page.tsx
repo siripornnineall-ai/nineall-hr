@@ -19,13 +19,20 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, nickname, phone, personal_email, hire_date, employment_type, employment_status, photo_url, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, nickname, bio, phone, personal_email, hire_date, employment_type, employment_status, photo_url, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
     .maybeSingle();
 
   if (!employee) notFound();
+
+  // photo_url is a private-bucket storage path, not a fetchable URL.
+  let photoUrl: string | null = null;
+  if (employee.photo_url) {
+    const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(employee.photo_url, 3600);
+    photoUrl = signed?.signedUrl ?? null;
+  }
 
   const canSeeSalary = ["super_admin", "hr"].includes(user.role) || user.employeeId === employee.id;
   let compensation: { base_amount: number; effective_date: string } | null = null;
@@ -65,14 +72,20 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} />
       <div className="grid grid-cols-1 gap-6 p-4 md:grid-cols-3 md:p-8">
         <div className="rounded-xl border border-outline-variant bg-white p-6 text-center shadow-sm">
-          <div className="mx-auto mb-4 h-24 w-24 overflow-hidden rounded-full bg-surface-container">
-            {employee.photo_url && <img src={employee.photo_url} alt="" className="h-full w-full object-cover" />}
+          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-surface-container">
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <span className="material-symbols-outlined text-[44px] text-on-surface-variant">person</span>
+            )}
           </div>
           <h3 className="text-lg font-bold">
             {employee.first_name} {employee.last_name}
           </h3>
           {employee.nickname && <p className="text-sm text-on-surface-variant">({employee.nickname})</p>}
           <p className="mt-1 text-sm text-on-surface-variant">{position ?? "-"}</p>
+          {employee.bio && <p className="mt-3 text-left text-sm leading-relaxed text-on-surface-variant">{employee.bio}</p>}
           <div className="mt-3">
             <Badge tone={employee.employment_status === "active" ? "success" : "neutral"}>{employee.employment_status}</Badge>
           </div>

@@ -116,8 +116,19 @@ export default async function EmployeesPage({
                     <tr key={e.id} className={idx % 2 === 1 ? "bg-row-zebra hover:bg-row-hover" : "hover:bg-row-hover"}>
                       <td className="px-6 py-4 text-sm">{e.employeeCode}</td>
                       <td className="px-6 py-4 text-sm font-semibold">
-                        <Link href={`/employees/${e.id}`} className="hover:text-primary hover:underline">
-                          {e.firstName} {e.lastName}
+                        <Link href={`/employees/${e.id}`} className="flex items-center gap-3 hover:text-primary hover:underline">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container">
+                            {e.photoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={e.photoUrl} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <span className="material-symbols-outlined text-[20px] text-on-surface-variant">person</span>
+                            )}
+                          </span>
+                          <span>
+                            {e.firstName} {e.lastName}
+                            {e.nickname && <span className="ml-1 font-normal text-on-surface-variant">({e.nickname})</span>}
+                          </span>
                         </Link>
                       </td>
                       <td className="px-6 py-4 text-sm">{e.positionTitle ?? "-"}</td>

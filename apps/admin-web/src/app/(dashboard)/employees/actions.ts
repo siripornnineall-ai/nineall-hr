@@ -137,7 +137,6 @@ export async function updateEmployeeAction(
     newBaseAmountBaht: raw.newBaseAmountBaht ? Number(raw.newBaseAmountBaht) : undefined,
     branchId: raw.branchId || undefined,
     departmentId: raw.departmentId || undefined,
-    teamId: raw.teamId || undefined,
     jobPositionId: raw.jobPositionId || undefined,
     managerEmployeeId: raw.managerEmployeeId || undefined,
   });
@@ -147,6 +146,9 @@ export async function updateEmployeeAction(
   const input = parsed.data;
   const supabase = await createClient();
 
+  // team_id is intentionally not touched here: the edit form dropped the team field
+  // (per request — department + position is enough), so this update must not silently
+  // wipe whatever team an employee already has assigned.
   const { error: empError } = await supabase
     .from("employees")
     .update({
@@ -158,7 +160,6 @@ export async function updateEmployeeAction(
       personal_email: input.personalEmail || null,
       branch_id: input.branchId ?? null,
       department_id: input.departmentId ?? null,
-      team_id: input.teamId ?? null,
       job_position_id: input.jobPositionId ?? null,
       manager_employee_id: input.managerEmployeeId ?? null,
       employment_type: input.employmentType,
@@ -173,13 +174,20 @@ export async function updateEmployeeAction(
   }
 
   if (input.newBaseAmountBaht) {
-    const { error: compError } = await supabase.from("employee_compensation").insert({
-      employee_id: employeeId,
-      effective_date: new Date().toISOString().slice(0, 10),
-      employment_type: input.employmentType,
-      base_amount: input.newBaseAmountBaht,
-      created_by: user.profileId,
-    });
+    // Upsert on (employee_id, effective_date): a plain insert fails with a unique-
+    // constraint violation if the salary is edited more than once on the same day
+    // (e.g. HR fixes a typo right after saving) — history per prior day is untouched,
+    // only today's row gets replaced.
+    const { error: compError } = await supabase.from("employee_compensation").upsert(
+      {
+        employee_id: employeeId,
+        effective_date: new Date().toISOString().slice(0, 10),
+        employment_type: input.employmentType,
+        base_amount: input.newBaseAmountBaht,
+        created_by: user.profileId,
+      },
+      { onConflict: "employee_id,effective_date" }
+    );
     if (compError) {
       return { error: `บันทึกข้อมูลพนักงานสำเร็จ แต่บันทึกเงินเดือนใหม่ไม่สำเร็จ: ${compError.message}` };
     }

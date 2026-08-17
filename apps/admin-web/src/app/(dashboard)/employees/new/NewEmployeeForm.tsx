@@ -8,17 +8,17 @@ const initialState: CreateEmployeeState = {};
 
 export function NewEmployeeForm({
   departments,
-  teams,
   positions,
   managers,
 }: {
   departments: { id: string; name: string }[];
-  teams: { id: string; name: string }[];
-  positions: { id: string; title: string }[];
+  positions: { id: string; title: string; department_id: string | null }[];
   managers: { id: string; first_name: string; last_name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(createEmployeeAction, initialState);
   const [createLogin, setCreateLogin] = useState(true);
+  const [departmentId, setDepartmentId] = useState("");
+  const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
 
   if (state.success) {
     return (
@@ -64,9 +64,30 @@ export function NewEmployeeForm({
         <Field label="ชื่อเล่น" name="nickname" />
         <Field label="เบอร์โทร" name="phone" />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" />
-        <Select label="แผนก" name="departmentId" options={departments.map((d) => ({ value: d.id, label: d.name }))} />
-        <Select label="ทีม" name="teamId" options={teams.map((t) => ({ value: t.id, label: t.name }))} />
-        <Select label="ตำแหน่ง" name="jobPositionId" options={positions.map((p) => ({ value: p.id, label: p.title }))} />
+        <div className="space-y-1">
+          <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">
+            แผนก
+          </label>
+          <select
+            id="departmentId"
+            name="departmentId"
+            value={departmentId}
+            onChange={(e) => setDepartmentId(e.target.value)}
+            className="h-11 w-full rounded-lg border border-outline-variant bg-surface px-3 text-sm"
+          >
+            <option value="">-- ไม่ระบุ --</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Select
+          label="ตำแหน่ง"
+          name="jobPositionId"
+          options={positionsInDepartment.map((p) => ({ value: p.id, label: p.title }))}
+        />
         <Select
           label="หัวหน้างาน"
           name="managerEmployeeId"

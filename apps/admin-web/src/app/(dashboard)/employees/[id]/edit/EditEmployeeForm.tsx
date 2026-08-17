@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateEmployeeAction, type UpdateEmployeeState } from "../../actions";
 
@@ -16,7 +16,6 @@ interface EmployeeRow {
   employment_type: string;
   branch_id: string | null;
   department_id: string | null;
-  team_id: string | null;
   job_position_id: string | null;
   manager_employee_id: string | null;
 }
@@ -27,7 +26,6 @@ export function EditEmployeeForm({
   employee,
   currentBaseAmount,
   departments,
-  teams,
   positions,
   managers,
   branches,
@@ -35,14 +33,15 @@ export function EditEmployeeForm({
   employee: EmployeeRow;
   currentBaseAmount: number | null;
   departments: { id: string; name: string }[];
-  teams: { id: string; name: string }[];
-  positions: { id: string; title: string }[];
+  positions: { id: string; title: string; department_id: string | null }[];
   managers: { id: string; first_name: string; last_name: string }[];
   branches: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const boundAction = updateEmployeeAction.bind(null, employee.id);
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
+  const [departmentId, setDepartmentId] = useState(employee.department_id ?? "");
+  const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
 
   if (state.success) {
     router.push(`/employees/${employee.id}`);
@@ -62,18 +61,30 @@ export function EditEmployeeForm({
         <Field label="เบอร์โทร" name="phone" defaultValue={employee.phone ?? ""} />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" defaultValue={employee.personal_email ?? ""} />
         <Select label="สาขา" name="branchId" defaultValue={employee.branch_id ?? ""} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
-        <Select
-          label="แผนก"
-          name="departmentId"
-          defaultValue={employee.department_id ?? ""}
-          options={departments.map((d) => ({ value: d.id, label: d.name }))}
-        />
-        <Select label="ทีม" name="teamId" defaultValue={employee.team_id ?? ""} options={teams.map((t) => ({ value: t.id, label: t.name }))} />
+        <div className="space-y-1">
+          <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">
+            แผนก
+          </label>
+          <select
+            id="departmentId"
+            name="departmentId"
+            value={departmentId}
+            onChange={(e) => setDepartmentId(e.target.value)}
+            className="h-11 w-full rounded-lg border border-outline-variant bg-surface px-3 text-sm"
+          >
+            <option value="">-- ไม่ระบุ --</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <Select
           label="ตำแหน่ง"
           name="jobPositionId"
           defaultValue={employee.job_position_id ?? ""}
-          options={positions.map((p) => ({ value: p.id, label: p.title }))}
+          options={positionsInDepartment.map((p) => ({ value: p.id, label: p.title }))}
         />
         <Select
           label="หัวหน้างาน"
