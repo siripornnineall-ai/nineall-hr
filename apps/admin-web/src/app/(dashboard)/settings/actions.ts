@@ -57,3 +57,228 @@ export async function createLeaveTypeAction(_prev: LeaveTypeActionState, formDat
   revalidatePath("/settings");
   return {};
 }
+
+type FormValues = Record<string, string | boolean>;
+const str = (v: FormValues, key: string) => (typeof v[key] === "string" ? (v[key] as string).trim() : "");
+const strOrNull = (v: FormValues, key: string) => str(v, key) || null;
+const bool = (v: FormValues, key: string) => Boolean(v[key]);
+const num = (v: FormValues, key: string, fallback = 0) => {
+  const n = Number(v[key]);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+async function requireSettingsUser() {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  return user;
+}
+
+export async function createLeaveTypeQuickAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  if (!str(values, "code") || !str(values, "nameTh")) throw new Error("กรุณากรอกรหัสและชื่อประเภทการลา");
+  const supabase = await createClient();
+  const { data: leaveType, error } = await supabase
+    .from("leave_types")
+    .insert({ org_id: user.orgId, code: str(values, "code"), name_th: str(values, "nameTh"), is_paid: bool(values, "isPaid") })
+    .select("id")
+    .single();
+  if (error || !leaveType) throw new Error(error?.message ?? "บันทึกไม่สำเร็จ");
+  await supabase.from("leave_policies").insert({
+    leave_type_id: leaveType.id,
+    effective_date: new Date().toISOString().slice(0, 10),
+    days_per_year: num(values, "daysPerYear"),
+    created_by: user.profileId,
+  });
+  revalidatePath("/settings");
+}
+
+export async function updateLeaveTypeAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leave_types")
+    .update({ code: str(values, "code"), name_th: str(values, "nameTh"), is_paid: bool(values, "isPaid") })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateOrganizationAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ name: str(values, "name"), timezone: str(values, "timezone") })
+    .eq("id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+// --- Branches ---------------------------------------------------------------
+export async function createBranchAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  if (!str(values, "name")) throw new Error("กรุณากรอกชื่อสาขา");
+  const supabase = await createClient();
+  const { error } = await supabase.from("branches").insert({ org_id: user.orgId, name: str(values, "name"), address: strOrNull(values, "address") });
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateBranchAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("branches")
+    .update({ name: str(values, "name"), address: strOrNull(values, "address") })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+// --- Departments --------------------------------------------------------------
+export async function createDepartmentAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  if (!str(values, "name")) throw new Error("กรุณากรอกชื่อแผนก");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("departments")
+    .insert({ org_id: user.orgId, name: str(values, "name"), name_en: strOrNull(values, "nameEn") });
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateDepartmentAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("departments")
+    .update({ name: str(values, "name"), name_en: strOrNull(values, "nameEn") })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+// --- Teams --------------------------------------------------------------------
+export async function createTeamAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  if (!str(values, "name")) throw new Error("กรุณากรอกชื่อทีม");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("teams")
+    .insert({ org_id: user.orgId, name: str(values, "name"), department_id: strOrNull(values, "departmentId") });
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateTeamAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("teams")
+    .update({ name: str(values, "name"), department_id: strOrNull(values, "departmentId") })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+// --- Job positions --------------------------------------------------------------
+export async function createJobPositionAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  if (!str(values, "title")) throw new Error("กรุณากรอกชื่อตำแหน่ง");
+  const supabase = await createClient();
+  const { error } = await supabase.from("job_positions").insert({
+    org_id: user.orgId,
+    title: str(values, "title"),
+    title_en: strOrNull(values, "titleEn"),
+    department_id: strOrNull(values, "departmentId"),
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateJobPositionAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("job_positions")
+    .update({ title: str(values, "title"), title_en: strOrNull(values, "titleEn"), department_id: strOrNull(values, "departmentId") })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+// --- Work shifts --------------------------------------------------------------
+export async function createShiftAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  if (!str(values, "name") || !str(values, "startTime") || !str(values, "endTime")) throw new Error("กรุณากรอกชื่อกะและเวลาเข้า-ออกให้ครบ");
+  const supabase = await createClient();
+  const { error } = await supabase.from("work_shifts").insert({
+    org_id: user.orgId,
+    name: str(values, "name"),
+    start_time: str(values, "startTime"),
+    end_time: str(values, "endTime"),
+    grace_minutes_late: num(values, "graceMinutesLate"),
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateShiftAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("work_shifts")
+    .update({
+      name: str(values, "name"),
+      start_time: str(values, "startTime"),
+      end_time: str(values, "endTime"),
+      grace_minutes_late: num(values, "graceMinutesLate"),
+    })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+// --- Work locations -------------------------------------------------------------
+function parseLatLng(values: FormValues) {
+  const lat = num(values, "latitude", NaN);
+  const lng = num(values, "longitude", NaN);
+  if (!str(values, "name") || Number.isNaN(lat) || Number.isNaN(lng)) throw new Error("กรุณากรอกชื่อสถานที่และพิกัด GPS ให้ครบ");
+  if (lat < -90 || lat > 90) throw new Error("ละติจูดไม่ถูกต้อง (ต้องอยู่ระหว่าง -90 ถึง 90)");
+  if (lng < -180 || lng > 180) throw new Error("ลองจิจูดไม่ถูกต้อง (ต้องอยู่ระหว่าง -180 ถึง 180)");
+  return { lat, lng };
+}
+
+export async function createWorkLocationAction(values: FormValues) {
+  const user = await requireSettingsUser();
+  const { lat, lng } = parseLatLng(values);
+  const supabase = await createClient();
+  const { error } = await supabase.from("work_locations").insert({
+    org_id: user.orgId,
+    name: str(values, "name"),
+    latitude: lat,
+    longitude: lng,
+    radius_meters: num(values, "radiusMeters", 150),
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function updateWorkLocationAction(id: string, values: FormValues) {
+  const user = await requireSettingsUser();
+  const { lat, lng } = parseLatLng(values);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("work_locations")
+    .update({ name: str(values, "name"), latitude: lat, longitude: lng, radius_meters: num(values, "radiusMeters", 150) })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
