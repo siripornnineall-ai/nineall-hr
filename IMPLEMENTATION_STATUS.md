@@ -1,6 +1,6 @@
 # Implementation Status — Nineall HR
 
-Last updated: 2026-08-13 (session 3). Update this file every time
+Last updated: 2026-08-17 (session 3, continued). Update this file every time
 a module is finished or a decision changes — do not silently let it go
 stale, and do not declare something "done" here if its tests/build aren't
 actually green.
@@ -45,6 +45,20 @@ typecheck):
   pattern (see `OffboardButton.tsx`, `DeleteKeyButton` in
   `TranslationGrid.tsx`) instead of `window.confirm()`/`alert()` — better
   UX anyway (stylable, can't be silently blocked).
+- **Settings page 500'd on every load (2026-08-17)**: building the
+  `EditableList` component above, `displayLabel`/`displaySubLabel` were
+  passed as plain closures from the server-rendered `settings/page.tsx`
+  into the client `EditableList` component. Next.js only allows
+  serializable data or genuine `"use server"` actions across the
+  Server→Client Component prop boundary — plain functions crash the render
+  ("Functions cannot be passed directly to Client Components..."). Fixed
+  by precomputing `label`/`subLabel` as plain strings on each row
+  server-side instead of handing over formatter functions. Caught by
+  reproducing the production 500 against a local `next start` build using
+  the real Supabase env — the production error page itself only showed a
+  generic digest, so local reproduction with full server logs was
+  necessary to see the real stack trace. Re-verified live on Vercel after
+  the fix deployed.
 
 New features:
 - **Employee self-service profile editing** (name, nickname, bio, photo) in
@@ -56,6 +70,19 @@ New features:
   resignation/termination date, deactivates their login, logs to
   `audit_logs`. Implemented as a `security definer` RPC
   (`offboard_employee`, `0018`) rather than a client-side table update.
+- **Settings page: full CRUD editing, 2026-08-17.** Previously every
+  Settings section (company info, leave types, shifts, work locations) was
+  read-only apart from an add-only leave-type form, and branches/
+  departments/teams/job positions had no UI at all. Built a generic
+  `EditableList` client component (inline add/edit forms, field types
+  text/number/checkbox/select/time) reused across seven entities — leave
+  types, shifts, work locations (with GPS lat/lng validation, -90..90 /
+  -180..180), branches, departments, teams, and job positions — plus a
+  simple inline edit form for company name/timezone. All backed by
+  dedicated server actions in `settings/actions.ts` (`requireSettingsUser()`
+  gate: super_admin/hr only). **Verified live** against production
+  Supabase: edited the company name, confirmed it persisted, reverted it;
+  opened the leave-type edit form and confirmed it prefilled real data.
 
 **A design detour worth knowing about** (0017 → 0018 → 0019): building the
 profile-editing feature above, this session added a column-level `GRANT`
@@ -133,7 +160,7 @@ TypeScript errors, verified this session).
 | Payroll (full flow: create → calculate → submit → approve → lock) | ✅ Real | Bank-file export, printable payslip PDF still not built. **Session 3**: fixed a double-submit bug on "create payroll period" (no pending-disabled guard → 33 duplicate runs created in production, cleaned up); now uses `SubmitButton` + a server-side idempotency check (reuses the existing non-locked run for a period instead of creating another) |
 | Announcements | ✅ Real | |
 | **Translation Management** | ✅ Built and **click-tested this session** | `/translations` (super_admin/hr only) — search, missing/complete filter, inline per-locale editing with autosave + history log (`translation_history`), add-key form, delete-key, JSON export/import (not Excel — see limitation below), missing-translation warning count. Database already had **~75 translation keys** (`auth.*`, `common.*`, `dashboard.*`, `nav.*`, `status.*` namespaces) from earlier in session 2, plus 8 more added via `supabase/seed/004_translations.sql`. **A real bug was caught and fixed here**: `LOCALES`/`Locale` were originally exported from `actions.ts`, a `"use server"` file — Next.js only allows async-function exports from Server Action modules, so the client component received a broken value and the page 500'd (`LOCALES.some is not a function`). Moved the constant to a new `constants.ts` and re-verified — logged in as `EMP-001`, page loads real data cleanly, zero console errors. **Known limitation:** import is JSON, not Excel (master prompt's Stitch reference shows "Import Excel" — parsing .xlsx server-side wasn't attempted this session) |
-| Settings | 🟡 Partial | Same gaps as session 1: branches/teams/positions CRUD, tax/SS version editor, approval-chain config, role-permission matrix UI not built; `custom_roles` table exists but isn't wired into any UI or the RLS permission check yet |
+| Settings | ✅ Core CRUD done, session 3 (2026-08-17) | Company info, leave types, shifts, work locations/GPS radius, branches, departments, teams, and job positions are all now editable in-page (`EditableList` component). **Remaining gaps**: tax/SS version editor, approval-chain config, role-permission matrix UI not built; `custom_roles` table exists but isn't wired into any UI or the RLS permission check yet |
 | Reports | 🟡 Partial | One real report (monthly attendance summary) |
 | Shift & schedule management UI | ❌ Not built | |
 | Time-correction request review UI | ❌ Not built | |
