@@ -46,6 +46,16 @@ export default async function SettingsPage() {
     supabase.from("job_positions").select("id, title, title_en, department_id, departments(name)").eq("org_id", user.orgId),
   ]);
 
+  const { data: leavePolicyRows } = await supabase
+    .from("leave_policies")
+    .select("leave_type_id, days_per_year, allow_half_day, allow_hourly, requires_attachment, notice_days_required, effective_date")
+    .in("leave_type_id", (leaveTypes ?? []).map((lt) => lt.id))
+    .order("effective_date", { ascending: false });
+  const latestPolicyByType = new Map<string, NonNullable<typeof leavePolicyRows>[number]>();
+  for (const p of leavePolicyRows ?? []) {
+    if (!latestPolicyByType.has(p.leave_type_id)) latestPolicyByType.set(p.leave_type_id, p);
+  }
+
   const departmentOptions = (departments ?? []).map((d) => ({ value: d.id, label: d.name }));
 
   return (
@@ -61,15 +71,28 @@ export default async function SettingsPage() {
               { key: "code", label: "รหัส", type: "text" },
               { key: "nameTh", label: "ชื่อภาษาไทย", type: "text" },
               { key: "isPaid", label: "ได้รับค่าจ้าง", type: "checkbox" },
+              { key: "daysPerYear", label: "จำนวนวัน/ปี", type: "number", optional: true },
+              { key: "allowHalfDay", label: "ลาครึ่งวันได้ (เช้า/บ่าย)", type: "checkbox" },
+              { key: "allowHourly", label: "ลารายชั่วโมงได้", type: "checkbox" },
+              { key: "requiresAttachment", label: "ต้องแนบเอกสาร", type: "checkbox" },
+              { key: "noticeDaysRequired", label: "แจ้งล่วงหน้า (วัน)", type: "number", optional: true },
             ]}
-            rows={(leaveTypes ?? []).map((lt) => ({
-              id: lt.id,
-              code: lt.code,
-              nameTh: lt.name_th,
-              isPaid: lt.is_paid,
-              label: lt.name_th,
-              subLabel: lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง",
-            }))}
+            rows={(leaveTypes ?? []).map((lt) => {
+              const policy = latestPolicyByType.get(lt.id);
+              return {
+                id: lt.id,
+                code: lt.code,
+                nameTh: lt.name_th,
+                isPaid: lt.is_paid,
+                daysPerYear: policy?.days_per_year ?? 0,
+                allowHalfDay: policy?.allow_half_day ?? true,
+                allowHourly: policy?.allow_hourly ?? false,
+                requiresAttachment: policy?.requires_attachment ?? false,
+                noticeDaysRequired: policy?.notice_days_required ?? 0,
+                label: lt.name_th,
+                subLabel: `${lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง"} • ${policy?.days_per_year ?? 0} วัน/ปี`,
+              };
+            })}
             onCreate={createLeaveTypeQuickAction}
             onSave={updateLeaveTypeAction}
             emptyLabel="ยังไม่มีประเภทการลา"

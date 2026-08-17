@@ -248,7 +248,11 @@ export async function calculatePayrollRunAction(runId: string) {
   revalidatePath(`/payroll/${runId}`);
 }
 
-export async function submitPayrollRunAction(runId: string) {
+// A single "approve" step, not a separate submit-then-approve dance: for a
+// small team the same person calculates and signs off, so the extra click
+// and status hop were pure friction. The anomaly check that used to gate
+// submission now gates approval directly.
+export async function approvePayrollRunAction(runId: string) {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
   const supabase = await createClient();
@@ -259,21 +263,9 @@ export async function submitPayrollRunAction(runId: string) {
     .eq("payroll_run_id", runId)
     .eq("has_anomaly", true);
   if ((count ?? 0) > 0) {
-    throw new Error("ยังมีรายการที่มีความผิดปกติซึ่งยังไม่ได้ตรวจสอบ กรุณาแก้ไขก่อนส่งอนุมัติ");
+    throw new Error("ยังมีรายการที่มีความผิดปกติซึ่งยังไม่ได้ตรวจสอบ กรุณาแก้ไขก่อนอนุมัติ");
   }
 
-  await supabase
-    .from("payroll_runs")
-    .update({ status: "pending_approval", submitted_at: new Date().toISOString(), submitted_by: user.profileId })
-    .eq("id", runId)
-    .eq("org_id", user.orgId);
-  revalidatePath(`/payroll/${runId}`);
-}
-
-export async function approvePayrollRunAction(runId: string) {
-  const user = await requireUser();
-  requireRole(user, ["super_admin", "hr"]);
-  const supabase = await createClient();
   await supabase
     .from("payroll_runs")
     .update({ status: "approved", approved_at: new Date().toISOString(), approved_by: user.profileId })

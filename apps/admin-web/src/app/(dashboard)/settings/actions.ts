@@ -87,20 +87,58 @@ export async function createLeaveTypeQuickAction(values: FormValues) {
     leave_type_id: leaveType.id,
     effective_date: new Date().toISOString().slice(0, 10),
     days_per_year: num(values, "daysPerYear"),
+    allow_half_day: bool(values, "allowHalfDay"),
+    allow_hourly: bool(values, "allowHourly"),
+    requires_attachment: bool(values, "requiresAttachment"),
+    notice_days_required: num(values, "noticeDaysRequired"),
     created_by: user.profileId,
   });
   revalidatePath("/settings");
 }
 
+// Policy fields are edited in place on the current policy row rather than versioned
+// with a new effective-dated row — this is a quick-edit settings UI, not the
+// effective-dated history flow (that's what leave_policies is designed to support
+// later, e.g. a "change policy starting next year" feature, not built here).
 export async function updateLeaveTypeAction(id: string, values: FormValues) {
   const user = await requireSettingsUser();
   const supabase = await createClient();
-  const { error } = await supabase
+  const { error: typeErr } = await supabase
     .from("leave_types")
     .update({ code: str(values, "code"), name_th: str(values, "nameTh"), is_paid: bool(values, "isPaid") })
     .eq("id", id)
     .eq("org_id", user.orgId);
-  if (error) throw new Error(error.message);
+  if (typeErr) throw new Error(typeErr.message);
+
+  const policyFields = {
+    days_per_year: num(values, "daysPerYear"),
+    allow_half_day: bool(values, "allowHalfDay"),
+    allow_hourly: bool(values, "allowHourly"),
+    requires_attachment: bool(values, "requiresAttachment"),
+    notice_days_required: num(values, "noticeDaysRequired"),
+  };
+
+  const { data: currentPolicy } = await supabase
+    .from("leave_policies")
+    .select("id")
+    .eq("leave_type_id", id)
+    .order("effective_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (currentPolicy) {
+    const { error: policyErr } = await supabase.from("leave_policies").update(policyFields).eq("id", currentPolicy.id);
+    if (policyErr) throw new Error(policyErr.message);
+  } else {
+    const { error: policyErr } = await supabase.from("leave_policies").insert({
+      leave_type_id: id,
+      effective_date: new Date().toISOString().slice(0, 10),
+      created_by: user.profileId,
+      ...policyFields,
+    });
+    if (policyErr) throw new Error(policyErr.message);
+  }
+
   revalidatePath("/settings");
 }
 

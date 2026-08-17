@@ -119,7 +119,7 @@ export default function LeavePage() {
       <h1 className="text-lg font-bold text-primary">ขอลางาน</h1>
 
       <div className="grid grid-cols-2 gap-3">
-        {balances.slice(0, 2).map((b) => {
+        {balances.map((b) => {
           const type = leaveTypes.find((t) => t.id === b.leave_type_id);
           const remaining = Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days);
           return (

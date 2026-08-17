@@ -6,12 +6,14 @@ import { Badge } from "@/components/Badge";
 import { RunActions } from "./RunActions";
 
 const STEPS = [
-  { key: "draft", label: "เลือกพนักงาน" },
-  { key: "under_review", label: "ตรวจสอบเวลา/ลา" },
-  { key: "pending_approval", label: "คำนวณรายได้/หัก" },
+  { key: "draft", label: "สร้างรอบเงินเดือน" },
+  { key: "under_review", label: "คำนวณ/ตรวจสอบ" },
   { key: "approved", label: "อนุมัติ" },
   { key: "locked", label: "ล็อก/ออกสลิป" },
 ];
+// "pending_approval" is a legacy status from a removed submit-for-approval step;
+// old runs may still carry it, so it's treated the same as "approved" for the stepper.
+const STEP_STATUS_ALIAS: Record<string, string> = { pending_approval: "approved" };
 
 export default async function PayrollRunDetailPage({ params }: { params: Promise<{ runId: string }> }) {
   const user = await requireUser();
@@ -35,7 +37,7 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
 
   const period = run.payroll_periods as unknown as { label: string; period_start: string; period_end: string; pay_date: string } | null;
   const anomalyCount = (calculations ?? []).filter((c) => c.has_anomaly).length;
-  const stepIndex = STEPS.findIndex((s) => s.key === run.status);
+  const stepIndex = STEPS.findIndex((s) => s.key === (STEP_STATUS_ALIAS[run.status] ?? run.status));
 
   return (
     <>
