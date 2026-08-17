@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 interface PayslipRow {
   id: string;
+  pdf_file_path: string | null;
   payroll_periods: { label: string; pay_date: string } | null;
   payroll_employee_calculations: {
     gross_earnings: number;
@@ -23,12 +24,22 @@ export default function PayslipPage() {
   const [payslips, setPayslips] = useState<PayslipRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  async function handleDownload(path: string, id: string) {
+    setDownloadingId(id);
+    const { data } = await supabase.storage.from("payslips").createSignedUrl(path, 3600);
+    setDownloadingId(null);
+    if (data) window.open(data.signedUrl, "_blank");
+  }
 
   useEffect(() => {
     if (!profile) return;
     supabase
       .from("payslips")
-      .select("id, payroll_periods(label, pay_date), payroll_employee_calculations(gross_earnings, total_deductions, net_pay, social_security_amount, tax_amount)")
+      .select(
+        "id, pdf_file_path, payroll_periods(label, pay_date), payroll_employee_calculations(gross_earnings, total_deductions, net_pay, social_security_amount, tax_amount)"
+      )
       .eq("employee_id", profile.employeeId)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
@@ -67,6 +78,16 @@ export default function PayslipPage() {
                 <DetailRow label="ภาษีหัก ณ ที่จ่าย" value={-calc.tax_amount} negative />
                 <div className="my-1 h-px bg-outline-variant" />
                 <DetailRow label="เงินได้สุทธิ" value={calc.net_pay} bold />
+                {p.pdf_file_path && (
+                  <button
+                    onClick={() => handleDownload(p.pdf_file_path!, p.id)}
+                    disabled={downloadingId === p.id}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{downloadingId === p.id ? "progress_activity" : "download"}</span>
+                    {downloadingId === p.id ? "กำลังเตรียมไฟล์..." : "ดาวน์โหลด PDF"}
+                  </button>
+                )}
               </div>
             )}
           </div>

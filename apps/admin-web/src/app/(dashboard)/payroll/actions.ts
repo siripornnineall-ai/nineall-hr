@@ -7,6 +7,7 @@ import type { AttendanceStatus, PayrollEmployeeInput, PayrollInputDay } from "@n
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { loadPolicyConfig } from "@/lib/payroll/policy";
+import { generatePayslipBuffer } from "@/lib/pdf/generatePayslipBuffer";
 
 export async function createPayrollRunAction(formData: FormData) {
   const user = await requireUser();
@@ -279,17 +280,64 @@ export async function lockPayrollRunAction(runId: string) {
   requireRole(user, ["super_admin"]);
   const supabase = await createClient();
 
-  const { data: calcs } = await supabase.from("payroll_employee_calculations").select("id, employee_id").eq("payroll_run_id", runId);
+  const { data: calcs } = await supabase.from("payroll_employee_calculations").select("*").eq("payroll_run_id", runId);
 
   await supabase.from("payroll_runs").update({ status: "locked", locked_at: new Date().toISOString(), locked_by: user.profileId }).eq("id", runId);
 
-  const { data: run } = await supabase.from("payroll_runs").select("payroll_period_id").eq("id", runId).single();
-  if (run && calcs) {
-    await supabase.from("payslips").upsert(
-      calcs.map((c) => ({ payroll_calc_id: c.id, employee_id: c.employee_id, payroll_period_id: run.payroll_period_id, issued_at: new Date().toISOString() })),
-      { onConflict: "payroll_calc_id" }
-    );
+  const { data: run } = await supabase
+    .from("payroll_runs")
+    .select("payroll_period_id, org_id, payroll_periods(label, period_start, period_end, pay_date)")
+    .eq("id", runId)
+    .single();
+  if (!run || !calcs) {
+    revalidatePath(`/payroll/${runId}`);
+    return;
   }
+
+  const { data: org } = await supabase.from("organizations").select("name, legal_name").eq("id", run.org_id).single();
+  const period = run.payroll_periods as unknown as { label: string; period_start: string; period_end: string; pay_date: string } | null;
+
+  await supabase.from("payslips").upsert(
+    calcs.map((c) => ({ payroll_calc_id: c.id, employee_id: c.employee_id, payroll_period_id: run.payroll_period_id, issued_at: new Date().toISOString() })),
+    { onConflict: "payroll_calc_id" }
+  );
+
+  // Generate + upload each payslip PDF in parallel, same pattern as the payroll
+  // calculation step — independent per-employee work, no reason to serialize it.
+  await Promise.all(
+    calcs.map(async (c) => {
+      const pdfBuffer = await generatePayslipBuffer({
+        orgName: org?.name ?? "-",
+        orgLegalName: org?.legal_name ?? null,
+        employeeCode: c.employee_code_snapshot,
+        employeeName: c.employee_name_snapshot,
+        department: c.department_snapshot,
+        position: c.position_snapshot,
+        periodLabel: period?.label ?? "-",
+        periodStart: period?.period_start ? new Date(period.period_start).toLocaleDateString("th-TH") : "-",
+        periodEnd: period?.period_end ? new Date(period.period_end).toLocaleDateString("th-TH") : "-",
+        payDate: period?.pay_date ? new Date(period.pay_date).toLocaleDateString("th-TH") : "-",
+        baseAmount: Number(c.base_amount),
+        otAmount: Number(c.ot_amount),
+        workedDays: Number(c.worked_days),
+        absentDays: Number(c.absent_days),
+        lateCount: Number(c.late_count),
+        grossEarnings: Number(c.gross_earnings),
+        socialSecurityAmount: Number(c.social_security_amount),
+        taxAmount: Number(c.tax_amount),
+        totalDeductions: Number(c.total_deductions),
+        netPay: Number(c.net_pay),
+      });
+
+      const path = `${run.org_id}/${c.employee_id}/payslip-${run.payroll_period_id}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from("payslips")
+        .upload(path, pdfBuffer, { contentType: "application/pdf", upsert: true });
+      if (uploadError) return;
+
+      await supabase.from("payslips").update({ pdf_file_path: path }).eq("payroll_calc_id", c.id);
+    })
+  );
 
   revalidatePath(`/payroll/${runId}`);
 }

@@ -35,6 +35,21 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
     .eq("payroll_run_id", runId)
     .order("employee_code_snapshot");
 
+  const { data: payslips } = await supabase
+    .from("payslips")
+    .select("payroll_calc_id, pdf_file_path")
+    .in("payroll_calc_id", (calculations ?? []).map((c) => c.id));
+
+  const payslipUrlByCalcId = new Map<string, string>();
+  await Promise.all(
+    (payslips ?? [])
+      .filter((p): p is { payroll_calc_id: string; pdf_file_path: string } => !!p.pdf_file_path)
+      .map(async (p) => {
+        const { data: signed } = await supabase.storage.from("payslips").createSignedUrl(p.pdf_file_path, 3600);
+        if (signed) payslipUrlByCalcId.set(p.payroll_calc_id, signed.signedUrl);
+      })
+  );
+
   const period = run.payroll_periods as unknown as { label: string; period_start: string; period_end: string; pay_date: string } | null;
   const anomalyCount = (calculations ?? []).filter((c) => c.has_anomaly).length;
   const stepIndex = STEPS.findIndex((s) => s.key === (STEP_STATUS_ALIAS[run.status] ?? run.status));
@@ -90,12 +105,13 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                   <th className="px-3 py-3 text-right font-bold text-on-surface-variant">ภาษี</th>
                   <th className="px-3 py-3 text-right font-bold text-on-surface-variant">เงินสุทธิ</th>
                   <th className="px-3 py-3 text-center font-bold text-on-surface-variant">สถานะ</th>
+                  <th className="px-3 py-3 text-center font-bold text-on-surface-variant">สลิป</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant">
                 {(calculations ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-on-surface-variant">
+                    <td colSpan={11} className="px-4 py-10 text-center text-on-surface-variant">
                       ยังไม่มีข้อมูลการคำนวณ กด &quot;คำนวณเงินเดือนอัตโนมัติ&quot; เพื่อเริ่มต้น
                     </td>
                   </tr>
@@ -118,6 +134,15 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                         <Badge tone="success">พร้อมจ่าย</Badge>
                       )}
                       {c.anomaly_notes && <p className="mt-1 text-[10px] text-error">{c.anomaly_notes}</p>}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {payslipUrlByCalcId.has(c.id) ? (
+                        <a href={payslipUrlByCalcId.get(c.id)} target="_blank" rel="noreferrer" className="text-xs font-bold text-primary hover:underline">
+                          ดาวน์โหลด PDF
+                        </a>
+                      ) : (
+                        <span className="text-xs text-on-surface-variant">-</span>
+                      )}
                     </td>
                   </tr>
                 ))}
