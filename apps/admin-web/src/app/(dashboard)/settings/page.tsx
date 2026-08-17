@@ -19,6 +19,8 @@ import {
   updateWorkLocationAction,
   createLeaveTypeQuickAction,
   updateLeaveTypeAction,
+  createHolidayAction,
+  updateHolidayAction,
 } from "./actions";
 
 export default async function SettingsPage() {
@@ -45,6 +47,12 @@ export default async function SettingsPage() {
     supabase.from("teams").select("id, name, department_id, departments(name)").eq("org_id", user.orgId),
     supabase.from("job_positions").select("id, title, title_en, department_id, departments(name)").eq("org_id", user.orgId),
   ]);
+
+  const { data: holidays } = await supabase
+    .from("company_holidays")
+    .select("id, name, holiday_date")
+    .eq("org_id", user.orgId)
+    .order("holiday_date");
 
   const { data: leavePolicyRows } = await supabase
     .from("leave_policies")
@@ -224,6 +232,25 @@ export default async function SettingsPage() {
             addLabel="เพิ่มตำแหน่ง"
           />
         </div>
+
+        <EditableList
+          title="วันหยุดบริษัท"
+          fields={[
+            { key: "name", label: "ชื่อวันหยุด", type: "text" },
+            { key: "holidayDate", label: "วันที่", type: "date" },
+          ]}
+          rows={(holidays ?? []).map((h) => ({
+            id: h.id,
+            name: h.name,
+            holidayDate: h.holiday_date,
+            label: h.name,
+            subLabel: new Date(h.holiday_date).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" }),
+          }))}
+          onCreate={createHolidayAction}
+          onSave={updateHolidayAction}
+          emptyLabel="ยังไม่มีวันหยุดบริษัท"
+          addLabel="เพิ่มวันหยุด"
+        />
 
         <section className="rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-6 text-sm text-on-surface-variant">
           หน้าตั้งค่าขั้นสูง (ภาษี/ประกันสังคมแบบมีเวอร์ชัน, ลำดับผู้อนุมัติ, สิทธิ์ผู้ใช้แบบละเอียด, รูปแบบสลิป) อยู่ระหว่างพัฒนา — ดูสถานะที่{" "}

@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 export type FieldDef = {
   key: string;
   label: string;
-  type: "text" | "number" | "checkbox" | "select" | "time";
+  type: "text" | "number" | "checkbox" | "select" | "time" | "date";
   options?: { value: string; label: string }[];
   optional?: boolean;
 };
@@ -173,7 +173,7 @@ function EntityForm({
               <>
                 <label className="mb-1 block text-xs font-semibold text-on-surface-variant">{f.label}</label>
                 <input
-                  type={f.type === "time" ? "time" : f.type === "number" ? "number" : "text"}
+                  type={f.type === "time" ? "time" : f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
                   value={String(values[f.key] ?? "")}
                   onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
                   className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm"

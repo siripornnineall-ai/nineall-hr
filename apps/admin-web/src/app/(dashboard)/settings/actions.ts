@@ -326,3 +326,29 @@ export async function updateWorkLocationAction(id: string, values: FormValues) {
   if (error) throw new Error(error.message);
   revalidatePath("/settings");
 }
+
+// --- Company holidays -------------------------------------------------------------
+export async function createHolidayAction(values: FormValues): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  if (!str(values, "name") || !str(values, "holidayDate")) return { error: "กรุณากรอกชื่อวันหยุดและวันที่" };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("company_holidays")
+    .insert({ org_id: user.orgId, name: str(values, "name"), holiday_date: str(values, "holidayDate") });
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+}
+
+export async function updateHolidayAction(id: string, values: FormValues): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("company_holidays")
+    .update({ name: str(values, "name"), holiday_date: str(values, "holidayDate") })
+    .eq("id", id)
+    .eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+}

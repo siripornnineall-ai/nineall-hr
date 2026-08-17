@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { getDashboardStats } from "@/lib/queries/dashboard";
+import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/StatCard";
 
@@ -9,7 +10,17 @@ function formatThaiDate(date: Date): string {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const stats = await getDashboardStats(user.orgId);
+  const supabase = await createClient();
+  const [stats, { data: holidays }] = await Promise.all([
+    getDashboardStats(user.orgId),
+    supabase
+      .from("company_holidays")
+      .select("id, name, holiday_date")
+      .eq("org_id", user.orgId)
+      .gte("holiday_date", new Date().toISOString().slice(0, 10))
+      .order("holiday_date")
+      .limit(5),
+  ]);
 
   return (
     <>
@@ -47,6 +58,28 @@ export default async function DashboardPage() {
                     </p>
                   </li>
                 ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-outline-variant bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-lg font-bold">วันหยุดที่กำลังจะมาถึง</h3>
+            {(holidays ?? []).length === 0 ? (
+              <p className="text-sm text-on-surface-variant">ไม่มีวันหยุดที่กำลังจะมาถึง</p>
+            ) : (
+              <ul className="space-y-3">
+                {(holidays ?? []).map((h) => {
+                  const d = new Date(h.holiday_date);
+                  return (
+                    <li key={h.id} className="flex items-center gap-3 border-b border-outline-variant pb-2 last:border-0">
+                      <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <span className="text-sm font-bold leading-none">{d.getDate()}</span>
+                        <span className="text-[10px] leading-none">{d.toLocaleDateString("th-TH", { month: "short" })}</span>
+                      </div>
+                      <p className="text-sm font-semibold">{h.name}</p>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

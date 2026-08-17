@@ -14,6 +14,12 @@ interface HomeStats {
   todayClockIn: string | null;
 }
 
+interface Holiday {
+  id: string;
+  name: string;
+  holiday_date: string;
+}
+
 const STATUS_TH: Record<string, string> = {
   on_time: "ตรงเวลา",
   late: "มาสาย",
@@ -30,6 +36,7 @@ export default function HomePage() {
   const { profile, signOut, loading: authLoading } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [stats, setStats] = useState<HomeStats | null>(null);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -72,6 +79,18 @@ export default function HomePage() {
   useEffect(() => {
     loadStats();
   }, [loadStats]);
+
+  useEffect(() => {
+    if (!profile) return;
+    supabase
+      .from("company_holidays")
+      .select("id, name, holiday_date")
+      .eq("org_id", profile.orgId)
+      .gte("holiday_date", new Date().toISOString().slice(0, 10))
+      .order("holiday_date")
+      .limit(5)
+      .then(({ data }) => setHolidays(data ?? []));
+  }, [profile, supabase]);
 
   if (authLoading) {
     return (
@@ -131,6 +150,26 @@ export default function HomePage() {
             <span className="text-xs font-bold">ขอลางาน</span>
           </Link>
         </div>
+
+        {holidays.length > 0 && (
+          <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+            <p className="mb-3 text-sm font-bold text-on-surface">วันหยุดที่กำลังจะมาถึง</p>
+            <ul className="space-y-3">
+              {holidays.map((h) => {
+                const d = new Date(h.holiday_date);
+                return (
+                  <li key={h.id} className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-full bg-primary-container text-primary">
+                      <span className="text-sm font-bold leading-none">{d.getDate()}</span>
+                      <span className="text-[9px] leading-none">{d.toLocaleDateString("th-TH", { month: "short" })}</span>
+                    </div>
+                    <p className="text-sm text-on-surface">{h.name}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <div className="flex justify-end pt-2">
           <button onClick={() => signOut()} className="text-xs font-semibold text-status-danger">
