@@ -151,8 +151,17 @@ New features, all click-tested against production:
   signed URL). Known limitation: the PDF's text layer (copy/paste,
   search) comes out reordered for Thai — a common complex-script PDF
   limitation — visual rendering and printing are correct.
+- **Minimum service requirement for leave types**: `leave_policies.
+  min_service_months` (existed in the schema, never exposed anywhere)
+  is now editable in Settings → leave types, and enforced when HR grants
+  a leave balance — e.g. ลาพักร้อน (annual leave) set to 6 days/year,
+  requiring 12 months of service; granting it to an employee who hasn't
+  reached that tenure is blocked with a message naming the employee and
+  how many months they're short. Enforced only on the grant side (not on
+  leave *requests* — those are already blocked by insufficient
+  `leave_balances`, since nothing gets granted before eligibility).
 
-**Two real, previously-latent bugs found and fixed:**
+**Three real, previously-latent bugs found and fixed:**
 - **UUID validation silently broke department/team/position/manager
   selection everywhere**, including the pre-existing "Add Employee" form,
   not just the new edit form. Zod's `.uuid()` enforces real RFC4122
@@ -175,6 +184,24 @@ New features, all click-tested against production:
   gets its own object, so upsert never needs to overwrite one. Verified
   by resetting a run to "approved" and re-locking it directly on the
   live Vercel deployment, confirming the download link appears.
+- **Server Action validation errors were invisible to users in
+  production**: Next.js redacts any message thrown from a Server Action
+  in production builds by default (security behavior, not a framework
+  bug) — the client only ever receives a generic "An error occurred" +
+  digest, *even when the client-side code catches it*, because the
+  redaction happens before the message crosses the server/client
+  boundary. Surfaced while testing the min-service-months block above —
+  the enforcement logic was correct (confirmed in server logs) but the
+  user would only ever have seen the generic message, never the real
+  reason. Fixed for `EditableList`'s consumers (Settings leave types,
+  leave balance grants) by having those actions return `{ error }`
+  instead of throwing; `EditableList` now checks the return value first,
+  falling back to catching genuinely unexpected exceptions. **Other
+  throw-based actions in this codebase (offboarding, payroll
+  approve/lock, branches/departments/teams/positions/shifts/locations in
+  Settings) likely have the same gap and weren't converted this
+  session** — worth doing if a similar "the error message doesn't show
+  up" report comes in on any of those.
 
 **Environment notes carried forward:** the Supabase MCP connection used
 earlier in session 3 for direct SQL disconnected partway through and
