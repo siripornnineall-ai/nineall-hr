@@ -10,14 +10,16 @@ export type FieldDef = {
   optional?: boolean;
 };
 
-type Row = Record<string, string | number | boolean | null>;
+// `label`/`subLabel` are plain strings (not functions) because rows cross the
+// server-to-client boundary as props: only serializable data or genuine
+// "use server" actions can be passed to a Client Component, so any per-row
+// display formatting must happen in the server component before it gets here.
+type Row = Record<string, string | number | boolean | null> & { label: string; subLabel?: string | null };
 
 export function EditableList({
   title,
   fields,
   rows,
-  displayLabel,
-  displaySubLabel,
   onSave,
   onCreate,
   emptyLabel,
@@ -26,8 +28,6 @@ export function EditableList({
   title: string;
   fields: FieldDef[];
   rows: Row[];
-  displayLabel: (row: Row) => string;
-  displaySubLabel?: (row: Row) => string;
   onSave: (id: string, values: Record<string, string | boolean>) => Promise<void>;
   onCreate: (values: Record<string, string | boolean>) => Promise<void>;
   emptyLabel: string;
@@ -69,8 +69,8 @@ export function EditableList({
                 </div>
               ) : (
                 <button onClick={() => setEditingId(id)} className="flex w-full items-center justify-between text-left hover:text-primary">
-                  <span>{displayLabel(row)}</span>
-                  <span className="text-xs text-on-surface-variant">{displaySubLabel?.(row)}</span>
+                  <span>{row.label}</span>
+                  <span className="text-xs text-on-surface-variant">{row.subLabel}</span>
                 </button>
               )}
             </li>
@@ -90,7 +90,7 @@ function EntityForm({
   submitLabel,
 }: {
   fields: FieldDef[];
-  initial: Row;
+  initial: Record<string, string | number | boolean | null | undefined>;
   onSubmit: (values: Record<string, string | boolean>) => Promise<void>;
   onCancel?: () => void;
   submitLabel: string;

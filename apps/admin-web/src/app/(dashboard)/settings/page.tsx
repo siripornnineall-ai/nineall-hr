@@ -62,9 +62,14 @@ export default async function SettingsPage() {
               { key: "nameTh", label: "ชื่อภาษาไทย", type: "text" },
               { key: "isPaid", label: "ได้รับค่าจ้าง", type: "checkbox" },
             ]}
-            rows={(leaveTypes ?? []).map((lt) => ({ id: lt.id, code: lt.code, nameTh: lt.name_th, isPaid: lt.is_paid }))}
-            displayLabel={(row) => String(row.nameTh)}
-            displaySubLabel={(row) => (row.isPaid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง")}
+            rows={(leaveTypes ?? []).map((lt) => ({
+              id: lt.id,
+              code: lt.code,
+              nameTh: lt.name_th,
+              isPaid: lt.is_paid,
+              label: lt.name_th,
+              subLabel: lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง",
+            }))}
             onCreate={createLeaveTypeQuickAction}
             onSave={updateLeaveTypeAction}
             emptyLabel="ยังไม่มีประเภทการลา"
@@ -88,9 +93,9 @@ export default async function SettingsPage() {
               startTime: s.start_time,
               endTime: s.end_time,
               graceMinutesLate: s.grace_minutes_late,
+              label: s.name,
+              subLabel: `${s.start_time} - ${s.end_time} (ผ่อนผัน ${s.grace_minutes_late} นาที)`,
             }))}
-            displayLabel={(row) => String(row.name)}
-            displaySubLabel={(row) => `${row.startTime} - ${row.endTime} (ผ่อนผัน ${row.graceMinutesLate} นาที)`}
             onCreate={createShiftAction}
             onSave={updateShiftAction}
             emptyLabel="ยังไม่มีการตั้งค่ากะ"
@@ -110,9 +115,9 @@ export default async function SettingsPage() {
               latitude: l.latitude,
               longitude: l.longitude,
               radiusMeters: l.radius_meters,
+              label: l.name,
+              subLabel: `${l.radius_meters} เมตร`,
             }))}
-            displayLabel={(row) => String(row.name)}
-            displaySubLabel={(row) => `${row.radiusMeters} เมตร`}
             onCreate={createWorkLocationAction}
             onSave={updateWorkLocationAction}
             emptyLabel="ยังไม่มีสถานที่ทำงาน"
@@ -127,9 +132,7 @@ export default async function SettingsPage() {
               { key: "name", label: "ชื่อสาขา", type: "text" },
               { key: "address", label: "ที่อยู่", type: "text", optional: true },
             ]}
-            rows={(branches ?? []).map((b) => ({ id: b.id, name: b.name, address: b.address }))}
-            displayLabel={(row) => String(row.name)}
-            displaySubLabel={(row) => String(row.address ?? "")}
+            rows={(branches ?? []).map((b) => ({ id: b.id, name: b.name, address: b.address, label: b.name, subLabel: b.address ?? "" }))}
             onCreate={createBranchAction}
             onSave={updateBranchAction}
             emptyLabel="ยังไม่มีสาขา"
@@ -141,9 +144,7 @@ export default async function SettingsPage() {
               { key: "name", label: "ชื่อแผนก", type: "text" },
               { key: "nameEn", label: "ชื่อภาษาอังกฤษ", type: "text", optional: true },
             ]}
-            rows={(departments ?? []).map((d) => ({ id: d.id, name: d.name, nameEn: d.name_en }))}
-            displayLabel={(row) => String(row.name)}
-            displaySubLabel={(row) => String(row.nameEn ?? "")}
+            rows={(departments ?? []).map((d) => ({ id: d.id, name: d.name, nameEn: d.name_en, label: d.name, subLabel: d.name_en ?? "" }))}
             onCreate={createDepartmentAction}
             onSave={updateDepartmentAction}
             emptyLabel="ยังไม่มีแผนก"
@@ -158,14 +159,16 @@ export default async function SettingsPage() {
               { key: "name", label: "ชื่อทีม", type: "text" },
               { key: "departmentId", label: "แผนก", type: "select", options: departmentOptions, optional: true },
             ]}
-            rows={(teams ?? []).map((t) => ({
-              id: t.id,
-              name: t.name,
-              departmentId: t.department_id,
-              departmentName: (t.departments as unknown as { name: string } | null)?.name ?? null,
-            }))}
-            displayLabel={(row) => String(row.name)}
-            displaySubLabel={(row) => String(row.departmentName ?? "")}
+            rows={(teams ?? []).map((t) => {
+              const departmentName = (t.departments as unknown as { name: string } | null)?.name ?? "";
+              return {
+                id: t.id,
+                name: t.name,
+                departmentId: t.department_id,
+                label: t.name,
+                subLabel: departmentName,
+              };
+            })}
             onCreate={createTeamAction}
             onSave={updateTeamAction}
             emptyLabel="ยังไม่มีทีม"
@@ -178,15 +181,17 @@ export default async function SettingsPage() {
               { key: "titleEn", label: "ชื่อภาษาอังกฤษ", type: "text", optional: true },
               { key: "departmentId", label: "แผนก", type: "select", options: departmentOptions, optional: true },
             ]}
-            rows={(positions ?? []).map((p) => ({
-              id: p.id,
-              title: p.title,
-              titleEn: p.title_en,
-              departmentId: p.department_id,
-              departmentName: (p.departments as unknown as { name: string } | null)?.name ?? null,
-            }))}
-            displayLabel={(row) => String(row.title)}
-            displaySubLabel={(row) => String(row.departmentName ?? "")}
+            rows={(positions ?? []).map((p) => {
+              const departmentName = (p.departments as unknown as { name: string } | null)?.name ?? "";
+              return {
+                id: p.id,
+                title: p.title,
+                titleEn: p.title_en,
+                departmentId: p.department_id,
+                label: p.title,
+                subLabel: departmentName,
+              };
+            })}
             onCreate={createJobPositionAction}
             onSave={updateJobPositionAction}
             emptyLabel="ยังไม่มีตำแหน่งงาน"
