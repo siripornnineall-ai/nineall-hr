@@ -134,10 +134,10 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <StatCard icon="event_available" color="var(--color-tertiary)" label="วันลาคงเหลือ" value={`${stats?.leaveDaysRemaining ?? "-"} วัน`} />
-          <StatCard icon="timer" color="var(--color-secondary)" label="OT เดือนนี้" value={`${stats?.otHoursThisMonth ?? 0} ชม.`} />
-          <StatCard icon="pending_actions" color="var(--color-status-warning)" label="คำขอรออนุมัติ" value={`${stats?.pendingRequests ?? 0} รายการ`} />
-          <StatCard icon="payments" color="var(--color-status-info)" label="สลิปล่าสุด" value={stats?.latestPayslipLabel ?? "ยังไม่มี"} />
+          <StatCard href="/leave/balances" icon="event_available" color="var(--color-tertiary)" label="วันลาคงเหลือ" value={`${stats?.leaveDaysRemaining ?? "-"} วัน`} />
+          <StatCard href="/overtime" icon="timer" color="var(--color-secondary)" label="OT เดือนนี้" value={`${stats?.otHoursThisMonth ?? 0} ชม.`} />
+          <StatCard href="/requests" icon="pending_actions" color="var(--color-status-warning)" label="คำขอรออนุมัติ" value={`${stats?.pendingRequests ?? 0} รายการ`} />
+          <StatCard href="/payslip" icon="payments" color="var(--color-status-info)" label="สลิปล่าสุด" value={stats?.latestPayslipLabel ?? "ยังไม่มี"} />
         </div>
 
         <div className="flex gap-3">
@@ -181,14 +181,14 @@ export default function HomePage() {
   );
 }
 
-function StatCard({ icon, color, label, value }: { icon: string; color: string; label: string; value: string }) {
+function StatCard({ href, icon, color, label, value }: { href: string; icon: string; color: string; label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+    <Link href={href} className="block rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-95 transition-transform">
       <span className="material-symbols-outlined text-[22px]" style={{ color }}>
         {icon}
       </span>
       <p className="mt-2 text-xs text-on-surface-variant">{label}</p>
       <p className="mt-0.5 text-base font-bold text-on-surface">{value}</p>
-    </div>
+    </Link>
   );
 }

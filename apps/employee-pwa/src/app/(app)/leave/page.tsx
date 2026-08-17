@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
@@ -12,13 +13,6 @@ interface LeaveType {
   allow_hourly: boolean;
   requires_attachment: boolean;
   attachment_required_after_days: number;
-}
-interface LeaveBalanceRow {
-  leave_type_id: string;
-  entitled_days: number;
-  carried_over_days: number;
-  used_days: number;
-  pending_days: number;
 }
 interface LeaveRequestRow {
   id: string;
@@ -41,7 +35,6 @@ export default function LeavePage() {
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [balances, setBalances] = useState<LeaveBalanceRow[]>([]);
   const [requests, setRequests] = useState<LeaveRequestRow[]>([]);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [unit, setUnit] = useState<"full_day" | "half_day" | "hourly">("full_day");
@@ -59,18 +52,12 @@ export default function LeavePage() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const year = new Date().getFullYear();
-    const [{ data: types }, { data: policies }, { data: bal }, { data: reqs }] = await Promise.all([
+    const [{ data: types }, { data: policies }, { data: reqs }] = await Promise.all([
       supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true),
       supabase
         .from("leave_policies")
         .select("leave_type_id, allow_half_day, allow_hourly, requires_attachment, attachment_required_after_days, effective_date")
         .order("effective_date", { ascending: false }),
-      supabase
-        .from("leave_balances")
-        .select("leave_type_id, entitled_days, carried_over_days, used_days, pending_days")
-        .eq("employee_id", profile.employeeId)
-        .eq("year", year),
       supabase
         .from("leave_requests")
         .select("id, start_date, end_date, total_days, status, leave_types(name_th)")
@@ -93,7 +80,6 @@ export default function LeavePage() {
       attachment_required_after_days: latestPolicyByType.get(t.id)?.attachment_required_after_days ?? 0,
     }));
     setLeaveTypes(typesWithPolicy);
-    setBalances(bal ?? []);
     setRequests((reqs ?? []) as unknown as LeaveRequestRow[]);
     setSelectedType((current) => current ?? typesWithPolicy[0]?.id ?? null);
   }, [profile, supabase]);
@@ -201,20 +187,11 @@ export default function LeavePage() {
 
   return (
     <div className="safe-top space-y-5 px-4 pb-6 pt-4">
-      <h1 className="text-lg font-bold text-primary">ขอลางาน</h1>
-
-      <div className="grid grid-cols-2 gap-3">
-        {balances.map((b) => {
-          const type = leaveTypes.find((t) => t.id === b.leave_type_id);
-          const remaining = Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days);
-          return (
-            <div key={b.leave_type_id} className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-              <p className="text-xs text-on-surface-variant">{type?.name_th ?? "-"}</p>
-              <p className="mt-1 text-xl font-bold text-primary">{remaining} วัน</p>
-            </div>
-          );
-        })}
-        {balances.length === 0 && <p className="col-span-2 text-sm text-on-surface-variant">ยังไม่มีข้อมูลวันลาคงเหลือ</p>}
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold text-primary">ขอลางาน</h1>
+        <Link href="/leave/balances" className="text-xs font-semibold text-secondary">
+          ดูวันลาคงเหลือ →
+        </Link>
       </div>
 
       <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
