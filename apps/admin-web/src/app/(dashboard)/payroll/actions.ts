@@ -78,11 +78,12 @@ export async function calculatePayrollRunAction(runId: string) {
     .eq("org_id", user.orgId)
     .in("employment_status", ["active", "probation", "resigned"]);
 
-  let totalGross = 0;
-  let totalDeduction = 0;
-  let totalNet = 0;
-
-  for (const emp of employees ?? []) {
+  // Each employee needs ~5 reads + ~4 writes to calculate. Running employees sequentially
+  // (a plain for-loop with await inside) meant 16 employees took 100+ round-trips one after
+  // another — slow enough to look hung, with no progress shown. Employees are independent of
+  // each other, so process them concurrently instead; this doesn't change what gets written,
+  // only how long it takes to get there.
+  async function processEmployee(emp: NonNullable<typeof employees>[number]) {
     const { data: comp } = await supabase
       .from("employee_compensation")
       .select("*")
@@ -91,38 +92,37 @@ export async function calculatePayrollRunAction(runId: string) {
       .order("effective_date", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!comp) continue; // no compensation on file yet — surfaced in the UI as "missing data"
+    if (!comp) return null; // no compensation on file yet — surfaced in the UI as "missing data"
 
-    const { data: attendance } = await supabase
-      .from("attendance_records")
-      .select("work_date, status, late_minutes, early_leave_minutes, worked_minutes")
-      .eq("employee_id", emp.id)
-      .gte("work_date", period.period_start)
-      .lte("work_date", period.period_end);
-
-    const { data: shiftAssignments } = await supabase
-      .from("shift_assignments")
-      .select("work_date, is_day_off")
-      .eq("employee_id", emp.id)
-      .gte("work_date", period.period_start)
-      .lte("work_date", period.period_end);
-
-    const { data: overtime } = await supabase
-      .from("overtime_requests")
-      .select("work_date, approved_hours, rate_multiplier")
-      .eq("employee_id", emp.id)
-      .eq("status", "approved")
-      .gte("work_date", period.period_start)
-      .lte("work_date", period.period_end);
-
-    const { data: unpaidLeave } = await supabase
-      .from("leave_requests")
-      .select("total_days, leave_types!inner(is_paid)")
-      .eq("employee_id", emp.id)
-      .eq("status", "approved")
-      .eq("leave_types.is_paid", false)
-      .gte("start_date", period.period_start)
-      .lte("end_date", period.period_end);
+    const [{ data: attendance }, { data: shiftAssignments }, { data: overtime }, { data: unpaidLeave }] = await Promise.all([
+      supabase
+        .from("attendance_records")
+        .select("work_date, status, late_minutes, early_leave_minutes, worked_minutes")
+        .eq("employee_id", emp.id)
+        .gte("work_date", period.period_start)
+        .lte("work_date", period.period_end),
+      supabase
+        .from("shift_assignments")
+        .select("work_date, is_day_off")
+        .eq("employee_id", emp.id)
+        .gte("work_date", period.period_start)
+        .lte("work_date", period.period_end),
+      supabase
+        .from("overtime_requests")
+        .select("work_date, approved_hours, rate_multiplier")
+        .eq("employee_id", emp.id)
+        .eq("status", "approved")
+        .gte("work_date", period.period_start)
+        .lte("work_date", period.period_end),
+      supabase
+        .from("leave_requests")
+        .select("total_days, leave_types!inner(is_paid)")
+        .eq("employee_id", emp.id)
+        .eq("status", "approved")
+        .eq("leave_types.is_paid", false)
+        .gte("start_date", period.period_start)
+        .lte("end_date", period.period_end),
+    ]);
 
     const days: PayrollInputDay[] = (attendance ?? []).map((a) => ({
       workDate: a.work_date,
@@ -161,7 +161,7 @@ export async function calculatePayrollRunAction(runId: string) {
     };
 
     const result = calculatePayrollForEmployee(input);
-    const hasMissingData = !comp || days.length === 0;
+    const hasMissingData = days.length === 0;
 
     const { data: calc, error: calcError } = await supabase
       .from("payroll_employee_calculations")
@@ -195,24 +195,42 @@ export async function calculatePayrollRunAction(runId: string) {
       )
       .select("id")
       .single();
-    if (calcError || !calc) continue;
+    if (calcError || !calc) return null;
 
-    await supabase.from("payroll_earning_items").delete().eq("payroll_calc_id", calc.id);
-    await supabase.from("payroll_deduction_items").delete().eq("payroll_calc_id", calc.id);
-    if (result.earnings.length > 0) {
-      await supabase.from("payroll_earning_items").insert(
-        result.earnings.map((e) => ({ payroll_calc_id: calc.id, label: e.label, quantity: e.quantity, amount: satangToBaht(e.amountSatang) }))
-      );
-    }
-    if (result.deductions.length > 0) {
-      await supabase.from("payroll_deduction_items").insert(
-        result.deductions.map((d) => ({ payroll_calc_id: calc.id, label: d.label, quantity: d.quantity, amount: satangToBaht(d.amountSatang) }))
-      );
-    }
+    await Promise.all([
+      supabase.from("payroll_earning_items").delete().eq("payroll_calc_id", calc.id),
+      supabase.from("payroll_deduction_items").delete().eq("payroll_calc_id", calc.id),
+    ]);
+    await Promise.all([
+      result.earnings.length > 0
+        ? supabase
+            .from("payroll_earning_items")
+            .insert(result.earnings.map((e) => ({ payroll_calc_id: calc.id, label: e.label, quantity: e.quantity, amount: satangToBaht(e.amountSatang) })))
+        : Promise.resolve(),
+      result.deductions.length > 0
+        ? supabase
+            .from("payroll_deduction_items")
+            .insert(result.deductions.map((d) => ({ payroll_calc_id: calc.id, label: d.label, quantity: d.quantity, amount: satangToBaht(d.amountSatang) })))
+        : Promise.resolve(),
+    ]);
 
-    totalGross += satangToBaht(result.grossEarningsSatang);
-    totalDeduction += satangToBaht(result.totalDeductionsSatang);
-    totalNet += satangToBaht(result.netPaySatang);
+    return {
+      gross: satangToBaht(result.grossEarningsSatang),
+      deduction: satangToBaht(result.totalDeductionsSatang),
+      net: satangToBaht(result.netPaySatang),
+    };
+  }
+
+  const results = await Promise.all((employees ?? []).map(processEmployee));
+
+  let totalGross = 0;
+  let totalDeduction = 0;
+  let totalNet = 0;
+  for (const r of results) {
+    if (!r) continue;
+    totalGross += r.gross;
+    totalDeduction += r.deduction;
+    totalNet += r.net;
   }
 
   await supabase
