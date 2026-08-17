@@ -109,6 +109,82 @@ by actually logging in** in-browser as both `EMP-001` (super_admin, via
 admin-web) and `employee@nineallgroup.co.th` (employee, via employee-pwa) —
 both reached their real dashboards with live data, zero console errors.
 
+**Session 3, second continuation (2026-08-17):** Data reset + a batch of
+real feature gaps reported by the account owner after using the live
+system, all built and verified against production.
+
+**Data reset, on explicit request:** hard-deleted the 15 seed employees
+(EMP-002–016), keeping only EMP-001. Two replacement accounts created
+without a service-role key — via Supabase's public `signUp()` API
+(works with just the anon key; the existing "Add Employee" UI's login
+flow needs the service-role key and is still blocked) plus an
+authenticated insert into `employees`/`profiles`: **EMP-002 ธนภรณ์
+แก้วจาย** (super_admin, `Hr@nineall.com`) and **EMP-003 Ting
+Phanthavong** (employee, `yutayuu030863@gmail.com`). Both need to click
+the Supabase email-confirmation link before first login (standard for
+public sign-up, not sent by the admin-created-account flow).
+
+New features, all click-tested against production:
+- **Settings → leave types** now also edits the effective-dated
+  `leave_policies` row (days/year, half-day, hourly, attachment
+  requirement, notice days) in place, not just `leave_types`' own
+  columns.
+- **Employee edit** (`/employees/[id]/edit`): full edit of contact info,
+  branch/department/team/position/manager, employment type. Salary
+  changes insert a new `employee_compensation` row dated today — history
+  is preserved, not overwritten.
+- **Leave balance grants**: a "วันลาคงเหลือ" section on the employee
+  detail page lets HR set/adjust entitled + carried-over days per
+  employee/leave-type/year (`leave_balances`), reusing the `EditableList`
+  component from Settings.
+- **Payroll approval simplified**: removed the separate "ส่งอนุมัติ"
+  submit-for-approval step — for a small team where the same person
+  calculates and signs off, it was pure friction. One "อนุมัติรอบเงินเดือน"
+  click now does what used to take two; the anomaly-count safety check
+  moved with it, unchanged.
+- **Payslip PDF auto-generation**: locking a payroll run now renders a
+  real PDF per employee (company header, period/employee info,
+  earnings/deductions table, net pay) with `@react-pdf/renderer` +
+  embedded Noto Sans Thai, uploads it to the existing private `payslips`
+  bucket, and links it via `payslips.pdf_file_path`. Download links added
+  in both admin-web (payroll run detail) and employee-pwa (payslip page,
+  signed URL). Known limitation: the PDF's text layer (copy/paste,
+  search) comes out reordered for Thai — a common complex-script PDF
+  limitation — visual rendering and printing are correct.
+
+**Two real, previously-latent bugs found and fixed:**
+- **UUID validation silently broke department/team/position/manager
+  selection everywhere**, including the pre-existing "Add Employee" form,
+  not just the new edit form. Zod's `.uuid()` enforces real RFC4122
+  version/variant nibbles; this project's seed data uses simplified
+  placeholder ids (`00000000-...-000000000303`) that fail that check.
+  Nobody had hit it before because the 16 seed employees were inserted
+  directly via SQL, never through the UI. Fixed by relaxing the affected
+  `shared-validation` schemas to `z.string()` — these ids come from
+  server-rendered `<select>` options, not free text, so the database
+  foreign key is the real integrity guard, not client-side format
+  validation.
+- **Payslip PDFs generated but never got linked**, silently. Root cause
+  (found by adding error logging and reproducing the exact Storage call
+  directly): the `payslips` bucket's RLS grants INSERT/SELECT/DELETE but
+  no UPDATE, and the original path was keyed on `payroll_period_id` — so
+  any re-lock of a period that already had a file at that path hit an
+  upsert-triggered UPDATE the policy silently blocked. No way to add the
+  missing policy without direct DB access (still gone this session, see
+  below), so the path is now keyed on `runId` instead: every run's PDF
+  gets its own object, so upsert never needs to overwrite one. Verified
+  by resetting a run to "approved" and re-locking it directly on the
+  live Vercel deployment, confirming the download link appears.
+
+**Environment notes carried forward:** the Supabase MCP connection used
+earlier in session 3 for direct SQL disconnected partway through and
+never came back — the data reset and new-account creation above were
+done entirely through the deployed app's own Supabase client (RLS-
+respecting, signed in as `EMP-001`), not raw SQL. `SUPABASE_SERVICE_ROLE_KEY`
+is still the unfilled placeholder; the account owner has not yet found
+who owns the underlying Supabase account (tried GitHub sign-in first,
+per guidance given this session — result not yet reported back).
+
 ## 0. Design source of truth
 
 Session 2 replaced the session-1 Stitch export with
@@ -130,7 +206,7 @@ all updated to match; see §3/§4 below for exactly what changed.
 | Triggers | ✅ Written and applied | `0010_triggers.sql` |
 | Storage bucket policies | ✅ Written and applied | `0011_storage.sql` |
 | Edge Functions (clock-in, clock-out) | ✅ Written — **deployment status not re-verified this session**, check `supabase functions list` before assuming live | `supabase/functions/` |
-| Seed data | ✅ Applied — 16 employees, 15 attendance records, 3 leave requests, 2 OT requests, 3 announcements, ~75 translation keys, etc. | `supabase/seed/` |
+| Seed data | ✅ Applied, **reset 2026-08-17** — the original 16 seed employees were hard-deleted at the account owner's request, leaving `EMP-001`/`002`/`003` (see session 3 second-continuation note above); other seed data (leave types, shifts, work locations, translations) untouched | `supabase/seed/` |
 | `apps/admin-web/.env.local` | 🟡 Partial | URL/anon key filled in. `SUPABASE_SERVICE_ROLE_KEY` is **still the placeholder** — still needed for the admin-web "create employee + login account" flow and for `npm run seed:accounts` (the Admin-API version of account creation). Not needed for the 4 demo accounts, which were created a different way — see below. |
 | `apps/employee-mobile/.env` | ❓ Not checked this session | Verify it has the same URL/anon key before running the mobile app |
 | **`auth.users` / `profiles` — 4 demo accounts** | ✅ **Created and verified working** | See `scripts/seed-demo-accounts.sql` — created directly via SQL (bcrypt password hash via `pgcrypto`) since the account owner couldn't retrieve the service-role key. **Logged in as both `EMP-001` and `employee@nineallgroup.co.th` in-browser this session** — both reached real dashboards. `SUPABASE_SERVICE_ROLE_KEY` is still needed for creating *additional* employee accounts through the admin-web UI (that flow uses the Admin API, not this SQL workaround). |
@@ -152,12 +228,13 @@ TypeScript errors, verified this session).
 | Login / logout / forgot / reset password | ✅ Real, Supabase Auth-backed, **verified live** | **Bug found and fixed this session**: employee-code login was comparing the `employee_id` UUID column against the typed code string (e.g. "EMP-001"), which could never match — email login worked, code login silently didn't. Now calls `lookup_login_email()` (the RPC `0016` added but that nothing actually called until this fix). **Confirmed working end-to-end**: logged in as `EMP-001` in-browser, real dashboard loaded (16 employees, 1 pending leave, 1 pending OT, live announcements), zero console errors |
 | Role gate | ✅ Done | `requireUser()` in `src/lib/auth.ts` — `payroll_admin` role (added `0013`) not yet threaded through role-gate logic, verify before relying on it |
 | Dashboard | ✅ Real queries | |
-| Employee directory / create / detail | ✅ Real (edit form still not built), **detail page 404 bug fixed session 3** | Ambiguous `teams(name)` embed — see session 3 note above |
+| Employee directory / create / **edit** / detail | ✅ Real, edit form built session 3 (2026-08-17) | `/employees/[id]/edit` — contact info, branch/department/team/position/manager, employment type, salary (new effective-dated `employee_compensation` row, history kept). Also: leave balance grants (see below) live on the detail page |
 | Employee offboarding (mark resigned/terminated) | ✅ Built + click-tested, session 3 | Not a delete — see session 3 note above. `offboard_employee` RPC |
+| **Leave balance grants** | ✅ Built session 3 (2026-08-17) | "วันลาคงเหลือ" section on employee detail page — set/adjust entitled + carried-over days per employee/leave-type/year |
 | Attendance (daily timesheet) | ✅ Real queries, reads-only | Inline edit-with-reason still not built |
 | Leave (list + approve/reject) | ✅ Real | |
 | Overtime (list + approve/reject) | ✅ Real | |
-| Payroll (full flow: create → calculate → submit → approve → lock) | ✅ Real | Bank-file export, printable payslip PDF still not built. **Session 3**: fixed a double-submit bug on "create payroll period" (no pending-disabled guard → 33 duplicate runs created in production, cleaned up); now uses `SubmitButton` + a server-side idempotency check (reuses the existing non-locked run for a period instead of creating another) |
+| Payroll (full flow: create → calculate → approve → lock) | ✅ Real, **payslip PDF built session 3 (2026-08-17)** | Locking a run now generates a real PDF per employee (`@react-pdf/renderer` + embedded Noto Sans Thai) uploaded to the `payslips` bucket, downloadable from the run detail page and employee-pwa. Removed the separate "ส่งอนุมัติ" submit-for-approval step (redundant for a one-person-does-everything team) — approve now does what submit+approve used to. Bank-file export still not built. **Session 3 (earlier)**: fixed a double-submit bug on "create payroll period" (no pending-disabled guard → 33 duplicate runs created in production, cleaned up); now uses `SubmitButton` + a server-side idempotency check |
 | Announcements | ✅ Real | |
 | **Translation Management** | ✅ Built and **click-tested this session** | `/translations` (super_admin/hr only) — search, missing/complete filter, inline per-locale editing with autosave + history log (`translation_history`), add-key form, delete-key, JSON export/import (not Excel — see limitation below), missing-translation warning count. Database already had **~75 translation keys** (`auth.*`, `common.*`, `dashboard.*`, `nav.*`, `status.*` namespaces) from earlier in session 2, plus 8 more added via `supabase/seed/004_translations.sql`. **A real bug was caught and fixed here**: `LOCALES`/`Locale` were originally exported from `actions.ts`, a `"use server"` file — Next.js only allows async-function exports from Server Action modules, so the client component received a broken value and the page 500'd (`LOCALES.some is not a function`). Moved the constant to a new `constants.ts` and re-verified — logged in as `EMP-001`, page loads real data cleanly, zero console errors. **Known limitation:** import is JSON, not Excel (master prompt's Stitch reference shows "Import Excel" — parsing .xlsx server-side wasn't attempted this session) |
 | Settings | ✅ Core CRUD done, session 3 (2026-08-17) | Company info, leave types, shifts, work locations/GPS radius, branches, departments, teams, and job positions are all now editable in-page (`EditableList` component). **Remaining gaps**: tax/SS version editor, approval-chain config, role-permission matrix UI not built; `custom_roles` table exists but isn't wired into any UI or the RLS permission check yet |
@@ -217,8 +294,8 @@ queries, same Edge Function calls) rather than rebuilt from scratch — read
 | Auth session, route guarding | ✅ Real | `requireEmployee()` server-side (redirects non-employee roles to "use admin-web") + client `AuthContext` mirroring the Expo app's pattern |
 | Home dashboard | ✅ Real queries, **verified live** | Same stats as the Expo version: leave balance, OT hours, pending requests, latest payslip, today's status, live clock |
 | **Attendance clock-in/out (GPS + live camera)** | ✅ Real, server-computed | The critical flow. `getUserMedia` front camera → live preview → frame captured to `<canvas>` → JPEG blob (never a file picker), `navigator.geolocation` for GPS, uploads to the same `selfies` Storage bucket, calls the same `clock-in`/`clock-out` Edge Functions with the same payload shape the Expo app used — **zero server-side changes needed** |
-| Leave request (submit + history) | ✅ Real | Uses native `<input type="date">` — an actual improvement over the Expo app's plain-text date field |
-| Payslip list + breakdown | ✅ Real queries | Expandable detail per payslip. PIN-gate not implemented (same gap as Expo version) |
+| Leave request (submit + history) | ✅ Real | Uses native `<input type="date">` — an actual improvement over the Expo app's plain-text date field. Remaining-balance cards on this page were hardcoded to show only the first 2 leave types — fixed session 3 (2026-08-17) to show all of them |
+| Payslip list + breakdown + **PDF download** | ✅ Real queries, PDF download added session 3 (2026-08-17) | Expandable detail per payslip; "ดาวน์โหลด PDF" button fetches a signed URL for the PDF admin-web generates on payroll lock. PIN-gate not implemented (same gap as Expo version) |
 | Profile (change password, privacy note, logout) | ✅ Real | Same as Expo version |
 | **Profile self-editing (name, nickname, bio, photo)** | ✅ Built + click-tested, session 3 | Photo uploads to the pre-existing `avatars` Storage bucket (RLS policies for it already existed from session 1, unused until now) at `{orgId}/{employeeId}/{timestamp}.jpg`, displayed via a signed URL. Editing is scoped server-side to exactly `first_name, last_name, nickname, photo_url, bio, phone, personal_email, address` via a column-level `GRANT` (`0017_employee_self_profile_edit.sql`) — closes a real gap where the existing `employees_update_self` RLS policy had no column restriction at all |
 | Overtime request, Announcements screen | ❌ Not built | Same gap as the Expo app had — not a regression, just not yet ported/built |
