@@ -1,9 +1,14 @@
-import path from "node:path";
 import { Document, Page, View, Text, StyleSheet, Font } from "@react-pdf/renderer";
+import { notoSansThaiBase64 } from "./fonts/notoSansThaiBase64";
 
+// The font is embedded as a base64 string (compiled into the JS bundle) rather than read
+// from disk via a file path: Next.js's build-time file tracer couldn't reliably follow the
+// dynamic `path.join(process.cwd(), ...)` this used before, so the font silently failed to
+// load in the Vercel serverless function (worked locally, where the repo checkout makes any
+// path trivially resolve) — payslips locked in production got no PDF and no visible error.
 Font.register({
   family: "NotoSansThai",
-  src: path.join(process.cwd(), "src/lib/pdf/fonts/NotoSansThai-Regular.ttf"),
+  src: `data:font/ttf;base64,${notoSansThaiBase64}`,
 });
 
 const styles = StyleSheet.create({

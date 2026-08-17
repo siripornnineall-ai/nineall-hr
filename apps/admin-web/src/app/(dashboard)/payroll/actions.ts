@@ -304,38 +304,51 @@ export async function lockPayrollRunAction(runId: string) {
 
   // Generate + upload each payslip PDF in parallel, same pattern as the payroll
   // calculation step — independent per-employee work, no reason to serialize it.
+  //
+  // Path is keyed on runId, not payroll_period_id: the `payslips` bucket's storage RLS
+  // only grants INSERT (no UPDATE), so re-locking a period that already produced a payslip
+  // at the same path fails with an RLS error on the upsert. Runs are already unique per
+  // lock, so keying on runId means every generation writes a fresh object and never needs
+  // to overwrite one — sidesteps the missing policy without needing DB access to add it.
   await Promise.all(
     calcs.map(async (c) => {
-      const pdfBuffer = await generatePayslipBuffer({
-        orgName: org?.name ?? "-",
-        orgLegalName: org?.legal_name ?? null,
-        employeeCode: c.employee_code_snapshot,
-        employeeName: c.employee_name_snapshot,
-        department: c.department_snapshot,
-        position: c.position_snapshot,
-        periodLabel: period?.label ?? "-",
-        periodStart: period?.period_start ? new Date(period.period_start).toLocaleDateString("th-TH") : "-",
-        periodEnd: period?.period_end ? new Date(period.period_end).toLocaleDateString("th-TH") : "-",
-        payDate: period?.pay_date ? new Date(period.pay_date).toLocaleDateString("th-TH") : "-",
-        baseAmount: Number(c.base_amount),
-        otAmount: Number(c.ot_amount),
-        workedDays: Number(c.worked_days),
-        absentDays: Number(c.absent_days),
-        lateCount: Number(c.late_count),
-        grossEarnings: Number(c.gross_earnings),
-        socialSecurityAmount: Number(c.social_security_amount),
-        taxAmount: Number(c.tax_amount),
-        totalDeductions: Number(c.total_deductions),
-        netPay: Number(c.net_pay),
-      });
+      try {
+        const pdfBuffer = await generatePayslipBuffer({
+          orgName: org?.name ?? "-",
+          orgLegalName: org?.legal_name ?? null,
+          employeeCode: c.employee_code_snapshot,
+          employeeName: c.employee_name_snapshot,
+          department: c.department_snapshot,
+          position: c.position_snapshot,
+          periodLabel: period?.label ?? "-",
+          periodStart: period?.period_start ? new Date(period.period_start).toLocaleDateString("th-TH") : "-",
+          periodEnd: period?.period_end ? new Date(period.period_end).toLocaleDateString("th-TH") : "-",
+          payDate: period?.pay_date ? new Date(period.pay_date).toLocaleDateString("th-TH") : "-",
+          baseAmount: Number(c.base_amount),
+          otAmount: Number(c.ot_amount),
+          workedDays: Number(c.worked_days),
+          absentDays: Number(c.absent_days),
+          lateCount: Number(c.late_count),
+          grossEarnings: Number(c.gross_earnings),
+          socialSecurityAmount: Number(c.social_security_amount),
+          taxAmount: Number(c.tax_amount),
+          totalDeductions: Number(c.total_deductions),
+          netPay: Number(c.net_pay),
+        });
 
-      const path = `${run.org_id}/${c.employee_id}/payslip-${run.payroll_period_id}.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from("payslips")
-        .upload(path, pdfBuffer, { contentType: "application/pdf", upsert: true });
-      if (uploadError) return;
+        const path = `${run.org_id}/${c.employee_id}/payslip-${runId}.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from("payslips")
+          .upload(path, pdfBuffer, { contentType: "application/pdf", upsert: true });
+        if (uploadError) {
+          console.error(`Payslip upload failed for ${c.employee_code_snapshot}:`, uploadError.message);
+          return;
+        }
 
-      await supabase.from("payslips").update({ pdf_file_path: path }).eq("payroll_calc_id", c.id);
+        await supabase.from("payslips").update({ pdf_file_path: path }).eq("payroll_calc_id", c.id);
+      } catch (err) {
+        console.error(`Payslip generation failed for ${c.employee_code_snapshot}:`, err);
+      }
     })
   );
 
