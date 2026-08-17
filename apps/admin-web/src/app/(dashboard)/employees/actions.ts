@@ -14,6 +14,20 @@ export interface CreateEmployeeState {
   tempPassword?: string;
 }
 
+// Address sub-fields are read straight off the raw FormData rather than added to the
+// zod schema: they're always-optional free text with nothing to validate, and the
+// form posts them as flat `idCardHouseNo`/`currentHouseNo`/... fields keyed by prefix
+// rather than a nested object (FormData has no nesting).
+const ADDRESS_KEYS = ["HouseNo", "Moo", "Soi", "Yaek", "Road", "SubDistrict", "District", "Province", "PostalCode"] as const;
+function buildAddress(raw: Record<string, FormDataEntryValue>, prefix: "idCard" | "current"): Record<string, string> | null {
+  const address: Record<string, string> = {};
+  for (const key of ADDRESS_KEYS) {
+    const value = String(raw[`${prefix}${key}`] ?? "").trim();
+    if (value) address[key[0].toLowerCase() + key.slice(1)] = value;
+  }
+  return Object.keys(address).length > 0 ? address : null;
+}
+
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
   let out = "";
@@ -254,6 +268,8 @@ export async function updateEmployeeAction(
       manager_employee_id: input.managerEmployeeId ?? null,
       employment_type: input.employmentType,
       hire_date: input.hireDate,
+      id_card_address: buildAddress(raw, "idCard"),
+      current_address: buildAddress(raw, "current"),
       updated_by: user.profileId,
     })
     .eq("id", employeeId)

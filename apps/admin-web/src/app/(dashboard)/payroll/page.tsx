@@ -1,19 +1,9 @@
-import Link from "next/link";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
-import { Badge } from "@/components/Badge";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createPayrollRunAction } from "./actions";
-
-const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral" | "info"; label: string }> = {
-  draft: { tone: "neutral", label: "Draft" },
-  under_review: { tone: "info", label: "Under Review" },
-  pending_approval: { tone: "warning", label: "Pending Approval" },
-  approved: { tone: "success", label: "Approved" },
-  paid: { tone: "success", label: "Paid" },
-  locked: { tone: "neutral", label: "Locked" },
-};
+import { PayrollRunRow } from "./PayrollRunRow";
 
 export default async function PayrollPage() {
   const user = await requireUser();
@@ -25,6 +15,19 @@ export default async function PayrollPage() {
     .select("id, status, employee_count, total_net_amount, created_at, payroll_periods(label, period_start, period_end)")
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false });
+
+  const rows = (runs ?? []).map((r) => {
+    const period = r.payroll_periods as unknown as { label: string; period_start: string; period_end: string } | null;
+    return {
+      id: r.id,
+      status: r.status,
+      employeeCount: r.employee_count,
+      totalNetAmount: Number(r.total_net_amount),
+      label: period?.label ?? "-",
+      periodStart: period?.period_start ?? "",
+      periodEnd: period?.period_end ?? "",
+    };
+  });
 
   return (
     <>
@@ -64,36 +67,16 @@ export default async function PayrollPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant">
-              {(runs ?? []).length === 0 && (
+              {rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-on-surface-variant">
                     ยังไม่มีรอบเงินเดือน
                   </td>
                 </tr>
               )}
-              {(runs ?? []).map((r) => {
-                const period = r.payroll_periods as unknown as { label: string; period_start: string; period_end: string } | null;
-                const badge = STATUS_BADGE[r.status] ?? { tone: "neutral" as const, label: r.status };
-                return (
-                  <tr key={r.id}>
-                    <td className="px-4 py-3 font-semibold">
-                      <Link href={`/payroll/${r.id}`} className="hover:text-primary hover:underline">
-                        {period?.label ?? "-"}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">{r.employee_count}</td>
-                    <td className="px-4 py-3">{Number(r.total_net_amount).toLocaleString("th-TH")} บาท</td>
-                    <td className="px-4 py-3">
-                      <Badge tone={badge.tone}>{badge.label}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href={`/payroll/${r.id}`} className="text-xs font-bold text-primary">
-                        ดูรายละเอียด
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
+              {rows.map((r) => (
+                <PayrollRunRow key={r.id} row={r} />
+              ))}
             </tbody>
           </table>
         </div>

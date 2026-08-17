@@ -22,6 +22,7 @@ export function EditableList({
   rows,
   onSave,
   onCreate,
+  onDelete,
   emptyLabel,
   addLabel,
 }: {
@@ -30,6 +31,7 @@ export function EditableList({
   rows: Row[];
   onSave: (id: string, values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
   onCreate: (values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
+  onDelete?: (id: string) => Promise<{ error?: string } | void>;
   emptyLabel: string;
   addLabel: string;
 }) {
@@ -67,7 +69,7 @@ export function EditableList({
           return (
             <li key={id} className="py-2">
               {isEditing ? (
-                <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
+                <div className="space-y-3 rounded-lg border border-outline-variant bg-surface-container-low p-4">
                   <EntityForm
                     fields={fields}
                     initial={row}
@@ -79,6 +81,7 @@ export function EditableList({
                     onCancel={() => setEditingId(null)}
                     submitLabel="บันทึกการแก้ไข"
                   />
+                  {onDelete && <DeleteButton label={row.label} onDelete={() => onDelete(id)} onDeleted={() => setEditingId(null)} />}
                 </div>
               ) : (
                 <button onClick={() => setEditingId(id)} className="flex w-full items-center justify-between text-left hover:text-primary">
@@ -92,6 +95,30 @@ export function EditableList({
         {rows.length === 0 && <p className="py-2 text-on-surface-variant">{emptyLabel}</p>}
       </ul>
     </section>
+  );
+}
+
+function DeleteButton({ label, onDelete, onDeleted }: { label: string; onDelete: () => Promise<{ error?: string } | void>; onDeleted: () => void }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleClick() {
+    if (!confirm(`ลบ "${label}" ใช่หรือไม่? การลบนี้ไม่สามารถย้อนกลับได้`)) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await onDelete();
+      if (result?.error) setError(result.error);
+      else onDeleted();
+    });
+  }
+
+  return (
+    <div className="border-t border-outline-variant pt-3">
+      <button onClick={handleClick} disabled={isPending} className="text-sm font-bold text-status-danger hover:underline disabled:opacity-60">
+        {isPending ? "กำลังลบ..." : "ลบรายการนี้"}
+      </button>
+      {error && <p className="mt-1 text-sm font-semibold text-status-danger">{error}</p>}
+    </div>
   );
 }
 

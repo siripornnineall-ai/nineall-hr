@@ -57,6 +57,50 @@ export async function createPayrollRunAction(formData: FormData) {
   redirect(`/payroll/${run.id}`);
 }
 
+// Once a run is approved/locked it has real payslips issued off of it (see
+// lockPayrollRunAction below), so deleting or editing it out from under those would
+// leave employees looking at payslips that no longer match anything — only draft/
+// under_review runs (nothing finalized yet) can be deleted or have their period edited.
+const EDITABLE_RUN_STATUSES = new Set(["draft", "under_review"]);
+
+export async function deletePayrollRunAction(runId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: run } = await supabase.from("payroll_runs").select("status").eq("id", runId).eq("org_id", user.orgId).single();
+  if (!run) return { error: "ไม่พบรอบเงินเดือนนี้" };
+  if (!EDITABLE_RUN_STATUSES.has(run.status)) return { error: "ลบไม่ได้ เนื่องจากรอบนี้ผ่านการอนุมัติ/ล็อกแล้ว" };
+
+  const { error } = await supabase.from("payroll_runs").delete().eq("id", runId).eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/payroll");
+}
+
+export async function updatePayrollRunAction(
+  runId: string,
+  values: { label?: string; periodStart?: string; periodEnd?: string; payDate?: string }
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: run } = await supabase.from("payroll_runs").select("status, payroll_period_id").eq("id", runId).eq("org_id", user.orgId).single();
+  if (!run) return { error: "ไม่พบรอบเงินเดือนนี้" };
+  if (!EDITABLE_RUN_STATUSES.has(run.status)) return { error: "แก้ไขไม่ได้ เนื่องจากรอบนี้ผ่านการอนุมัติ/ล็อกแล้ว" };
+
+  const update: Record<string, string> = {};
+  if (values.label) update.label = values.label;
+  if (values.periodStart) update.period_start = values.periodStart;
+  if (values.periodEnd) update.period_end = values.periodEnd;
+  if (values.payDate) update.pay_date = values.payDate;
+  if (Object.keys(update).length === 0) return { error: "ไม่มีข้อมูลที่จะแก้ไข" };
+
+  const { error } = await supabase.from("payroll_periods").update(update).eq("id", run.payroll_period_id);
+  if (error) return { error: error.message };
+  revalidatePath("/payroll");
+}
+
 const WORKED_STATUSES = new Set<AttendanceStatus>(["on_time", "late", "early_leave", "work_from_home", "off_site", "holiday"]);
 
 export async function calculatePayrollRunAction(runId: string) {

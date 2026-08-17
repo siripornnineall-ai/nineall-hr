@@ -7,20 +7,28 @@ import { EditableList } from "./EditableList";
 import {
   createBranchAction,
   updateBranchAction,
+  deleteBranchAction,
   createDepartmentAction,
   updateDepartmentAction,
+  deleteDepartmentAction,
   createTeamAction,
   updateTeamAction,
+  deleteTeamAction,
   createJobPositionAction,
   updateJobPositionAction,
+  deleteJobPositionAction,
   createShiftAction,
   updateShiftAction,
+  deleteShiftAction,
   createWorkLocationAction,
   updateWorkLocationAction,
+  deleteWorkLocationAction,
   createLeaveTypeQuickAction,
   updateLeaveTypeAction,
+  deleteLeaveTypeAction,
   createHolidayAction,
   updateHolidayAction,
+  deleteHolidayAction,
 } from "./actions";
 
 export default async function SettingsPage() {
@@ -110,6 +118,7 @@ export default async function SettingsPage() {
             })}
             onCreate={createLeaveTypeQuickAction}
             onSave={updateLeaveTypeAction}
+            onDelete={deleteLeaveTypeAction}
             emptyLabel="ยังไม่มีประเภทการลา"
             addLabel="เพิ่มแบบย่อ"
           />
@@ -136,6 +145,7 @@ export default async function SettingsPage() {
             }))}
             onCreate={createShiftAction}
             onSave={updateShiftAction}
+            onDelete={deleteShiftAction}
             emptyLabel="ยังไม่มีการตั้งค่ากะ"
             addLabel="เพิ่มกะ"
           />
@@ -158,6 +168,7 @@ export default async function SettingsPage() {
             }))}
             onCreate={createWorkLocationAction}
             onSave={updateWorkLocationAction}
+            onDelete={deleteWorkLocationAction}
             emptyLabel="ยังไม่มีสถานที่ทำงาน"
             addLabel="เพิ่มสถานที่"
           />
@@ -173,6 +184,7 @@ export default async function SettingsPage() {
             rows={(branches ?? []).map((b) => ({ id: b.id, name: b.name, address: b.address, label: b.name, subLabel: b.address ?? "" }))}
             onCreate={createBranchAction}
             onSave={updateBranchAction}
+            onDelete={deleteBranchAction}
             emptyLabel="ยังไม่มีสาขา"
             addLabel="เพิ่มสาขา"
           />
@@ -185,6 +197,7 @@ export default async function SettingsPage() {
             rows={(departments ?? []).map((d) => ({ id: d.id, name: d.name, nameEn: d.name_en, label: d.name, subLabel: d.name_en ?? "" }))}
             onCreate={createDepartmentAction}
             onSave={updateDepartmentAction}
+            onDelete={deleteDepartmentAction}
             emptyLabel="ยังไม่มีแผนก"
             addLabel="เพิ่มแผนก"
           />
@@ -209,6 +222,7 @@ export default async function SettingsPage() {
             })}
             onCreate={createTeamAction}
             onSave={updateTeamAction}
+            onDelete={deleteTeamAction}
             emptyLabel="ยังไม่มีทีม"
             addLabel="เพิ่มทีม"
           />
@@ -232,6 +246,7 @@ export default async function SettingsPage() {
             })}
             onCreate={createJobPositionAction}
             onSave={updateJobPositionAction}
+            onDelete={deleteJobPositionAction}
             emptyLabel="ยังไม่มีตำแหน่งงาน"
             addLabel="เพิ่มตำแหน่ง"
           />
@@ -252,6 +267,7 @@ export default async function SettingsPage() {
           }))}
           onCreate={createHolidayAction}
           onSave={updateHolidayAction}
+          onDelete={deleteHolidayAction}
           emptyLabel="ยังไม่มีวันหยุดบริษัท"
           addLabel="เพิ่มวันหยุด"
         />

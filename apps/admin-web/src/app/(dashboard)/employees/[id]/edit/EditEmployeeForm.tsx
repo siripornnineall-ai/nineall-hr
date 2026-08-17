@@ -4,6 +4,18 @@ import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateEmployeeAction, type UpdateEmployeeState } from "../../actions";
 
+interface AddressValue {
+  houseNo?: string;
+  moo?: string;
+  soi?: string;
+  yaek?: string;
+  road?: string;
+  subDistrict?: string;
+  district?: string;
+  province?: string;
+  postalCode?: string;
+}
+
 interface EmployeeRow {
   id: string;
   employee_code: string;
@@ -18,9 +30,27 @@ interface EmployeeRow {
   department_id: string | null;
   job_position_id: string | null;
   manager_employee_id: string | null;
+  id_card_address: AddressValue | null;
+  current_address: AddressValue | null;
 }
 
 const initialState: UpdateEmployeeState = {};
+
+const ADDRESS_FIELDS: { key: keyof AddressValue; label: string }[] = [
+  { key: "houseNo", label: "เลขที่" },
+  { key: "moo", label: "หมู่ที่" },
+  { key: "soi", label: "ตรอก/ซอย" },
+  { key: "yaek", label: "แยก" },
+  { key: "road", label: "ถนน" },
+  { key: "subDistrict", label: "ตำบล/แขวง" },
+  { key: "district", label: "อำเภอ/เขต" },
+  { key: "province", label: "จังหวัด" },
+  { key: "postalCode", label: "รหัสไปรษณีย์" },
+];
+
+function capitalize(key: string): string {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 export function EditEmployeeForm({
   employee,
@@ -42,6 +72,20 @@ export function EditEmployeeForm({
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
   const [departmentId, setDepartmentId] = useState(employee.department_id ?? "");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
+  const [idCardAddress, setIdCardAddress] = useState<AddressValue>(employee.id_card_address ?? {});
+  const [currentAddress, setCurrentAddress] = useState<AddressValue>(employee.current_address ?? {});
+  const [sameAsIdCard, setSameAsIdCard] = useState(false);
+
+  function updateIdCardAddress(key: keyof AddressValue, value: string) {
+    const next = { ...idCardAddress, [key]: value };
+    setIdCardAddress(next);
+    if (sameAsIdCard) setCurrentAddress(next);
+  }
+
+  function toggleSameAsIdCard(checked: boolean) {
+    setSameAsIdCard(checked);
+    if (checked) setCurrentAddress(idCardAddress);
+  }
 
   if (state.success) {
     router.push(`/employees/${employee.id}`);
@@ -123,6 +167,43 @@ export function EditEmployeeForm({
         </p>
       </div>
 
+      <div className="space-y-3 rounded-lg border border-outline-variant p-4">
+        <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {ADDRESS_FIELDS.map((f) => (
+            <AddressField
+              key={f.key}
+              label={f.label}
+              name={`idCard${capitalize(f.key)}`}
+              value={idCardAddress[f.key] ?? ""}
+              onChange={(v) => updateIdCardAddress(f.key, v)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-outline-variant p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-on-surface">ที่อยู่ปัจจุบัน</p>
+          <label className="flex items-center gap-2 text-xs text-on-surface-variant">
+            <input type="checkbox" checked={sameAsIdCard} onChange={(e) => toggleSameAsIdCard(e.target.checked)} />
+            เหมือนที่อยู่ตามบัตรประชาชน
+          </label>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {ADDRESS_FIELDS.map((f) => (
+            <AddressField
+              key={f.key}
+              label={f.label}
+              name={`current${capitalize(f.key)}`}
+              value={currentAddress[f.key] ?? ""}
+              onChange={(v) => setCurrentAddress({ ...currentAddress, [f.key]: v })}
+              disabled={sameAsIdCard}
+            />
+          ))}
+        </div>
+      </div>
+
       <div className="flex gap-3">
         <button
           type="submit"
@@ -133,6 +214,36 @@ export function EditEmployeeForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function AddressField({
+  label,
+  name,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-xs font-semibold text-on-surface-variant" htmlFor={name}>
+        {label}
+      </label>
+      <input
+        id={name}
+        name={name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        readOnly={disabled}
+        className="h-10 w-full rounded-lg border border-outline-variant bg-surface px-3 text-sm outline-none focus:border-primary read-only:bg-surface-container-low"
+      />
+    </div>
   );
 }
 

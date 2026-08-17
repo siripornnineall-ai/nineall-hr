@@ -20,7 +20,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, nickname, bio, phone, personal_email, hire_date, employment_type, employment_status, photo_url, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, nickname, bio, phone, personal_email, hire_date, employment_type, employment_status, photo_url, id_card_address, current_address, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -135,6 +135,12 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
               />
             )}
           </dl>
+          {canSeeSalary && (employee.id_card_address || employee.current_address) && (
+            <dl className="grid grid-cols-1 gap-4 border-t border-outline-variant pt-4 text-sm md:grid-cols-2">
+              <Info label="ที่อยู่ตามบัตรประชาชน" value={formatAddress(employee.id_card_address as AddressValue | null)} />
+              <Info label="ที่อยู่ปัจจุบัน" value={formatAddress(employee.current_address as AddressValue | null)} />
+            </dl>
+          )}
         </div>
 
         {canManage && (
@@ -151,6 +157,34 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       </div>
     </>
   );
+}
+
+interface AddressValue {
+  houseNo?: string;
+  moo?: string;
+  soi?: string;
+  yaek?: string;
+  road?: string;
+  subDistrict?: string;
+  district?: string;
+  province?: string;
+  postalCode?: string;
+}
+
+function formatAddress(address: AddressValue | null): string {
+  if (!address) return "-";
+  const parts = [
+    address.houseNo,
+    address.moo ? `หมู่ ${address.moo}` : null,
+    address.soi ? `ซอย${address.soi}` : null,
+    address.yaek ? `แยก${address.yaek}` : null,
+    address.road ? `ถนน${address.road}` : null,
+    address.subDistrict ? `ตำบล/แขวง${address.subDistrict}` : null,
+    address.district ? `อำเภอ/เขต${address.district}` : null,
+    address.province,
+    address.postalCode,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "-";
 }
 
 function Info({ label, value }: { label: string; value: string }) {

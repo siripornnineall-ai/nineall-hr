@@ -73,6 +73,13 @@ async function requireSettingsUser() {
   return user;
 }
 
+// FK violations (Postgres code 23503) mean the row is still referenced by real data
+// (an employee, employment history, a leave request, etc.) — surface a friendly
+// message instead of the raw constraint name.
+function fkMessage(entityLabel: string): string {
+  return `ไม่สามารถลบ${entityLabel}นี้ได้ เนื่องจากมีข้อมูลพนักงานหรือประวัติที่เกี่ยวข้องอยู่`;
+}
+
 // Returns { error } instead of throwing: Next.js redacts thrown Server Action error
 // messages in production builds (a security default, not a bug) — the client only ever
 // sees a generic digest, never the real text. Validation-style errors that the user needs
@@ -150,6 +157,14 @@ export async function updateLeaveTypeAction(id: string, values: FormValues): Pro
   revalidatePath("/settings");
 }
 
+export async function deleteLeaveTypeAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("leave_types").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("ประเภทการลา") : error.message };
+  revalidatePath("/settings");
+}
+
 export async function updateOrganizationAction(values: FormValues) {
   const user = await requireSettingsUser();
   const supabase = await createClient();
@@ -183,6 +198,14 @@ export async function updateBranchAction(id: string, values: FormValues) {
   revalidatePath("/settings");
 }
 
+export async function deleteBranchAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("branches").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("สาขา") : error.message };
+  revalidatePath("/settings");
+}
+
 // --- Departments --------------------------------------------------------------
 export async function createDepartmentAction(values: FormValues) {
   const user = await requireSettingsUser();
@@ -204,6 +227,14 @@ export async function updateDepartmentAction(id: string, values: FormValues) {
     .eq("id", id)
     .eq("org_id", user.orgId);
   if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function deleteDepartmentAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("departments").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("แผนก") : error.message };
   revalidatePath("/settings");
 }
 
@@ -231,6 +262,14 @@ export async function updateTeamAction(id: string, values: FormValues) {
   revalidatePath("/settings");
 }
 
+export async function deleteTeamAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("teams").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("ทีม") : error.message };
+  revalidatePath("/settings");
+}
+
 // --- Job positions --------------------------------------------------------------
 export async function createJobPositionAction(values: FormValues) {
   const user = await requireSettingsUser();
@@ -255,6 +294,14 @@ export async function updateJobPositionAction(id: string, values: FormValues) {
     .eq("id", id)
     .eq("org_id", user.orgId);
   if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function deleteJobPositionAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("job_positions").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("ตำแหน่งงาน") : error.message };
   revalidatePath("/settings");
 }
 
@@ -288,6 +335,14 @@ export async function updateShiftAction(id: string, values: FormValues) {
     .eq("id", id)
     .eq("org_id", user.orgId);
   if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+}
+
+export async function deleteShiftAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("work_shifts").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("กะการทำงาน") : error.message };
   revalidatePath("/settings");
 }
 
@@ -329,6 +384,14 @@ export async function updateWorkLocationAction(id: string, values: FormValues) {
   revalidatePath("/settings");
 }
 
+export async function deleteWorkLocationAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("work_locations").delete().eq("id", id).eq("org_id", user.orgId);
+  if (error) return { error: error.code === "23503" ? fkMessage("สถานที่ทำงาน") : error.message };
+  revalidatePath("/settings");
+}
+
 // --- Company holidays -------------------------------------------------------------
 export async function createHolidayAction(values: FormValues): Promise<{ error?: string } | void> {
   const user = await requireSettingsUser();
@@ -350,6 +413,15 @@ export async function updateHolidayAction(id: string, values: FormValues): Promi
     .update({ name: str(values, "name"), holiday_date: str(values, "holidayDate") })
     .eq("id", id)
     .eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+}
+
+export async function deleteHolidayAction(id: string): Promise<{ error?: string } | void> {
+  const user = await requireSettingsUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("company_holidays").delete().eq("id", id).eq("org_id", user.orgId);
   if (error) return { error: error.message };
   revalidatePath("/settings");
   revalidatePath("/dashboard");
