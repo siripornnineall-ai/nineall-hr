@@ -21,6 +21,94 @@ function generateTempPassword(): string {
   return out + "!1";
 }
 
+// Prorates by join month, except leave types with a min-service requirement (annual
+// leave): those grant nothing until the employee reaches that tenure, then the full
+// yearly entitlement (not prorated) — matches how Thai annual leave is actually meant
+// to work, distinct from leave types available from day one.
+async function grantLeaveBalancesForEmployee(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  employeeId: string,
+  orgId: string,
+  hireDate: string,
+  year: number
+) {
+  const { data: leaveTypes } = await supabase.from("leave_types").select("id").eq("org_id", orgId).eq("is_active", true);
+  if (!leaveTypes || leaveTypes.length === 0) return;
+
+  const { data: policyRows } = await supabase
+    .from("leave_policies")
+    .select("leave_type_id, days_per_year, min_service_months, effective_date")
+    .in(
+      "leave_type_id",
+      leaveTypes.map((t) => t.id)
+    )
+    .order("effective_date", { ascending: false });
+  const latestPolicyByType = new Map<string, { days_per_year: number; min_service_months: number }>();
+  for (const p of policyRows ?? []) {
+    if (!latestPolicyByType.has(p.leave_type_id)) latestPolicyByType.set(p.leave_type_id, p);
+  }
+
+  const hire = new Date(hireDate);
+  const hireYear = hire.getFullYear();
+  const hireMonth = hire.getMonth() + 1;
+  const monthsOfServiceAsOfNow =
+    (new Date().getFullYear() - hireYear) * 12 + (new Date().getMonth() + 1 - hireMonth) - (new Date().getDate() < hire.getDate() ? 1 : 0);
+
+  const rows: { employee_id: string; leave_type_id: string; year: number; entitled_days: number }[] = [];
+  for (const t of leaveTypes) {
+    const policy = latestPolicyByType.get(t.id);
+    if (!policy) continue;
+    const daysPerYear = Number(policy.days_per_year);
+    const minMonths = Number(policy.min_service_months);
+
+    if (minMonths > 0) {
+      // Tenure-gated (e.g. annual leave): nothing until eligible, full entitlement once eligible.
+      if (monthsOfServiceAsOfNow >= minMonths) {
+        rows.push({ employee_id: employeeId, leave_type_id: t.id, year, entitled_days: daysPerYear });
+      }
+      continue;
+    }
+
+    // Available from day one, prorated by join month for the year they joined;
+    // full entitlement for any year fully worked.
+    let entitled = daysPerYear;
+    if (hireYear === year) {
+      const monthsRemainingInYear = 13 - hireMonth;
+      entitled = Math.round(((daysPerYear * monthsRemainingInYear) / 12) * 100) / 100;
+    } else if (hireYear > year) {
+      continue; // not yet hired in that year
+    }
+    rows.push({ employee_id: employeeId, leave_type_id: t.id, year, entitled_days: entitled });
+  }
+
+  if (rows.length === 0) return;
+  // Only entitled_days is set on conflict — used_days/pending_days (managed by the
+  // leave request approval flow) and carried_over_days (a separate manual concern)
+  // are left untouched for rows that already exist.
+  await supabase.from("leave_balances").upsert(rows, { onConflict: "employee_id,leave_type_id,year" });
+}
+
+export async function syncLeaveBalancesAction(): Promise<{ error?: string; grantedCount?: number }> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: employees, error } = await supabase
+    .from("employees")
+    .select("id, hire_date")
+    .eq("org_id", user.orgId)
+    .in("employment_status", ["active", "probation"]);
+  if (error) return { error: error.message };
+
+  const year = new Date().getFullYear();
+  for (const emp of employees ?? []) {
+    await grantLeaveBalancesForEmployee(supabase, emp.id, user.orgId, emp.hire_date, year);
+  }
+
+  revalidatePath("/employees");
+  return { grantedCount: employees?.length ?? 0 };
+}
+
 export async function createEmployeeAction(
   _prevState: CreateEmployeeState,
   formData: FormData
@@ -85,6 +173,8 @@ export async function createEmployeeAction(
     base_amount: input.baseAmountBaht,
     created_by: user.profileId,
   });
+
+  await grantLeaveBalancesForEmployee(supabase, employee.id, user.orgId, input.hireDate, new Date().getFullYear());
 
   let tempPassword: string | undefined;
   if (createLoginAccount) {

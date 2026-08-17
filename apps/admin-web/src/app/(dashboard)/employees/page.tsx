@@ -4,6 +4,7 @@ import { getEmployeeSummary, listDepartments, listEmployees } from "@/lib/querie
 import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/StatCard";
 import { Badge } from "@/components/Badge";
+import { SyncLeaveBalancesButton } from "./SyncLeaveBalancesButton";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "danger" | "warning" | "neutral"; label: string }> = {
   active: { tone: "success", label: "กำลังทำงาน" },
@@ -46,7 +47,8 @@ export default async function EmployeesPage({
     <>
       <Topbar title="รายชื่อพนักงาน" subtitle={`จัดการข้อมูลพนักงานทั้งหมด ${total} รายการ`} />
       <div className="space-y-6 p-4 md:p-8">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-3">
+          <SyncLeaveBalancesButton />
           <Link
             href="/employees/new"
             className="flex h-12 items-center gap-2 rounded-xl bg-primary px-6 font-bold text-white shadow-md transition-all hover:bg-primary-container active:scale-95"
