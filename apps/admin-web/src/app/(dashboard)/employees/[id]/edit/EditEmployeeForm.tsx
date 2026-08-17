@@ -55,6 +55,7 @@ function capitalize(key: string): string {
 export function EditEmployeeForm({
   employee,
   currentBaseAmount,
+  bankAccount,
   departments,
   positions,
   managers,
@@ -62,6 +63,7 @@ export function EditEmployeeForm({
 }: {
   employee: EmployeeRow;
   currentBaseAmount: number | null;
+  bankAccount: { bank_name: string; account_name: string; account_number: string } | null;
   departments: { id: string; name: string }[];
   positions: { id: string; title: string; department_id: string | null }[];
   managers: { id: string; first_name: string; last_name: string }[];
@@ -166,6 +168,15 @@ export function EditEmployeeForm({
           ปัจจุบัน: {currentBaseAmount != null ? `${currentBaseAmount.toLocaleString("th-TH")} บาท` : "ยังไม่มีข้อมูล"} — เว้นว่างไว้ถ้าไม่ต้องการเปลี่ยน
           กรอกเฉพาะเมื่อมีการปรับเงินเดือน (จะบันทึกเป็นอัตราใหม่ตั้งแต่วันนี้ ประวัติอัตราเดิมยังเก็บไว้)
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-outline-variant p-4">
+        <p className="text-sm font-semibold text-on-surface">บัญชีธนาคาร</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field label="ธนาคาร" name="bankName" defaultValue={bankAccount?.bank_name ?? ""} />
+          <Field label="ชื่อบัญชี" name="bankAccountName" defaultValue={bankAccount?.account_name ?? ""} />
+          <Field label="เลขที่บัญชี" name="bankAccountNumber" defaultValue={bankAccount?.account_number ?? ""} />
+        </div>
       </div>
 
       <div className="space-y-3 rounded-lg border border-outline-variant p-4">

@@ -300,6 +300,30 @@ export async function updateEmployeeAction(
     }
   }
 
+  const bankName = String(raw.bankName ?? "").trim();
+  const bankAccountName = String(raw.bankAccountName ?? "").trim();
+  const bankAccountNumber = String(raw.bankAccountNumber ?? "").trim();
+  if (bankName || bankAccountName || bankAccountNumber) {
+    // No unique constraint on (employee_id) — an employee can have more than one row,
+    // so this only ever touches the existing primary one (or creates it) rather than
+    // upserting, to avoid creating a duplicate every time the admin re-saves the form.
+    const { data: existingAccount } = await supabase
+      .from("bank_accounts")
+      .select("id")
+      .eq("employee_id", employeeId)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const bankPayload = { bank_name: bankName, account_name: bankAccountName, account_number: bankAccountNumber, is_primary: true };
+    const { error: bankError } = existingAccount
+      ? await supabase.from("bank_accounts").update(bankPayload).eq("id", existingAccount.id)
+      : await supabase.from("bank_accounts").insert({ employee_id: employeeId, ...bankPayload });
+    if (bankError) {
+      return { error: `บันทึกข้อมูลพนักงานสำเร็จ แต่บันทึกบัญชีธนาคารไม่สำเร็จ: ${bankError.message}` };
+    }
+  }
+
   revalidatePath("/employees");
   revalidatePath(`/employees/${employeeId}`);
   return { success: true };

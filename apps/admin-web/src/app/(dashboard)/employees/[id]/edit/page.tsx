@@ -11,7 +11,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: employee }, departments, positions, managers, { data: branches }, { data: compensation }] = await Promise.all([
+  const [{ data: employee }, departments, positions, managers, { data: branches }, { data: compensation }, { data: bankAccount }] = await Promise.all([
     supabase
       .from("employees")
       .select(
@@ -31,6 +31,13 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
       .order("effective_date", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("bank_accounts")
+      .select("bank_name, account_name, account_number")
+      .eq("employee_id", id)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (!employee) notFound();
@@ -42,6 +49,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
         <EditEmployeeForm
           employee={employee}
           currentBaseAmount={compensation?.base_amount ?? null}
+          bankAccount={bankAccount}
           departments={departments}
           positions={positions}
           managers={managers.filter((m) => m.id !== employee.id)}
