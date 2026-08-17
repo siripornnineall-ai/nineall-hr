@@ -10,6 +10,8 @@ interface LeaveType {
   name_th: string;
   allow_half_day: boolean;
   allow_hourly: boolean;
+  requires_attachment: boolean;
+  attachment_required_after_days: number;
 }
 interface LeaveBalanceRow {
   leave_type_id: string;
@@ -49,6 +51,8 @@ export default function LeavePage() {
   const [hourlyStart, setHourlyStart] = useState("09:00");
   const [hourlyEnd, setHourlyEnd] = useState("12:00");
   const [reason, setReason] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -60,7 +64,7 @@ export default function LeavePage() {
       supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true),
       supabase
         .from("leave_policies")
-        .select("leave_type_id, allow_half_day, allow_hourly, effective_date")
+        .select("leave_type_id, allow_half_day, allow_hourly, requires_attachment, attachment_required_after_days, effective_date")
         .order("effective_date", { ascending: false }),
       supabase
         .from("leave_balances")
@@ -74,7 +78,10 @@ export default function LeavePage() {
         .order("created_at", { ascending: false })
         .limit(20),
     ]);
-    const latestPolicyByType = new Map<string, { allow_half_day: boolean; allow_hourly: boolean }>();
+    const latestPolicyByType = new Map<
+      string,
+      { allow_half_day: boolean; allow_hourly: boolean; requires_attachment: boolean; attachment_required_after_days: number }
+    >();
     for (const p of policies ?? []) {
       if (!latestPolicyByType.has(p.leave_type_id)) latestPolicyByType.set(p.leave_type_id, p);
     }
@@ -82,6 +89,8 @@ export default function LeavePage() {
       ...t,
       allow_half_day: latestPolicyByType.get(t.id)?.allow_half_day ?? true,
       allow_hourly: latestPolicyByType.get(t.id)?.allow_hourly ?? false,
+      requires_attachment: latestPolicyByType.get(t.id)?.requires_attachment ?? false,
+      attachment_required_after_days: latestPolicyByType.get(t.id)?.attachment_required_after_days ?? 0,
     }));
     setLeaveTypes(typesWithPolicy);
     setBalances(bal ?? []);
@@ -119,6 +128,12 @@ export default function LeavePage() {
     return Math.round((computeHourlyHours() / 8) * 100) / 100;
   }
 
+  // requires_attachment + a 0 threshold means "always"; a positive threshold means
+  // "only once the request reaches that many days" (e.g. sick leave: medical
+  // certificate only needed for 3+ days).
+  const attachmentRequired =
+    !!selectedLeaveType?.requires_attachment && computeTotalDays() >= (selectedLeaveType?.attachment_required_after_days ?? 0);
+
   async function handleSubmit() {
     setError(null);
     setSuccess(null);
@@ -135,9 +150,28 @@ export default function LeavePage() {
       setError("กรุณาระบุเวลาเริ่ม-สิ้นสุดให้ถูกต้อง");
       return;
     }
+    if (attachmentRequired && !attachmentFile) {
+      setError("ประเภทการลานี้ต้องแนบเอกสารประกอบ กรุณาแนบไฟล์");
+      return;
+    }
 
     const isSingleDay = unit !== "full_day";
     setSubmitting(true);
+
+    let attachmentPath: string | null = null;
+    if (attachmentFile) {
+      setUploadingAttachment(true);
+      const path = `${profile!.orgId}/${profile!.employeeId}/${Date.now()}-${attachmentFile.name}`;
+      const { error: uploadError } = await supabase.storage.from("attachments").upload(path, attachmentFile, { contentType: attachmentFile.type });
+      setUploadingAttachment(false);
+      if (uploadError) {
+        setSubmitting(false);
+        setError(`อัปโหลดเอกสารไม่สำเร็จ: ${uploadError.message}`);
+        return;
+      }
+      attachmentPath = path;
+    }
+
     const { error: insertError } = await supabase.from("leave_requests").insert({
       org_id: profile!.orgId,
       employee_id: profile!.employeeId,
@@ -149,6 +183,7 @@ export default function LeavePage() {
       unit,
       total_days: totalDays,
       reason,
+      attachment_file_path: attachmentPath,
       status: "pending",
     });
     setSubmitting(false);
@@ -159,6 +194,7 @@ export default function LeavePage() {
     setStartDate("");
     setEndDate("");
     setReason("");
+    setAttachmentFile(null);
     setSuccess("ส่งคำขอลาเรียบร้อยแล้ว");
     load();
   }
@@ -263,6 +299,21 @@ export default function LeavePage() {
           </div>
         )}
 
+        {selectedLeaveType?.requires_attachment && (
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">
+              เอกสารประกอบ{attachmentRequired ? <span className="text-status-danger"> * จำเป็น</span> : " (ไม่บังคับสำหรับจำนวนวันนี้)"}
+            </label>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
+              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+            />
+            {attachmentFile && <p className="mt-1 text-xs text-on-surface-variant">{attachmentFile.name}</p>}
+          </div>
+        )}
+
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">เหตุผล</label>
           <textarea
@@ -289,7 +340,7 @@ export default function LeavePage() {
           disabled={submitting}
           className="h-12 w-full rounded-2xl bg-primary font-bold text-white disabled:opacity-60"
         >
-          {submitting ? "กำลังส่ง..." : "ส่งคำขอลา"}
+          {uploadingAttachment ? "กำลังอัปโหลดเอกสาร..." : submitting ? "กำลังส่ง..." : "ส่งคำขอลา"}
         </button>
       </div>
 

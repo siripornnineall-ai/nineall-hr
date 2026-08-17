@@ -94,6 +94,7 @@ export async function createLeaveTypeQuickAction(values: FormValues): Promise<{ 
     allow_half_day: bool(values, "allowHalfDay"),
     allow_hourly: bool(values, "allowHourly"),
     requires_attachment: bool(values, "requiresAttachment"),
+    attachment_required_after_days: num(values, "attachmentRequiredAfterDays"),
     notice_days_required: num(values, "noticeDaysRequired"),
     min_service_months: num(values, "minServiceMonths"),
     created_by: user.profileId,
@@ -120,6 +121,7 @@ export async function updateLeaveTypeAction(id: string, values: FormValues): Pro
     allow_half_day: bool(values, "allowHalfDay"),
     allow_hourly: bool(values, "allowHourly"),
     requires_attachment: bool(values, "requiresAttachment"),
+    attachment_required_after_days: num(values, "attachmentRequiredAfterDays"),
     notice_days_required: num(values, "noticeDaysRequired"),
     min_service_months: num(values, "minServiceMonths"),
   };

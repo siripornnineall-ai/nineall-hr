@@ -56,7 +56,9 @@ export default async function SettingsPage() {
 
   const { data: leavePolicyRows } = await supabase
     .from("leave_policies")
-    .select("leave_type_id, days_per_year, allow_half_day, allow_hourly, requires_attachment, notice_days_required, min_service_months, effective_date")
+    .select(
+      "leave_type_id, days_per_year, allow_half_day, allow_hourly, requires_attachment, attachment_required_after_days, notice_days_required, min_service_months, effective_date"
+    )
     .in("leave_type_id", (leaveTypes ?? []).map((lt) => lt.id))
     .order("effective_date", { ascending: false });
   const latestPolicyByType = new Map<string, NonNullable<typeof leavePolicyRows>[number]>();
@@ -83,6 +85,7 @@ export default async function SettingsPage() {
               { key: "allowHalfDay", label: "ลาครึ่งวันได้ (เช้า/บ่าย)", type: "checkbox" },
               { key: "allowHourly", label: "ลารายชั่วโมงได้", type: "checkbox" },
               { key: "requiresAttachment", label: "ต้องแนบเอกสาร", type: "checkbox" },
+              { key: "attachmentRequiredAfterDays", label: "แนบเอกสารเมื่อลาตั้งแต่ (วัน) — 0 = ทุกครั้ง", type: "number", optional: true },
               { key: "noticeDaysRequired", label: "แจ้งล่วงหน้า (วัน)", type: "number", optional: true },
               { key: "minServiceMonths", label: "ต้องทำงานครบ (เดือน) ก่อนมีสิทธิ", type: "number", optional: true },
             ]}
@@ -98,10 +101,11 @@ export default async function SettingsPage() {
                 allowHalfDay: policy?.allow_half_day ?? true,
                 allowHourly: policy?.allow_hourly ?? false,
                 requiresAttachment: policy?.requires_attachment ?? false,
+                attachmentRequiredAfterDays: policy?.attachment_required_after_days ?? 0,
                 noticeDaysRequired: policy?.notice_days_required ?? 0,
                 minServiceMonths: minMonths,
                 label: lt.name_th,
-                subLabel: `${lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง"} • ${policy?.days_per_year ?? 0} วัน/ปี${minMonths > 0 ? ` • ต้องทำงานครบ ${minMonths} เดือน` : ""}`,
+                subLabel: `${lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง"} • ${policy?.days_per_year ?? 0} วัน/ปี${minMonths > 0 ? ` • ต้องทำงานครบ ${minMonths} เดือน` : ""}${policy?.requires_attachment ? ` • แนบเอกสาร${(policy?.attachment_required_after_days ?? 0) > 0 ? `ตั้งแต่ ${policy.attachment_required_after_days} วัน` : "ทุกครั้ง"}` : ""}`,
               };
             })}
             onCreate={createLeaveTypeQuickAction}
