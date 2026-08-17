@@ -73,16 +73,20 @@ async function requireSettingsUser() {
   return user;
 }
 
-export async function createLeaveTypeQuickAction(values: FormValues) {
+// Returns { error } instead of throwing: Next.js redacts thrown Server Action error
+// messages in production builds (a security default, not a bug) — the client only ever
+// sees a generic digest, never the real text. Validation-style errors that the user needs
+// to actually read must come back as a normal return value instead.
+export async function createLeaveTypeQuickAction(values: FormValues): Promise<{ error?: string } | void> {
   const user = await requireSettingsUser();
-  if (!str(values, "code") || !str(values, "nameTh")) throw new Error("กรุณากรอกรหัสและชื่อประเภทการลา");
+  if (!str(values, "code") || !str(values, "nameTh")) return { error: "กรุณากรอกรหัสและชื่อประเภทการลา" };
   const supabase = await createClient();
   const { data: leaveType, error } = await supabase
     .from("leave_types")
     .insert({ org_id: user.orgId, code: str(values, "code"), name_th: str(values, "nameTh"), is_paid: bool(values, "isPaid") })
     .select("id")
     .single();
-  if (error || !leaveType) throw new Error(error?.message ?? "บันทึกไม่สำเร็จ");
+  if (error || !leaveType) return { error: error?.message ?? "บันทึกไม่สำเร็จ" };
   await supabase.from("leave_policies").insert({
     leave_type_id: leaveType.id,
     effective_date: new Date().toISOString().slice(0, 10),
@@ -91,6 +95,7 @@ export async function createLeaveTypeQuickAction(values: FormValues) {
     allow_hourly: bool(values, "allowHourly"),
     requires_attachment: bool(values, "requiresAttachment"),
     notice_days_required: num(values, "noticeDaysRequired"),
+    min_service_months: num(values, "minServiceMonths"),
     created_by: user.profileId,
   });
   revalidatePath("/settings");
@@ -100,7 +105,7 @@ export async function createLeaveTypeQuickAction(values: FormValues) {
 // with a new effective-dated row — this is a quick-edit settings UI, not the
 // effective-dated history flow (that's what leave_policies is designed to support
 // later, e.g. a "change policy starting next year" feature, not built here).
-export async function updateLeaveTypeAction(id: string, values: FormValues) {
+export async function updateLeaveTypeAction(id: string, values: FormValues): Promise<{ error?: string } | void> {
   const user = await requireSettingsUser();
   const supabase = await createClient();
   const { error: typeErr } = await supabase
@@ -108,7 +113,7 @@ export async function updateLeaveTypeAction(id: string, values: FormValues) {
     .update({ code: str(values, "code"), name_th: str(values, "nameTh"), is_paid: bool(values, "isPaid") })
     .eq("id", id)
     .eq("org_id", user.orgId);
-  if (typeErr) throw new Error(typeErr.message);
+  if (typeErr) return { error: typeErr.message };
 
   const policyFields = {
     days_per_year: num(values, "daysPerYear"),
@@ -116,6 +121,7 @@ export async function updateLeaveTypeAction(id: string, values: FormValues) {
     allow_hourly: bool(values, "allowHourly"),
     requires_attachment: bool(values, "requiresAttachment"),
     notice_days_required: num(values, "noticeDaysRequired"),
+    min_service_months: num(values, "minServiceMonths"),
   };
 
   const { data: currentPolicy } = await supabase
@@ -128,7 +134,7 @@ export async function updateLeaveTypeAction(id: string, values: FormValues) {
 
   if (currentPolicy) {
     const { error: policyErr } = await supabase.from("leave_policies").update(policyFields).eq("id", currentPolicy.id);
-    if (policyErr) throw new Error(policyErr.message);
+    if (policyErr) return { error: policyErr.message };
   } else {
     const { error: policyErr } = await supabase.from("leave_policies").insert({
       leave_type_id: id,
@@ -136,7 +142,7 @@ export async function updateLeaveTypeAction(id: string, values: FormValues) {
       created_by: user.profileId,
       ...policyFields,
     });
-    if (policyErr) throw new Error(policyErr.message);
+    if (policyErr) return { error: policyErr.message };
   }
 
   revalidatePath("/settings");

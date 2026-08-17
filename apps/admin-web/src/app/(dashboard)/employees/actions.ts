@@ -238,29 +238,62 @@ const lbNum = (v: LeaveBalanceValues, key: string, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-export async function createLeaveBalanceAction(employeeId: string, values: LeaveBalanceValues) {
+function monthsOfService(hireDate: string, asOf = new Date()): number {
+  const hire = new Date(hireDate);
+  return (asOf.getFullYear() - hire.getFullYear()) * 12 + (asOf.getMonth() - hire.getMonth()) - (asOf.getDate() < hire.getDate() ? 1 : 0);
+}
+
+// Return { error } instead of throwing: Next.js redacts thrown Server Action error
+// messages in production builds (security default), so the client would only ever see a
+// generic digest, never the real text — validation errors the user needs to read have to
+// come back as a normal return value instead.
+export async function createLeaveBalanceAction(employeeId: string, values: LeaveBalanceValues): Promise<{ error?: string } | void> {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
   const leaveTypeId = lbStr(values, "leaveTypeId");
   const year = lbNum(values, "year", new Date().getFullYear());
-  if (!leaveTypeId) throw new Error("กรุณาเลือกประเภทการลา");
+  const entitledDays = lbNum(values, "entitledDays");
+  if (!leaveTypeId) return { error: "กรุณาเลือกประเภทการลา" };
 
   const supabase = await createClient();
+
+  if (entitledDays > 0) {
+    const [{ data: employee }, { data: policy }] = await Promise.all([
+      supabase.from("employees").select("hire_date, first_name, last_name").eq("id", employeeId).single(),
+      supabase
+        .from("leave_policies")
+        .select("min_service_months")
+        .eq("leave_type_id", leaveTypeId)
+        .order("effective_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const minMonths = policy?.min_service_months ?? 0;
+    if (employee && minMonths > 0) {
+      const served = monthsOfService(employee.hire_date);
+      if (served < minMonths) {
+        return {
+          error: `${employee.first_name} ${employee.last_name} ทำงานมาแล้ว ${Math.max(served, 0)} เดือน ยังไม่ครบ ${minMonths} เดือนที่ประเภทการลานี้กำหนด ยังไม่มีสิทธิ์รับวันลานี้`,
+        };
+      }
+    }
+  }
+
   const { error } = await supabase.from("leave_balances").upsert(
     {
       employee_id: employeeId,
       leave_type_id: leaveTypeId,
       year,
-      entitled_days: lbNum(values, "entitledDays"),
+      entitled_days: entitledDays,
       carried_over_days: lbNum(values, "carriedOverDays"),
     },
     { onConflict: "employee_id,leave_type_id,year" }
   );
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
   revalidatePath(`/employees/${employeeId}`);
 }
 
-export async function updateLeaveBalanceAction(id: string, values: LeaveBalanceValues) {
+export async function updateLeaveBalanceAction(id: string, values: LeaveBalanceValues): Promise<{ error?: string } | void> {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
   const supabase = await createClient();
@@ -268,6 +301,6 @@ export async function updateLeaveBalanceAction(id: string, values: LeaveBalanceV
     .from("leave_balances")
     .update({ entitled_days: lbNum(values, "entitledDays"), carried_over_days: lbNum(values, "carriedOverDays") })
     .eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
   revalidatePath("/employees");
 }

@@ -28,8 +28,8 @@ export function EditableList({
   title: string;
   fields: FieldDef[];
   rows: Row[];
-  onSave: (id: string, values: Record<string, string | boolean>) => Promise<void>;
-  onCreate: (values: Record<string, string | boolean>) => Promise<void>;
+  onSave: (id: string, values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
+  onCreate: (values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
   emptyLabel: string;
   addLabel: string;
 }) {
@@ -47,7 +47,16 @@ export function EditableList({
 
       {adding && (
         <div className="mb-4 rounded-lg border border-outline-variant bg-surface-container-low p-4">
-          <EntityForm fields={fields} initial={{}} onSubmit={async (v) => { await onCreate(v); setAdding(false); }} submitLabel="บันทึก" />
+          <EntityForm
+            fields={fields}
+            initial={{}}
+            onSubmit={async (v) => {
+              const result = await onCreate(v);
+              if (!result?.error) setAdding(false);
+              return result;
+            }}
+            submitLabel="บันทึก"
+          />
         </div>
       )}
 
@@ -62,7 +71,11 @@ export function EditableList({
                   <EntityForm
                     fields={fields}
                     initial={row}
-                    onSubmit={async (v) => { await onSave(id, v); setEditingId(null); }}
+                    onSubmit={async (v) => {
+                      const result = await onSave(id, v);
+                      if (!result?.error) setEditingId(null);
+                      return result;
+                    }}
                     onCancel={() => setEditingId(null)}
                     submitLabel="บันทึกการแก้ไข"
                   />
@@ -91,7 +104,7 @@ function EntityForm({
 }: {
   fields: FieldDef[];
   initial: Record<string, string | number | boolean | null | undefined>;
-  onSubmit: (values: Record<string, string | boolean>) => Promise<void>;
+  onSubmit: (values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
   onCancel?: () => void;
   submitLabel: string;
 }) {
@@ -110,8 +123,14 @@ function EntityForm({
     setError(null);
     startTransition(async () => {
       try {
-        await onSubmit(values);
+        const result = await onSubmit(values);
+        if (result?.error) setError(result.error);
       } catch (e) {
+        // Server Actions redact thrown error messages in production builds (Next.js
+        // security behavior — the client never sees the real text, only a generic
+        // digest), so actions that need to surface a specific message to the user
+        // return { error } instead of throwing. This catch only handles genuinely
+        // unexpected failures (network errors, etc.), hence the generic fallback.
         setError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
       }
     });

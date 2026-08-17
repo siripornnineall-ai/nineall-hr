@@ -48,7 +48,7 @@ export default async function SettingsPage() {
 
   const { data: leavePolicyRows } = await supabase
     .from("leave_policies")
-    .select("leave_type_id, days_per_year, allow_half_day, allow_hourly, requires_attachment, notice_days_required, effective_date")
+    .select("leave_type_id, days_per_year, allow_half_day, allow_hourly, requires_attachment, notice_days_required, min_service_months, effective_date")
     .in("leave_type_id", (leaveTypes ?? []).map((lt) => lt.id))
     .order("effective_date", { ascending: false });
   const latestPolicyByType = new Map<string, NonNullable<typeof leavePolicyRows>[number]>();
@@ -76,9 +76,11 @@ export default async function SettingsPage() {
               { key: "allowHourly", label: "ลารายชั่วโมงได้", type: "checkbox" },
               { key: "requiresAttachment", label: "ต้องแนบเอกสาร", type: "checkbox" },
               { key: "noticeDaysRequired", label: "แจ้งล่วงหน้า (วัน)", type: "number", optional: true },
+              { key: "minServiceMonths", label: "ต้องทำงานครบ (เดือน) ก่อนมีสิทธิ", type: "number", optional: true },
             ]}
             rows={(leaveTypes ?? []).map((lt) => {
               const policy = latestPolicyByType.get(lt.id);
+              const minMonths = policy?.min_service_months ?? 0;
               return {
                 id: lt.id,
                 code: lt.code,
@@ -89,8 +91,9 @@ export default async function SettingsPage() {
                 allowHourly: policy?.allow_hourly ?? false,
                 requiresAttachment: policy?.requires_attachment ?? false,
                 noticeDaysRequired: policy?.notice_days_required ?? 0,
+                minServiceMonths: minMonths,
                 label: lt.name_th,
-                subLabel: `${lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง"} • ${policy?.days_per_year ?? 0} วัน/ปี`,
+                subLabel: `${lt.is_paid ? "ได้รับค่าจ้าง" : "ไม่รับค่าจ้าง"} • ${policy?.days_per_year ?? 0} วัน/ปี${minMonths > 0 ? ` • ต้องทำงานครบ ${minMonths} เดือน` : ""}`,
               };
             })}
             onCreate={createLeaveTypeQuickAction}
