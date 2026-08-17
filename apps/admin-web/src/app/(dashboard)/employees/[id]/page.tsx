@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
 import { OffboardButton } from "./OffboardButton";
+import { LeaveBalances } from "./LeaveBalances";
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -42,6 +44,22 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const position = (employee.job_positions as unknown as { title: string } | null)?.title;
   const team = (employee.teams as unknown as { name: string } | null)?.name;
 
+  const canManage = ["super_admin", "hr"].includes(user.role);
+  let leaveTypes: { id: string; name_th: string }[] = [];
+  let leaveBalances: { id: string; leave_type_id: string; year: number; entitled_days: number; carried_over_days: number; used_days: number; pending_days: number }[] = [];
+  if (canManage) {
+    const [{ data: types }, { data: balances }] = await Promise.all([
+      supabase.from("leave_types").select("id, name_th").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),
+      supabase
+        .from("leave_balances")
+        .select("id, leave_type_id, year, entitled_days, carried_over_days, used_days, pending_days")
+        .eq("employee_id", employee.id)
+        .order("year", { ascending: false }),
+    ]);
+    leaveTypes = types ?? [];
+    leaveBalances = balances ?? [];
+  }
+
   return (
     <>
       <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} />
@@ -59,7 +77,15 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             <Badge tone={employee.employment_status === "active" ? "success" : "neutral"}>{employee.employment_status}</Badge>
           </div>
           {["super_admin", "hr"].includes(user.role) && (
-            <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
+            <>
+              <Link
+                href={`/employees/${employee.id}/edit`}
+                className="mt-3 block w-full rounded-lg border border-primary px-4 py-2 text-center text-sm font-bold text-primary hover:bg-primary/5"
+              >
+                แก้ไขข้อมูล
+              </Link>
+              <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
+            </>
           )}
         </div>
 
@@ -80,6 +106,12 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             )}
           </dl>
         </div>
+
+        {canManage && (
+          <div className="md:col-span-3">
+            <LeaveBalances employeeId={employee.id} leaveTypes={leaveTypes} balances={leaveBalances} />
+          </div>
+        )}
       </div>
     </>
   );

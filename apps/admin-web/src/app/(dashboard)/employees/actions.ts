@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { employeeCreateSchema } from "@nineall-hr/shared-validation";
+import { employeeCreateSchema, employeeUpdateSchema } from "@nineall-hr/shared-validation";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -118,6 +118,78 @@ export async function createEmployeeAction(
   };
 }
 
+export interface UpdateEmployeeState {
+  error?: string;
+  success?: boolean;
+}
+
+export async function updateEmployeeAction(
+  employeeId: string,
+  _prevState: UpdateEmployeeState,
+  formData: FormData
+): Promise<UpdateEmployeeState> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = employeeUpdateSchema.safeParse({
+    ...raw,
+    newBaseAmountBaht: raw.newBaseAmountBaht ? Number(raw.newBaseAmountBaht) : undefined,
+    branchId: raw.branchId || undefined,
+    departmentId: raw.departmentId || undefined,
+    teamId: raw.teamId || undefined,
+    jobPositionId: raw.jobPositionId || undefined,
+    managerEmployeeId: raw.managerEmployeeId || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" };
+  }
+  const input = parsed.data;
+  const supabase = await createClient();
+
+  const { error: empError } = await supabase
+    .from("employees")
+    .update({
+      employee_code: input.employeeCode,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      nickname: input.nickname || null,
+      phone: input.phone || null,
+      personal_email: input.personalEmail || null,
+      branch_id: input.branchId ?? null,
+      department_id: input.departmentId ?? null,
+      team_id: input.teamId ?? null,
+      job_position_id: input.jobPositionId ?? null,
+      manager_employee_id: input.managerEmployeeId ?? null,
+      employment_type: input.employmentType,
+      hire_date: input.hireDate,
+      updated_by: user.profileId,
+    })
+    .eq("id", employeeId)
+    .eq("org_id", user.orgId);
+
+  if (empError) {
+    return { error: `บันทึกไม่สำเร็จ: ${empError.message}` };
+  }
+
+  if (input.newBaseAmountBaht) {
+    const { error: compError } = await supabase.from("employee_compensation").insert({
+      employee_id: employeeId,
+      effective_date: new Date().toISOString().slice(0, 10),
+      employment_type: input.employmentType,
+      base_amount: input.newBaseAmountBaht,
+      created_by: user.profileId,
+    });
+    if (compError) {
+      return { error: `บันทึกข้อมูลพนักงานสำเร็จ แต่บันทึกเงินเดือนใหม่ไม่สำเร็จ: ${compError.message}` };
+    }
+  }
+
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${employeeId}`);
+  return { success: true };
+}
+
 /**
  * Offboarding, not deletion. Master prompt §18/§19: business records are never hard-deleted,
  * and closing an employee's account must not remove payroll/attendance history needed for
@@ -156,4 +228,46 @@ export async function offboardEmployeeAction(
 
   revalidatePath("/employees");
   revalidatePath(`/employees/${employeeId}`);
+}
+
+type LeaveBalanceValues = Record<string, string | boolean>;
+const lbStr = (v: LeaveBalanceValues, key: string) => (typeof v[key] === "string" ? (v[key] as string).trim() : "");
+const lbNum = (v: LeaveBalanceValues, key: string, fallback = 0) => {
+  if (v[key] === "" || v[key] == null) return fallback;
+  const n = Number(v[key]);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+export async function createLeaveBalanceAction(employeeId: string, values: LeaveBalanceValues) {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const leaveTypeId = lbStr(values, "leaveTypeId");
+  const year = lbNum(values, "year", new Date().getFullYear());
+  if (!leaveTypeId) throw new Error("กรุณาเลือกประเภทการลา");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("leave_balances").upsert(
+    {
+      employee_id: employeeId,
+      leave_type_id: leaveTypeId,
+      year,
+      entitled_days: lbNum(values, "entitledDays"),
+      carried_over_days: lbNum(values, "carriedOverDays"),
+    },
+    { onConflict: "employee_id,leave_type_id,year" }
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath(`/employees/${employeeId}`);
+}
+
+export async function updateLeaveBalanceAction(id: string, values: LeaveBalanceValues) {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leave_balances")
+    .update({ entitled_days: lbNum(values, "entitledDays"), carried_over_days: lbNum(values, "carriedOverDays") })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/employees");
 }
