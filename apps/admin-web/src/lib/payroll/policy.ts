@@ -12,7 +12,7 @@ const FALLBACK_POLICY: PayrollPolicyConfig = {
   socialSecurity: {
     employeeRate: 0.05,
     minBaseSatang: bahtToSatang(1_650),
-    maxContributionSatang: bahtToSatang(750),
+    maxContributionSatang: bahtToSatang(875),
   },
   taxBrackets: [
     { uptoSatang: bahtToSatang(150_000), rate: 0 },

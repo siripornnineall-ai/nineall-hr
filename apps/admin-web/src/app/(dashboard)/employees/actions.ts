@@ -268,6 +268,7 @@ export async function updateEmployeeAction(
       manager_employee_id: input.managerEmployeeId ?? null,
       employment_type: input.employmentType,
       hire_date: input.hireDate,
+      national_id: String(raw.nationalId ?? "").trim() || null,
       id_card_address: buildAddress(raw, "idCard"),
       current_address: buildAddress(raw, "current"),
       updated_by: user.profileId,

@@ -4,6 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
+
+interface AddressValue {
+  houseNo?: string;
+  moo?: string;
+  soi?: string;
+  yaek?: string;
+  road?: string;
+  subDistrict?: string;
+  district?: string;
+  province?: string;
+  postalCode?: string;
+}
 
 interface EditableProfile {
   firstName: string;
@@ -11,7 +24,27 @@ interface EditableProfile {
   nickname: string;
   bio: string;
   photoUrl: string | null;
+  nationalId: string;
+  idCardAddress: AddressValue;
+  currentAddress: AddressValue;
 }
+
+interface BankAccount {
+  id: string | null;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+}
+
+// Free-text sub-fields only — province/district/subDistrict/postalCode are handled by
+// the cascading selects in ThaiAddressCascadeFields instead.
+const ADDRESS_TEXT_FIELDS: { key: keyof AddressValue; label: string }[] = [
+  { key: "houseNo", label: "เลขที่" },
+  { key: "moo", label: "หมู่ที่" },
+  { key: "soi", label: "ตรอก/ซอย" },
+  { key: "yaek", label: "แยก" },
+  { key: "road", label: "ถนน" },
+];
 
 export default function ProfilePage() {
   const { profile, loading: authLoading, signOut, refreshProfile } = useAuth();
@@ -25,6 +58,11 @@ export default function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
+  const [sameAsIdCard, setSameAsIdCard] = useState(false);
+  const [bank, setBank] = useState<BankAccount | null>(null);
+  const [savingBank, setSavingBank] = useState(false);
+  const [bankMessage, setBankMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+
   const [newPassword, setNewPassword] = useState("");
   const [changing, setChanging] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
@@ -34,7 +72,7 @@ export default function ProfilePage() {
     setEditLoadFailed(false);
     supabase
       .from("employees")
-      .select("first_name, last_name, nickname, bio, photo_url")
+      .select("first_name, last_name, nickname, bio, photo_url, national_id, id_card_address, current_address")
       .eq("id", profile.employeeId)
       .single()
       .then(async ({ data, error }) => {
@@ -48,11 +86,29 @@ export default function ProfilePage() {
           nickname: data.nickname ?? "",
           bio: data.bio ?? "",
           photoUrl: data.photo_url,
+          nationalId: data.national_id ?? "",
+          idCardAddress: (data.id_card_address as AddressValue | null) ?? {},
+          currentAddress: (data.current_address as AddressValue | null) ?? {},
         });
         if (data.photo_url) {
           const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(data.photo_url, 3600);
           if (signed) setPhotoPreview(signed.signedUrl);
         }
+      });
+    supabase
+      .from("bank_accounts")
+      .select("id, bank_name, account_name, account_number")
+      .eq("employee_id", profile.employeeId)
+      .order("is_primary", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        setBank({
+          id: data?.id ?? null,
+          bankName: data?.bank_name ?? "",
+          accountName: data?.account_name ?? "",
+          accountNumber: data?.account_number ?? "",
+        });
       });
   }, [profile, supabase]);
 
@@ -97,6 +153,9 @@ export default function ProfilePage() {
         last_name: edit.lastName.trim(),
         nickname: edit.nickname.trim() || null,
         bio: edit.bio.trim() || null,
+        national_id: edit.nationalId.trim() || null,
+        id_card_address: Object.keys(edit.idCardAddress).length > 0 ? edit.idCardAddress : null,
+        current_address: Object.keys(edit.currentAddress).length > 0 ? edit.currentAddress : null,
       })
       .eq("id", profile.employeeId);
     setSavingProfile(false);
@@ -106,6 +165,48 @@ export default function ProfilePage() {
     }
     setProfileMessage({ type: "success", text: "บันทึกข้อมูลส่วนตัวแล้ว" });
     await refreshProfile();
+  }
+
+  function updateIdCardAddress(key: keyof AddressValue, value: string) {
+    patchIdCardAddress({ [key]: value });
+  }
+
+  function patchIdCardAddress(patch: Partial<AddressValue>) {
+    if (!edit) return;
+    const nextIdCard = { ...edit.idCardAddress, ...patch };
+    setEdit({ ...edit, idCardAddress: nextIdCard, currentAddress: sameAsIdCard ? nextIdCard : edit.currentAddress });
+  }
+
+  function toggleSameAsIdCard(checked: boolean) {
+    setSameAsIdCard(checked);
+    if (checked && edit) setEdit({ ...edit, currentAddress: edit.idCardAddress });
+  }
+
+  async function handleSaveBank() {
+    if (!profile || !bank) return;
+    setBankMessage(null);
+    if (!bank.bankName.trim() || !bank.accountName.trim() || !bank.accountNumber.trim()) {
+      setBankMessage({ type: "error", text: "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบถ้วน" });
+      return;
+    }
+    setSavingBank(true);
+    const payload = {
+      employee_id: profile.employeeId,
+      bank_name: bank.bankName.trim(),
+      account_name: bank.accountName.trim(),
+      account_number: bank.accountNumber.trim(),
+      is_primary: true,
+    };
+    const { data, error } = bank.id
+      ? await supabase.from("bank_accounts").update(payload).eq("id", bank.id).select("id").single()
+      : await supabase.from("bank_accounts").insert(payload).select("id").single();
+    setSavingBank(false);
+    if (error) {
+      setBankMessage({ type: "error", text: error.message });
+      return;
+    }
+    setBank({ ...bank, id: data.id });
+    setBankMessage({ type: "success", text: "บันทึกข้อมูลบัญชีธนาคารแล้ว" });
   }
 
   async function handleChangePassword() {
@@ -221,6 +322,60 @@ export default function ProfilePage() {
               className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขบัตรประชาชน</label>
+            <input
+              value={edit.nationalId}
+              onChange={(e) => setEdit({ ...edit, nationalId: e.target.value })}
+              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+            />
+          </div>
+
+          <div className="space-y-2 border-t border-outline-variant pt-3">
+            <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ADDRESS_TEXT_FIELDS.map((f) => (
+                <div key={f.key}>
+                  <label className="mb-1 block text-xs text-on-surface-variant">{f.label}</label>
+                  <input
+                    value={edit.idCardAddress[f.key] ?? ""}
+                    onChange={(e) => updateIdCardAddress(f.key, e.target.value)}
+                    className="w-full rounded-lg border border-outline-variant px-2.5 py-2 text-sm"
+                  />
+                </div>
+              ))}
+              <ThaiAddressCascadeFields value={edit.idCardAddress} onChange={patchIdCardAddress} />
+            </div>
+          </div>
+
+          <div className="space-y-2 border-t border-outline-variant pt-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-on-surface">ที่อยู่ปัจจุบัน</p>
+              <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                <input type="checkbox" checked={sameAsIdCard} onChange={(e) => toggleSameAsIdCard(e.target.checked)} />
+                เหมือนที่อยู่ตามบัตรประชาชน
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {ADDRESS_TEXT_FIELDS.map((f) => (
+                <div key={f.key}>
+                  <label className="mb-1 block text-xs text-on-surface-variant">{f.label}</label>
+                  <input
+                    value={edit.currentAddress[f.key] ?? ""}
+                    onChange={(e) => setEdit({ ...edit, currentAddress: { ...edit.currentAddress, [f.key]: e.target.value } })}
+                    readOnly={sameAsIdCard}
+                    className="w-full rounded-lg border border-outline-variant px-2.5 py-2 text-sm read-only:bg-surface-container-low"
+                  />
+                </div>
+              ))}
+              <ThaiAddressCascadeFields
+                value={edit.currentAddress}
+                onChange={(patch) => setEdit({ ...edit, currentAddress: { ...edit.currentAddress, ...patch } })}
+                disabled={sameAsIdCard}
+              />
+            </div>
+          </div>
+
           {profileMessage && (
             <p className={`text-sm font-semibold ${profileMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>
               {profileMessage.text}
@@ -232,6 +387,42 @@ export default function ProfilePage() {
             className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60"
           >
             {savingProfile ? "กำลังบันทึก..." : "บันทึกข้อมูลส่วนตัว"}
+          </button>
+        </div>
+      )}
+
+      {bank && (
+        <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <h2 className="font-bold text-on-surface">บัญชีธนาคาร</h2>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ธนาคาร</label>
+            <input
+              value={bank.bankName}
+              onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
+              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อบัญชี</label>
+            <input
+              value={bank.accountName}
+              onChange={(e) => setBank({ ...bank, accountName: e.target.value })}
+              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขที่บัญชี</label>
+            <input
+              value={bank.accountNumber}
+              onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })}
+              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+            />
+          </div>
+          {bankMessage && (
+            <p className={`text-sm font-semibold ${bankMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>{bankMessage.text}</p>
+          )}
+          <button onClick={handleSaveBank} disabled={savingBank} className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60">
+            {savingBank ? "กำลังบันทึก..." : "บันทึกบัญชีธนาคาร"}
           </button>
         </div>
       )}

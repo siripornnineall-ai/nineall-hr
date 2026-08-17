@@ -4,6 +4,7 @@ import { Topbar } from "@/components/Topbar";
 import { NewLeaveTypeForm } from "./NewLeaveTypeForm";
 import { OrgInfoForm } from "./OrgInfoForm";
 import { EditableList } from "./EditableList";
+import { THAI_FIXED_HOLIDAYS } from "@/lib/thaiHolidays";
 import {
   createBranchAction,
   updateBranchAction,
@@ -268,6 +269,7 @@ export default async function SettingsPage() {
           onCreate={createHolidayAction}
           onSave={updateHolidayAction}
           onDelete={deleteHolidayAction}
+          dateNameSuggestions={{ dateField: "holidayDate", nameField: "name", byMonthDay: THAI_FIXED_HOLIDAYS }}
           emptyLabel="ยังไม่มีวันหยุดบริษัท"
           addLabel="เพิ่มวันหยุด"
         />

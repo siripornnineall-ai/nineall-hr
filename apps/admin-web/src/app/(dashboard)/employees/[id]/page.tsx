@@ -20,7 +20,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, nickname, bio, phone, personal_email, hire_date, employment_type, employment_status, photo_url, id_card_address, current_address, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, nickname, bio, phone, personal_email, hire_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -37,15 +37,26 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
   const canSeeSalary = ["super_admin", "hr"].includes(user.role) || user.employeeId === employee.id;
   let compensation: { base_amount: number; effective_date: string } | null = null;
+  let bankAccount: { bank_name: string; account_name: string; account_number: string } | null = null;
   if (canSeeSalary) {
-    const { data } = await supabase
-      .from("employee_compensation")
-      .select("base_amount, effective_date")
-      .eq("employee_id", employee.id)
-      .order("effective_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    compensation = data;
+    const [{ data: comp }, { data: bank }] = await Promise.all([
+      supabase
+        .from("employee_compensation")
+        .select("base_amount, effective_date")
+        .eq("employee_id", employee.id)
+        .order("effective_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("bank_accounts")
+        .select("bank_name, account_name, account_number")
+        .eq("employee_id", employee.id)
+        .order("is_primary", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    compensation = comp;
+    bankAccount = bank;
   }
 
   const department = (employee.departments as unknown as { name: string } | null)?.name;
@@ -134,11 +145,19 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
                 value={compensation ? `${compensation.base_amount.toLocaleString("th-TH")} บาท` : "-"}
               />
             )}
+            {canSeeSalary && <Info label="เลขบัตรประชาชน" value={employee.national_id ?? "-"} />}
           </dl>
           {canSeeSalary && (employee.id_card_address || employee.current_address) && (
             <dl className="grid grid-cols-1 gap-4 border-t border-outline-variant pt-4 text-sm md:grid-cols-2">
               <Info label="ที่อยู่ตามบัตรประชาชน" value={formatAddress(employee.id_card_address as AddressValue | null)} />
               <Info label="ที่อยู่ปัจจุบัน" value={formatAddress(employee.current_address as AddressValue | null)} />
+            </dl>
+          )}
+          {canSeeSalary && bankAccount && (
+            <dl className="grid grid-cols-2 gap-4 border-t border-outline-variant pt-4 text-sm md:grid-cols-3">
+              <Info label="ธนาคาร" value={bankAccount.bank_name} />
+              <Info label="ชื่อบัญชี" value={bankAccount.account_name} />
+              <Info label="เลขที่บัญชี" value={bankAccount.account_number} />
             </dl>
           )}
         </div>

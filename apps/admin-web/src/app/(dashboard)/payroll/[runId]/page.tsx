@@ -2,8 +2,8 @@ import { notFound } from "next/navigation";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
-import { Badge } from "@/components/Badge";
 import { RunActions } from "./RunActions";
+import { PayrollCalcRow } from "./PayrollCalcRow";
 
 const STEPS = [
   { key: "draft", label: "สร้างรอบเงินเดือน" },
@@ -35,10 +35,12 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
     .eq("payroll_run_id", runId)
     .order("employee_code_snapshot");
 
-  const { data: payslips } = await supabase
-    .from("payslips")
-    .select("payroll_calc_id, pdf_file_path")
-    .in("payroll_calc_id", (calculations ?? []).map((c) => c.id));
+  const calcIds = (calculations ?? []).map((c) => c.id);
+  const [{ data: payslips }, { data: earningItems }, { data: deductionItems }] = await Promise.all([
+    supabase.from("payslips").select("payroll_calc_id, pdf_file_path").in("payroll_calc_id", calcIds),
+    supabase.from("payroll_earning_items").select("payroll_calc_id, label, amount").in("payroll_calc_id", calcIds),
+    supabase.from("payroll_deduction_items").select("payroll_calc_id, label, amount").in("payroll_calc_id", calcIds),
+  ]);
 
   const payslipUrlByCalcId = new Map<string, string>();
   await Promise.all(
@@ -50,9 +52,23 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
       })
   );
 
+  const earningItemsByCalcId = new Map<string, { label: string; amount: number }[]>();
+  for (const item of earningItems ?? []) {
+    const list = earningItemsByCalcId.get(item.payroll_calc_id) ?? [];
+    list.push({ label: item.label, amount: Number(item.amount) });
+    earningItemsByCalcId.set(item.payroll_calc_id, list);
+  }
+  const deductionItemsByCalcId = new Map<string, { label: string; amount: number }[]>();
+  for (const item of deductionItems ?? []) {
+    const list = deductionItemsByCalcId.get(item.payroll_calc_id) ?? [];
+    list.push({ label: item.label, amount: Number(item.amount) });
+    deductionItemsByCalcId.set(item.payroll_calc_id, list);
+  }
+
   const period = run.payroll_periods as unknown as { label: string; period_start: string; period_end: string; pay_date: string } | null;
   const anomalyCount = (calculations ?? []).filter((c) => c.has_anomaly).length;
   const stepIndex = STEPS.findIndex((s) => s.key === (STEP_STATUS_ALIAS[run.status] ?? run.status));
+  const editable = run.status !== "locked";
 
   return (
     <>
@@ -117,34 +133,27 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                   </tr>
                 )}
                 {(calculations ?? []).map((c) => (
-                  <tr key={c.id} className="hover:bg-primary/5">
-                    <td className="px-3 py-3">{c.employee_code_snapshot}</td>
-                    <td className="px-3 py-3 font-semibold">{c.employee_name_snapshot}</td>
-                    <td className="px-3 py-3 text-right">{Number(c.base_amount).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-right text-tertiary">{Number(c.ot_amount).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-right">{Number(c.gross_earnings).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-right text-error">{Number(c.total_deductions).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-right">{Number(c.social_security_amount).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-right">{Number(c.tax_amount).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-right font-bold text-primary">{Number(c.net_pay).toLocaleString("th-TH")}</td>
-                    <td className="px-3 py-3 text-center">
-                      {c.has_anomaly ? (
-                        <Badge tone="danger">ตรวจสอบ</Badge>
-                      ) : (
-                        <Badge tone="success">พร้อมจ่าย</Badge>
-                      )}
-                      {c.anomaly_notes && <p className="mt-1 text-[10px] text-error">{c.anomaly_notes}</p>}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {payslipUrlByCalcId.has(c.id) ? (
-                        <a href={payslipUrlByCalcId.get(c.id)} target="_blank" rel="noreferrer" className="text-xs font-bold text-primary hover:underline">
-                          ดาวน์โหลด PDF
-                        </a>
-                      ) : (
-                        <span className="text-xs text-on-surface-variant">-</span>
-                      )}
-                    </td>
-                  </tr>
+                  <PayrollCalcRow
+                    key={c.id}
+                    editable={editable}
+                    row={{
+                      id: c.id,
+                      employeeCode: c.employee_code_snapshot,
+                      employeeName: c.employee_name_snapshot,
+                      baseAmount: Number(c.base_amount),
+                      otAmount: Number(c.ot_amount),
+                      grossEarnings: Number(c.gross_earnings),
+                      totalDeductions: Number(c.total_deductions),
+                      socialSecurityAmount: Number(c.social_security_amount),
+                      taxAmount: Number(c.tax_amount),
+                      netPay: Number(c.net_pay),
+                      hasAnomaly: c.has_anomaly,
+                      anomalyNotes: c.anomaly_notes,
+                      earningItems: earningItemsByCalcId.get(c.id) ?? [],
+                      deductionItems: deductionItemsByCalcId.get(c.id) ?? [],
+                      payslipUrl: payslipUrlByCalcId.get(c.id) ?? null,
+                    }}
+                  />
                 ))}
               </tbody>
             </table>

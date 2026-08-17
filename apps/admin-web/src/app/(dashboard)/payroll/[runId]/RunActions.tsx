@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { approvePayrollRunAction, calculatePayrollRunAction, lockPayrollRunAction } from "../actions";
+import { approvePayrollRunAction, calculatePayrollRunAction, lockPayrollRunAction, unlockPayrollRunAction } from "../actions";
 
 export function RunActions({ runId, status, canLock }: { runId: string; status: string; canLock: boolean }) {
   const [isPending, startTransition] = useTransition();
@@ -51,6 +51,17 @@ export function RunActions({ runId, status, canLock }: { runId: string; status: 
             className="rounded-xl bg-on-surface px-6 py-3 text-sm font-bold text-white shadow-lg disabled:opacity-50"
           >
             ล็อกรอบและออกสลิป
+          </button>
+        )}
+        {status === "locked" && canLock && (
+          <button
+            disabled={isPending}
+            onClick={() => {
+              if (confirm("ปลดล็อครอบเงินเดือนนี้ใช่หรือไม่? จะกลับไปเป็นสถานะ \"อนุมัติ\" และแก้ไข/คำนวณใหม่ได้")) run(() => unlockPayrollRunAction(runId));
+            }}
+            className="rounded-xl border border-error px-6 py-3 text-sm font-bold text-error hover:bg-error-container/30 disabled:opacity-50"
+          >
+            ปลดล็อครอบเงินเดือน
           </button>
         )}
       </div>

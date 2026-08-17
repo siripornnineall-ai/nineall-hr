@@ -398,3 +398,110 @@ export async function lockPayrollRunAction(runId: string) {
 
   revalidatePath(`/payroll/${runId}`);
 }
+
+// Reopens a locked run back to "approved" so the numbers can be recalculated/edited
+// again. Existing payslips (and their PDFs) are left in place rather than deleted —
+// re-locking later overwrites them via the same upsert lockPayrollRunAction already
+// does, so there's no dangling-file cleanup to do here.
+export async function unlockPayrollRunAction(runId: string) {
+  const user = await requireUser();
+  requireRole(user, ["super_admin"]);
+  const supabase = await createClient();
+
+  const { data: run } = await supabase.from("payroll_runs").select("status").eq("id", runId).eq("org_id", user.orgId).single();
+  if (!run) throw new Error("ไม่พบรอบเงินเดือนนี้");
+  if (run.status !== "locked") throw new Error("รอบนี้ยังไม่ได้ถูกล็อก");
+
+  await supabase
+    .from("payroll_runs")
+    .update({ status: "approved", locked_at: null, locked_by: null })
+    .eq("id", runId)
+    .eq("org_id", user.orgId);
+  revalidatePath(`/payroll/${runId}`);
+  revalidatePath("/payroll");
+}
+
+interface PayrollLineItem {
+  label: string;
+  amount: number;
+}
+
+// Lets HR correct a single employee's auto-calculated numbers by hand (base pay, OT,
+// social security, tax) and attach ad-hoc earning/deduction line items on top — the
+// same payroll_earning_items/payroll_deduction_items tables calculatePayrollRunAction
+// already writes to, just edited directly instead of only being engine output.
+// Only allowed pre-lock: once a run is locked its payslips are already issued (see
+// lockPayrollRunAction), so further edits here wouldn't be reflected in what was handed
+// to the employee — unlockPayrollRunAction exists for that case.
+export async function updatePayrollCalcAction(
+  calcId: string,
+  values: {
+    baseAmount: string;
+    otAmount: string;
+    socialSecurityAmount: string;
+    taxAmount: string;
+    earningItems: PayrollLineItem[];
+    deductionItems: PayrollLineItem[];
+  }
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: calc } = await supabase
+    .from("payroll_employee_calculations")
+    .select("payroll_run_id, payroll_runs!inner(status, org_id)")
+    .eq("id", calcId)
+    .single();
+  const run = calc?.payroll_runs as unknown as { status: string; org_id: string } | undefined;
+  if (!calc || !run || run.org_id !== user.orgId) return { error: "ไม่พบรายการคำนวณนี้" };
+  if (run.status === "locked") return { error: "แก้ไขไม่ได้ เนื่องจากรอบนี้ถูกล็อกแล้ว กรุณาปลดล็อกก่อน" };
+
+  const baseAmount = Number(values.baseAmount);
+  const otAmount = Number(values.otAmount);
+  const socialSecurityAmount = Number(values.socialSecurityAmount);
+  const taxAmount = Number(values.taxAmount);
+  if (![baseAmount, otAmount, socialSecurityAmount, taxAmount].every(Number.isFinite)) {
+    return { error: "จำนวนเงินไม่ถูกต้อง" };
+  }
+
+  const earningItems = values.earningItems.filter((i) => i.label.trim() && Number.isFinite(i.amount));
+  const deductionItems = values.deductionItems.filter((i) => i.label.trim() && Number.isFinite(i.amount));
+  const earningItemsTotal = earningItems.reduce((sum, i) => sum + i.amount, 0);
+  const deductionItemsTotal = deductionItems.reduce((sum, i) => sum + i.amount, 0);
+
+  const grossEarnings = baseAmount + otAmount + earningItemsTotal;
+  const totalDeductions = socialSecurityAmount + taxAmount + deductionItemsTotal;
+  const netPay = grossEarnings - totalDeductions;
+
+  const { error: updateError } = await supabase
+    .from("payroll_employee_calculations")
+    .update({
+      base_amount: baseAmount,
+      ot_amount: otAmount,
+      social_security_amount: socialSecurityAmount,
+      tax_amount: taxAmount,
+      gross_earnings: grossEarnings,
+      total_deductions: totalDeductions,
+      net_pay: netPay,
+    })
+    .eq("id", calcId);
+  if (updateError) return { error: updateError.message };
+
+  await Promise.all([
+    supabase.from("payroll_earning_items").delete().eq("payroll_calc_id", calcId),
+    supabase.from("payroll_deduction_items").delete().eq("payroll_calc_id", calcId),
+  ]);
+  await Promise.all([
+    earningItems.length > 0
+      ? supabase.from("payroll_earning_items").insert(earningItems.map((i) => ({ payroll_calc_id: calcId, label: i.label, amount: i.amount, added_by: user.profileId })))
+      : Promise.resolve(),
+    deductionItems.length > 0
+      ? supabase
+          .from("payroll_deduction_items")
+          .insert(deductionItems.map((i) => ({ payroll_calc_id: calcId, label: i.label, amount: i.amount, added_by: user.profileId })))
+      : Promise.resolve(),
+  ]);
+
+  revalidatePath(`/payroll/${calc.payroll_run_id}`);
+}

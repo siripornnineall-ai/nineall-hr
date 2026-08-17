@@ -23,6 +23,7 @@ export function EditableList({
   onSave,
   onCreate,
   onDelete,
+  dateNameSuggestions,
   emptyLabel,
   addLabel,
 }: {
@@ -32,6 +33,11 @@ export function EditableList({
   onSave: (id: string, values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
   onCreate: (values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
   onDelete?: (id: string) => Promise<{ error?: string } | void>;
+  // Auto-fills nameField from a date field when it matches a known date (e.g. company
+  // holidays) — plain serializable data rather than a callback, since this whole tree
+  // is a Server Component and a function prop can't cross into the Client Component
+  // below (see the Row type comment above for the same constraint elsewhere in this file).
+  dateNameSuggestions?: { dateField: string; nameField: string; byMonthDay: Record<string, string> };
   emptyLabel: string;
   addLabel: string;
 }) {
@@ -57,6 +63,7 @@ export function EditableList({
               if (!result?.error) setAdding(false);
               return result;
             }}
+            dateNameSuggestions={dateNameSuggestions}
             submitLabel="บันทึก"
           />
         </div>
@@ -79,6 +86,7 @@ export function EditableList({
                       return result;
                     }}
                     onCancel={() => setEditingId(null)}
+                    dateNameSuggestions={dateNameSuggestions}
                     submitLabel="บันทึกการแก้ไข"
                   />
                   {onDelete && <DeleteButton label={row.label} onDelete={() => onDelete(id)} onDeleted={() => setEditingId(null)} />}
@@ -127,12 +135,14 @@ function EntityForm({
   initial,
   onSubmit,
   onCancel,
+  dateNameSuggestions,
   submitLabel,
 }: {
   fields: FieldDef[];
   initial: Record<string, string | number | boolean | null | undefined>;
   onSubmit: (values: Record<string, string | boolean>) => Promise<{ error?: string } | void>;
   onCancel?: () => void;
+  dateNameSuggestions?: { dateField: string; nameField: string; byMonthDay: Record<string, string> };
   submitLabel: string;
 }) {
   const [values, setValues] = useState<Record<string, string | boolean>>(() => {
@@ -145,6 +155,15 @@ function EntityForm({
   });
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  function handleChange(key: string, value: string | boolean) {
+    const next = { ...values, [key]: value };
+    if (dateNameSuggestions && key === dateNameSuggestions.dateField && typeof value === "string" && !next[dateNameSuggestions.nameField]) {
+      const suggested = dateNameSuggestions.byMonthDay[value.slice(5, 10)];
+      if (suggested) next[dateNameSuggestions.nameField] = suggested;
+    }
+    setValues(next);
+  }
 
   function submit() {
     setError(null);
@@ -173,7 +192,7 @@ function EntityForm({
                 <input
                   type="checkbox"
                   checked={Boolean(values[f.key])}
-                  onChange={(e) => setValues({ ...values, [f.key]: e.target.checked })}
+                  onChange={(e) => handleChange(f.key, e.target.checked)}
                   id={f.key}
                 />
                 <label htmlFor={f.key} className="text-sm">
@@ -185,7 +204,7 @@ function EntityForm({
                 <label className="mb-1 block text-xs font-semibold text-on-surface-variant">{f.label}</label>
                 <select
                   value={String(values[f.key] ?? "")}
-                  onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                  onChange={(e) => handleChange(f.key, e.target.value)}
                   className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm"
                 >
                   <option value="">-- เลือก --</option>
@@ -202,7 +221,7 @@ function EntityForm({
                 <input
                   type={f.type === "time" ? "time" : f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
                   value={String(values[f.key] ?? "")}
-                  onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                  onChange={(e) => handleChange(f.key, e.target.value)}
                   className="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm"
                 />
               </>

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateEmployeeAction, type UpdateEmployeeState } from "../../actions";
+import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
 
 interface AddressValue {
   houseNo?: string;
@@ -30,22 +31,21 @@ interface EmployeeRow {
   department_id: string | null;
   job_position_id: string | null;
   manager_employee_id: string | null;
+  national_id: string | null;
   id_card_address: AddressValue | null;
   current_address: AddressValue | null;
 }
 
 const initialState: UpdateEmployeeState = {};
 
-const ADDRESS_FIELDS: { key: keyof AddressValue; label: string }[] = [
+// Free-text sub-fields only — province/district/subDistrict/postalCode are handled by
+// the cascading selects in ThaiAddressCascadeFields instead.
+const ADDRESS_TEXT_FIELDS: { key: keyof AddressValue; label: string }[] = [
   { key: "houseNo", label: "เลขที่" },
   { key: "moo", label: "หมู่ที่" },
   { key: "soi", label: "ตรอก/ซอย" },
   { key: "yaek", label: "แยก" },
   { key: "road", label: "ถนน" },
-  { key: "subDistrict", label: "ตำบล/แขวง" },
-  { key: "district", label: "อำเภอ/เขต" },
-  { key: "province", label: "จังหวัด" },
-  { key: "postalCode", label: "รหัสไปรษณีย์" },
 ];
 
 function capitalize(key: string): string {
@@ -76,8 +76,8 @@ export function EditEmployeeForm({
   const [currentAddress, setCurrentAddress] = useState<AddressValue>(employee.current_address ?? {});
   const [sameAsIdCard, setSameAsIdCard] = useState(false);
 
-  function updateIdCardAddress(key: keyof AddressValue, value: string) {
-    const next = { ...idCardAddress, [key]: value };
+  function patchIdCardAddress(patch: Partial<AddressValue>) {
+    const next = { ...idCardAddress, ...patch };
     setIdCardAddress(next);
     if (sameAsIdCard) setCurrentAddress(next);
   }
@@ -104,6 +104,7 @@ export function EditEmployeeForm({
         <Field label="ชื่อเล่น" name="nickname" defaultValue={employee.nickname ?? ""} />
         <Field label="เบอร์โทร" name="phone" defaultValue={employee.phone ?? ""} />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" defaultValue={employee.personal_email ?? ""} />
+        <Field label="เลขบัตรประชาชน" name="nationalId" defaultValue={employee.national_id ?? ""} />
         <Select label="สาขา" name="branchId" defaultValue={employee.branch_id ?? ""} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
         <div className="space-y-1">
           <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">
@@ -170,15 +171,16 @@ export function EditEmployeeForm({
       <div className="space-y-3 rounded-lg border border-outline-variant p-4">
         <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {ADDRESS_FIELDS.map((f) => (
+          {ADDRESS_TEXT_FIELDS.map((f) => (
             <AddressField
               key={f.key}
               label={f.label}
               name={`idCard${capitalize(f.key)}`}
               value={idCardAddress[f.key] ?? ""}
-              onChange={(v) => updateIdCardAddress(f.key, v)}
+              onChange={(v) => patchIdCardAddress({ [f.key]: v })}
             />
           ))}
+          <ThaiAddressCascadeFields namePrefix="idCard" value={idCardAddress} onChange={patchIdCardAddress} />
         </div>
       </div>
 
@@ -191,7 +193,7 @@ export function EditEmployeeForm({
           </label>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {ADDRESS_FIELDS.map((f) => (
+          {ADDRESS_TEXT_FIELDS.map((f) => (
             <AddressField
               key={f.key}
               label={f.label}
@@ -201,6 +203,12 @@ export function EditEmployeeForm({
               disabled={sameAsIdCard}
             />
           ))}
+          <ThaiAddressCascadeFields
+            namePrefix="current"
+            value={currentAddress}
+            onChange={(patch) => setCurrentAddress({ ...currentAddress, ...patch })}
+            disabled={sameAsIdCard}
+          />
         </div>
       </div>
 
