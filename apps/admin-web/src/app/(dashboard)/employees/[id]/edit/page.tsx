@@ -15,7 +15,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
     supabase
       .from("employees")
       .select(
-        "id, employee_code, first_name, last_name, nickname, title_prefix, gender, gender_identity, phone, personal_email, hire_date, probation_end_date, employment_type, branch_id, department_id, job_position_id, manager_employee_id, national_id, tax_id, social_security_id, id_card_address, current_address"
+        "id, employee_code, first_name, last_name, first_name_en, last_name_en, nickname, title_prefix, gender, gender_identity, phone, personal_email, hire_date, probation_end_date, employment_type, branch_id, department_id, job_position_id, manager_employee_id, national_id, tax_id, social_security_id, id_card_address, current_address"
       )
       .eq("org_id", user.orgId)
       .eq("id", id)

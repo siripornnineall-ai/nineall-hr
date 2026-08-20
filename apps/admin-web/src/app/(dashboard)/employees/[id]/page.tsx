@@ -5,8 +5,35 @@ import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
 import { OffboardButton } from "./OffboardButton";
-import { LeaveBalances } from "./LeaveBalances";
-import { ShiftAssignment } from "./ShiftAssignment";
+import { EmployeeDetailTabs } from "./EmployeeDetailTabs";
+
+interface AddressValue {
+  houseNo?: string;
+  moo?: string;
+  soi?: string;
+  yaek?: string;
+  road?: string;
+  subDistrict?: string;
+  district?: string;
+  province?: string;
+  postalCode?: string;
+}
+
+function formatAddress(address: AddressValue | null): string {
+  if (!address) return "-";
+  const parts = [
+    address.houseNo,
+    address.moo ? `หมู่ ${address.moo}` : null,
+    address.soi ? `ซอย${address.soi}` : null,
+    address.yaek ? `แยก${address.yaek}` : null,
+    address.road ? `ถนน${address.road}` : null,
+    address.subDistrict ? `ตำบล/แขวง${address.subDistrict}` : null,
+    address.district ? `อำเภอ/เขต${address.district}` : null,
+    address.province,
+    address.postalCode,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "-";
+}
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -20,7 +47,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, nickname, title_prefix, gender, gender_identity, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, first_name_en, last_name_en, nickname, title_prefix, gender, gender_identity, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, department_id, job_position_id, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -36,13 +63,20 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   }
 
   const canSeeSalary = ["super_admin", "hr"].includes(user.role) || user.employeeId === employee.id;
-  let compensation: { base_amount: number; effective_date: string } | null = null;
+  let compensation: {
+    baseAmount: number;
+    workDaysPerMonth: number;
+    workHoursPerDay: number;
+    paymentSchedule: string;
+    companyCoversSsf: boolean;
+    companyCoversTax: boolean;
+  } | null = null;
   let bankAccount: { bank_name: string; account_name: string; account_number: string } | null = null;
   if (canSeeSalary) {
     const [{ data: comp }, { data: bank }] = await Promise.all([
       supabase
         .from("employee_compensation")
-        .select("base_amount, effective_date")
+        .select("base_amount, work_days_per_month, work_hours_per_day, payment_schedule, company_covers_ssf, company_covers_tax")
         .eq("employee_id", employee.id)
         .order("effective_date", { ascending: false })
         .limit(1)
@@ -55,13 +89,22 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         .limit(1)
         .maybeSingle(),
     ]);
-    compensation = comp;
+    compensation = comp
+      ? {
+          baseAmount: Number(comp.base_amount),
+          workDaysPerMonth: Number(comp.work_days_per_month),
+          workHoursPerDay: Number(comp.work_hours_per_day),
+          paymentSchedule: comp.payment_schedule,
+          companyCoversSsf: comp.company_covers_ssf,
+          companyCoversTax: comp.company_covers_tax,
+        }
+      : null;
     bankAccount = bank;
   }
 
-  const department = (employee.departments as unknown as { name: string } | null)?.name;
-  const position = (employee.job_positions as unknown as { title: string } | null)?.title;
-  const team = (employee.teams as unknown as { name: string } | null)?.name;
+  const department = (employee.departments as unknown as { name: string } | null)?.name ?? null;
+  const position = (employee.job_positions as unknown as { title: string } | null)?.title ?? null;
+  const team = (employee.teams as unknown as { name: string } | null)?.name ?? null;
 
   const canManage = ["super_admin", "hr"].includes(user.role);
   let leaveTypes: { id: string; name_th: string }[] = [];
@@ -95,6 +138,44 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       : null;
   }
 
+  const [{ data: trainingRows }, { data: documentRows }, { data: historyRows }] = await Promise.all([
+    supabase.from("training_records").select("id, title, provider, training_date, hours").eq("employee_id", employee.id).order("training_date", { ascending: false }),
+    supabase.from("employee_documents").select("id, document_type, file_path, file_name, created_at").eq("employee_id", employee.id).order("created_at", { ascending: false }),
+    supabase
+      .from("employment_records")
+      .select("id, effective_date, employment_type, reason, departments(name), job_positions(title)")
+      .eq("employee_id", employee.id)
+      .order("effective_date", { ascending: false }),
+  ]);
+
+  const trainingRecords = (trainingRows ?? []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    provider: r.provider,
+    trainingDate: r.training_date,
+    hours: r.hours != null ? Number(r.hours) : null,
+  }));
+
+  const documents = await Promise.all(
+    (documentRows ?? []).map(async (d) => {
+      let url: string | null = null;
+      if (d.file_path) {
+        const { data: signed } = await supabase.storage.from("documents").createSignedUrl(d.file_path, 3600);
+        url = signed?.signedUrl ?? null;
+      }
+      return { id: d.id, documentType: d.document_type, fileName: d.file_name ?? "-", url, createdAt: d.created_at };
+    })
+  );
+
+  const employmentHistory = (historyRows ?? []).map((r) => ({
+    id: r.id,
+    effectiveDate: r.effective_date,
+    department: (r.departments as unknown as { name: string } | null)?.name ?? null,
+    position: (r.job_positions as unknown as { title: string } | null)?.title ?? null,
+    employmentType: r.employment_type,
+    reason: r.reason,
+  }));
+
   return (
     <>
       <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} />
@@ -109,8 +190,13 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             )}
           </div>
           <h3 className="text-lg font-bold">
-            {employee.first_name} {employee.last_name}
+            {employee.title_prefix ?? ""} {employee.first_name} {employee.last_name}
           </h3>
+          {employee.first_name_en && (
+            <p className="text-xs text-on-surface-variant">
+              {employee.first_name_en} {employee.last_name_en}
+            </p>
+          )}
           {employee.nickname && <p className="text-sm text-on-surface-variant">({employee.nickname})</p>}
           <p className="mt-1 text-sm text-on-surface-variant">{position ?? "-"}</p>
           {employee.bio && <p className="mt-3 text-left text-sm leading-relaxed text-on-surface-variant">{employee.bio}</p>}
@@ -130,92 +216,45 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           )}
         </div>
 
-        <div className="space-y-4 rounded-xl border border-outline-variant bg-white p-6 shadow-sm md:col-span-2">
-          <h4 className="font-bold">ข้อมูลการทำงาน</h4>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <Info label="แผนก" value={department ?? "-"} />
-            <Info label="ทีม" value={team ?? "-"} />
-            <Info label="ประเภทการจ้าง" value={employee.employment_type} />
-            <Info label="วันที่เริ่มงาน" value={new Date(employee.hire_date).toLocaleDateString("th-TH")} />
-            <Info
-              label="วันที่ผ่านทดลองงาน"
-              value={employee.probation_end_date ? new Date(employee.probation_end_date).toLocaleDateString("th-TH") : "-"}
-            />
-            <Info label="คำนำหน้า/เพศ/เพศสภาพ" value={[employee.title_prefix, employee.gender, employee.gender_identity].filter(Boolean).join(" / ") || "-"} />
-            <Info label="เบอร์โทร" value={employee.phone ?? "-"} />
-            <Info label="อีเมล" value={employee.personal_email ?? "-"} />
-            {canSeeSalary && (
-              <Info
-                label="เงินเดือน/อัตราค่าจ้าง"
-                value={compensation ? `${compensation.base_amount.toLocaleString("th-TH")} บาท` : "-"}
-              />
-            )}
-            {canSeeSalary && <Info label="เลขบัตรประชาชน" value={employee.national_id ?? "-"} />}
-          </dl>
-          {canSeeSalary && (employee.id_card_address || employee.current_address) && (
-            <dl className="grid grid-cols-1 gap-4 border-t border-outline-variant pt-4 text-sm md:grid-cols-2">
-              <Info label="ที่อยู่ตามบัตรประชาชน" value={formatAddress(employee.id_card_address as AddressValue | null)} />
-              <Info label="ที่อยู่ปัจจุบัน" value={formatAddress(employee.current_address as AddressValue | null)} />
-            </dl>
-          )}
-          {canSeeSalary && bankAccount && (
-            <dl className="grid grid-cols-2 gap-4 border-t border-outline-variant pt-4 text-sm md:grid-cols-3">
-              <Info label="ธนาคาร" value={bankAccount.bank_name} />
-              <Info label="ชื่อบัญชี" value={bankAccount.account_name} />
-              <Info label="เลขที่บัญชี" value={bankAccount.account_number} />
-            </dl>
-          )}
-        </div>
-
-        {canManage && (
-          <div className="md:col-span-3">
-            <ShiftAssignment employeeId={employee.id} shifts={shifts} workLocations={workLocations} currentAssignment={currentShiftAssignment} />
-          </div>
-        )}
-
-        {canManage && (
-          <div className="md:col-span-3">
-            <LeaveBalances employeeId={employee.id} leaveTypes={leaveTypes} balances={leaveBalances} />
-          </div>
-        )}
+        <EmployeeDetailTabs
+          employee={{
+            id: employee.id,
+            employeeCode: employee.employee_code,
+            firstName: employee.first_name,
+            lastName: employee.last_name,
+            firstNameEn: employee.first_name_en,
+            lastNameEn: employee.last_name_en,
+            nickname: employee.nickname,
+            titlePrefix: employee.title_prefix,
+            gender: employee.gender,
+            genderIdentity: employee.gender_identity,
+            phone: employee.phone,
+            personalEmail: employee.personal_email,
+            nationalId: employee.national_id,
+            idCardAddress: formatAddress(employee.id_card_address as AddressValue | null),
+            currentAddress: formatAddress(employee.current_address as AddressValue | null),
+            hireDate: employee.hire_date,
+            probationEndDate: employee.probation_end_date,
+            employmentType: employee.employment_type,
+            employmentStatus: employee.employment_status,
+            department,
+            position,
+            team,
+          }}
+          bankAccount={bankAccount}
+          canSeeSalary={canSeeSalary}
+          canManage={canManage}
+          compensation={compensation}
+          leaveTypes={leaveTypes}
+          leaveBalances={leaveBalances}
+          trainingRecords={trainingRecords}
+          shifts={shifts}
+          workLocations={workLocations}
+          currentShiftAssignment={currentShiftAssignment}
+          documents={documents}
+          employmentHistory={employmentHistory}
+        />
       </div>
     </>
-  );
-}
-
-interface AddressValue {
-  houseNo?: string;
-  moo?: string;
-  soi?: string;
-  yaek?: string;
-  road?: string;
-  subDistrict?: string;
-  district?: string;
-  province?: string;
-  postalCode?: string;
-}
-
-function formatAddress(address: AddressValue | null): string {
-  if (!address) return "-";
-  const parts = [
-    address.houseNo,
-    address.moo ? `หมู่ ${address.moo}` : null,
-    address.soi ? `ซอย${address.soi}` : null,
-    address.yaek ? `แยก${address.yaek}` : null,
-    address.road ? `ถนน${address.road}` : null,
-    address.subDistrict ? `ตำบล/แขวง${address.subDistrict}` : null,
-    address.district ? `อำเภอ/เขต${address.district}` : null,
-    address.province,
-    address.postalCode,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : "-";
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs text-on-surface-variant">{label}</dt>
-      <dd className="font-semibold">{value}</dd>
-    </div>
   );
 }

@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { parseThaiPastedDate } from "@/lib/parseDate";
 
-// Wraps a native <input type="date"> with paste support for common pasted formats
-// (dd/mm/yyyy, Buddhist-era years) that the bare browser control silently rejects.
-// Self-manages its value by default (for plain <form action={serverAction}> usage,
-// read back via FormData by `name`); pass value+onChange to run it controlled instead
-// (needed when the surrounding form isn't FormData-based, e.g. a plain object payload).
+// A plain text input rather than <input type="date"> — native date inputs have
+// inconsistent, sometimes completely broken paste handling across browsers (confirmed
+// live: pasting into one silently did nothing even though a scripted paste event
+// worked fine in testing, since a real OS paste doesn't always route through the same
+// code path browsers use for a programmatically dispatched ClipboardEvent). A plain
+// text input always accepts paste with no special-casing needed; parseThaiPastedDate
+// normalizes whatever format comes in (ISO, dd/mm/yyyy, Buddhist-era year) to ISO,
+// both instantly on paste and on blur for anything typed by hand.
 export function DateField({
   label,
   name,
@@ -26,6 +29,23 @@ export function DateField({
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
   const value = controlledValue ?? internalValue;
   const setValue = onChange ?? setInternalValue;
+  const [error, setError] = useState<string | null>(null);
+
+  function normalize(raw: string) {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      setValue("");
+      setError(null);
+      return;
+    }
+    const parsed = parseThaiPastedDate(trimmed);
+    if (parsed) {
+      setValue(parsed);
+      setError(null);
+    } else {
+      setError("รูปแบบวันที่ไม่ถูกต้อง ลองใหม่ เช่น 20/08/2569 หรือ 2026-08-20");
+    }
+  }
 
   return (
     <div className="space-y-1">
@@ -36,20 +56,32 @@ export function DateField({
       <input
         id={name}
         name={name}
-        type="date"
+        type="text"
+        inputMode="numeric"
         required={required}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        placeholder="เช่น 20/08/2569 หรือ 2026-08-20"
+        onChange={(e) => {
+          setValue(e.target.value);
+          if (error) setError(null);
+        }}
+        onBlur={(e) => normalize(e.target.value)}
         onPaste={(e) => {
-          const parsed = parseThaiPastedDate(e.clipboardData.getData("text"));
+          const pasted = e.clipboardData.getData("text");
+          const parsed = parseThaiPastedDate(pasted);
           if (parsed) {
             e.preventDefault();
             setValue(parsed);
+            setError(null);
           }
         }}
         className="h-11 w-full rounded-lg border border-outline-variant bg-surface px-3 text-sm outline-none focus:border-primary"
       />
-      <p className="text-xs text-on-surface-variant">วางวันที่ได้ เช่น 20/08/2569 หรือ 2026-08-20</p>
+      {error ? (
+        <p className="text-xs text-status-danger">{error}</p>
+      ) : (
+        <p className="text-xs text-on-surface-variant">วางวันที่ได้ เช่น 20/08/2569 หรือ 2026-08-20</p>
+      )}
     </div>
   );
 }

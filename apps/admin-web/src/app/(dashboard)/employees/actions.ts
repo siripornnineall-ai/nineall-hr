@@ -178,6 +178,8 @@ export async function createEmployeeAction(
       employee_code: input.employeeCode,
       first_name: input.firstName,
       last_name: input.lastName,
+      first_name_en: String(raw.firstNameEn ?? "").trim() || null,
+      last_name_en: String(raw.lastNameEn ?? "").trim() || null,
       nickname: input.nickname || null,
       phone: input.phone || null,
       personal_email: input.personalEmail || null,
@@ -299,6 +301,12 @@ export async function updateEmployeeAction(
   const input = parsed.data;
   const supabase = await createClient();
 
+  const { data: before } = await supabase
+    .from("employees")
+    .select("department_id, job_position_id, manager_employee_id, employment_type")
+    .eq("id", employeeId)
+    .single();
+
   // team_id is intentionally not touched here: the edit form dropped the team field
   // (per request — department + position is enough), so this update must not silently
   // wipe whatever team an employee already has assigned.
@@ -308,6 +316,8 @@ export async function updateEmployeeAction(
       employee_code: input.employeeCode,
       first_name: input.firstName,
       last_name: input.lastName,
+      first_name_en: String(raw.firstNameEn ?? "").trim() || null,
+      last_name_en: String(raw.lastNameEn ?? "").trim() || null,
       nickname: input.nickname || null,
       phone: input.phone || null,
       personal_email: input.personalEmail || null,
@@ -333,6 +343,28 @@ export async function updateEmployeeAction(
 
   if (empError) {
     return { error: `บันทึกไม่สำเร็จ: ${empError.message}` };
+  }
+
+  // employment_records is a plain change log (History tab) — one row per change to
+  // department/position/manager/employment type, so the record only grows when
+  // something actually moved rather than on every save (e.g. a phone-number edit).
+  if (
+    before &&
+    (before.department_id !== (input.departmentId ?? null) ||
+      before.job_position_id !== (input.jobPositionId ?? null) ||
+      before.manager_employee_id !== (input.managerEmployeeId ?? null) ||
+      before.employment_type !== input.employmentType)
+  ) {
+    await supabase.from("employment_records").insert({
+      employee_id: employeeId,
+      effective_date: new Date().toISOString().slice(0, 10),
+      department_id: input.departmentId ?? null,
+      job_position_id: input.jobPositionId ?? null,
+      manager_employee_id: input.managerEmployeeId ?? null,
+      employment_type: input.employmentType,
+      reason: "แก้ไขข้อมูลพนักงาน",
+      created_by: user.profileId,
+    });
   }
 
   if (input.newBaseAmountBaht) {
@@ -543,5 +575,89 @@ export async function assignShiftAction(
 
   const { error } = await supabase.from("shift_assignments").upsert(rows, { onConflict: "employee_id,work_date" });
   if (error) return { error: error.message };
+  revalidatePath(`/employees/${employeeId}`);
+}
+
+// Contracts tab fields (work days/month, work hours/day, payment schedule, company
+// covers SSF/tax) live on employee_compensation but aren't salary-history the way
+// base_amount is, so this edits the latest row in place rather than dating a new one.
+export async function updateContractFieldsAction(
+  employeeId: string,
+  values: {
+    workDaysPerMonth: string;
+    workHoursPerDay: string;
+    paymentSchedule: string;
+    companyCoversSsf: boolean;
+    companyCoversTax: boolean;
+  }
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const workDaysPerMonth = Number(values.workDaysPerMonth);
+  const workHoursPerDay = Number(values.workHoursPerDay);
+  if (!Number.isFinite(workDaysPerMonth) || workDaysPerMonth <= 0) return { error: "วันทำงาน/เดือนไม่ถูกต้อง" };
+  if (!Number.isFinite(workHoursPerDay) || workHoursPerDay <= 0) return { error: "ชั่วโมงทำงาน/วันไม่ถูกต้อง" };
+
+  const { data: latest } = await supabase
+    .from("employee_compensation")
+    .select("id")
+    .eq("employee_id", employeeId)
+    .order("effective_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!latest) return { error: "ยังไม่มีข้อมูลเงินเดือน กรุณาเพิ่มเงินเดือนก่อน" };
+
+  const { error } = await supabase
+    .from("employee_compensation")
+    .update({
+      work_days_per_month: workDaysPerMonth,
+      work_hours_per_day: workHoursPerDay,
+      payment_schedule: values.paymentSchedule,
+      company_covers_ssf: values.companyCoversSsf,
+      company_covers_tax: values.companyCoversTax,
+    })
+    .eq("id", latest.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/employees/${employeeId}`);
+}
+
+export async function uploadEmployeeDocumentAction(
+  employeeId: string,
+  values: { documentType: string; filePath: string; fileName: string }
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  if (!values.documentType.trim()) return { error: "กรุณาระบุประเภทเอกสาร" };
+
+  const { error } = await supabase.from("employee_documents").insert({
+    employee_id: employeeId,
+    document_type: values.documentType.trim(),
+    file_path: values.filePath,
+    file_name: values.fileName,
+    uploaded_by: user.profileId,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/employees/${employeeId}`);
+}
+
+export async function deleteEmployeeDocumentAction(documentId: string, employeeId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: doc } = await supabase.from("employee_documents").select("file_path").eq("id", documentId).single();
+  if (doc?.file_path) {
+    await supabase.storage.from("documents").remove([doc.file_path]);
+  }
+
+  const { error } = await supabase.from("employee_documents").delete().eq("id", documentId);
+  if (error) return { error: error.message };
+
   revalidatePath(`/employees/${employeeId}`);
 }

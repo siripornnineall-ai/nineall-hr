@@ -18,6 +18,8 @@ interface EmployeeRow {
   first_name: string;
   last_name: string;
   nickname: string | null;
+  first_name_en: string | null;
+  last_name_en: string | null;
   title_prefix: string | null;
   gender: string | null;
   gender_identity: string | null;
@@ -102,6 +104,8 @@ export function EditEmployeeForm({
         <Select label="คำนำหน้าชื่อ" name="titlePrefix" defaultValue={employee.title_prefix ?? ""} options={TITLE_PREFIXES.map((v) => ({ value: v, label: v }))} />
         <Field label="ชื่อ" name="firstName" defaultValue={employee.first_name} required />
         <Field label="นามสกุล" name="lastName" defaultValue={employee.last_name} required />
+        <Field label="ชื่อ (ภาษาอังกฤษ)" name="firstNameEn" defaultValue={employee.first_name_en ?? ""} />
+        <Field label="นามสกุล (ภาษาอังกฤษ)" name="lastNameEn" defaultValue={employee.last_name_en ?? ""} />
         <Field label="ชื่อเล่น" name="nickname" defaultValue={employee.nickname ?? ""} />
         <Select label="เพศ" name="gender" defaultValue={employee.gender ?? ""} options={GENDERS.map((v) => ({ value: v, label: v }))} />
         <Select

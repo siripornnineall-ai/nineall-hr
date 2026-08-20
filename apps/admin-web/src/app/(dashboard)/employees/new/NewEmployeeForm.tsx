@@ -98,6 +98,8 @@ export function NewEmployeeForm({
         <Select label="คำนำหน้าชื่อ" name="titlePrefix" options={TITLE_PREFIXES.map((v) => ({ value: v, label: v }))} />
         <Field label="ชื่อ" name="firstName" required />
         <Field label="นามสกุล" name="lastName" required />
+        <Field label="ชื่อ (ภาษาอังกฤษ)" name="firstNameEn" />
+        <Field label="นามสกุล (ภาษาอังกฤษ)" name="lastNameEn" />
         <Field label="ชื่อเล่น" name="nickname" />
         <Select label="เพศ" name="gender" options={GENDERS.map((v) => ({ value: v, label: v }))} />
         <Select label="เพศสภาพ" name="genderIdentity" options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))} />
