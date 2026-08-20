@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { LeaveRow } from "./LeaveRow";
 import { AddBackdatedLeaveForm } from "./AddBackdatedLeaveForm";
 
@@ -16,7 +17,7 @@ export default async function LeavePage() {
     supabase
       .from("leave_requests")
       .select(
-        "id, start_date, end_date, total_days, unit, status, reason, created_at, leave_type_id, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name), leave_types(name_th)"
+        "id, start_date, end_date, total_days, unit, status, reason, created_at, leave_type_id, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url), leave_types(name_th)"
       )
       .eq("org_id", user.orgId)
       .order("created_at", { ascending: false })
@@ -30,8 +31,13 @@ export default async function LeavePage() {
       .order("employee_code"),
   ]);
 
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
   const rows = (data ?? []).map((r) => {
-    const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string } | null;
+    const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
     const leaveType = r.leave_types as unknown as { name_th: string } | null;
     return {
       id: r.id,
@@ -44,6 +50,7 @@ export default async function LeavePage() {
       reason: r.reason,
       employeeCode: emp?.employee_code ?? "-",
       employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
+      employeePhotoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
     };
   });
 

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { OtRow } from "./OtRow";
 
 export default async function OvertimePage() {
@@ -9,13 +10,20 @@ export default async function OvertimePage() {
 
   const { data } = await supabase
     .from("overtime_requests")
-    .select("id, work_date, start_time, end_time, requested_hours, rate_multiplier, status, reason, task_description, employees(employee_code, first_name, last_name)")
+    .select(
+      "id, work_date, start_time, end_time, requested_hours, rate_multiplier, status, reason, task_description, employees(employee_code, first_name, last_name, photo_url)"
+    )
     .eq("org_id", user.orgId)
     .order("work_date", { ascending: false })
     .limit(50);
 
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
   const rows = (data ?? []).map((r) => {
-    const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string } | null;
+    const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
     return {
       id: r.id,
       workDate: r.work_date,
@@ -28,6 +36,7 @@ export default async function OvertimePage() {
       reason: r.reason,
       employeeCode: emp?.employee_code ?? "-",
       employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
+      employeePhotoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
     };
   });
 

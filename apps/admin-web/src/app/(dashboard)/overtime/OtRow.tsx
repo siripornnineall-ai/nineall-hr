@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
+import { Avatar } from "@/components/Avatar";
 import { decideOvertimeRequest, updateOvertimeRequestAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral"; label: string }> = {
@@ -23,6 +24,7 @@ interface OtRowData {
   reason: string | null;
   employeeCode: string;
   employeeName: string;
+  employeePhotoUrl: string | null;
 }
 
 export function OtRow({ row }: { row: OtRowData }) {
@@ -113,8 +115,13 @@ export function OtRow({ row }: { row: OtRowData }) {
   return (
     <tr>
       <td className="px-4 py-3 font-semibold">
-        {row.employeeName}
-        <div className="text-xs text-on-surface-variant">{row.employeeCode}</div>
+        <div className="flex items-center gap-2">
+          <Avatar url={row.employeePhotoUrl} size={28} />
+          <div>
+            {row.employeeName}
+            <div className="text-xs font-normal text-on-surface-variant">{row.employeeCode}</div>
+          </div>
+        </div>
       </td>
       <td className="px-4 py-3">{new Date(row.workDate).toLocaleDateString("th-TH")}</td>
       <td className="px-4 py-3">

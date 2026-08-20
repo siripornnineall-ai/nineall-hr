@@ -1,6 +1,8 @@
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { Avatar } from "@/components/Avatar";
+import { signAvatarUrls } from "@/lib/avatars";
 
 export default async function ReportsPage() {
   const user = await requireUser();
@@ -13,16 +15,30 @@ export default async function ReportsPage() {
 
   const { data } = await supabase
     .from("attendance_records")
-    .select("status, employees(employee_code, first_name, last_name)")
+    .select("status, employees(employee_code, first_name, last_name, photo_url)")
     .eq("org_id", user.orgId)
     .gte("work_date", monthStartStr);
 
-  const summary = new Map<string, { name: string; onTime: number; late: number; absent: number; leave: number }>();
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((row) => (row.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
+  const summary = new Map<string, { name: string; photoUrl: string | null; onTime: number; late: number; absent: number; leave: number }>();
   for (const row of data ?? []) {
-    const emp = row.employees as unknown as { employee_code: string; first_name: string; last_name: string } | null;
+    const emp = row.employees as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
     if (!emp) continue;
     const key = emp.employee_code;
-    if (!summary.has(key)) summary.set(key, { name: `${emp.first_name} ${emp.last_name}`, onTime: 0, late: 0, absent: 0, leave: 0 });
+    if (!summary.has(key)) {
+      summary.set(key, {
+        name: `${emp.first_name} ${emp.last_name}`,
+        photoUrl: emp.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
+        onTime: 0,
+        late: 0,
+        absent: 0,
+        leave: 0,
+      });
+    }
     const s = summary.get(key)!;
     if (row.status === "on_time") s.onTime++;
     else if (row.status === "late") s.late++;
@@ -57,7 +73,12 @@ export default async function ReportsPage() {
               {Array.from(summary.entries()).map(([code, s]) => (
                 <tr key={code}>
                   <td className="px-4 py-3">{code}</td>
-                  <td className="px-4 py-3 font-semibold">{s.name}</td>
+                  <td className="px-4 py-3 font-semibold">
+                    <div className="flex items-center gap-2">
+                      <Avatar url={s.photoUrl} size={28} />
+                      {s.name}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-right">{s.onTime}</td>
                   <td className="px-4 py-3 text-right">{s.late}</td>
                   <td className="px-4 py-3 text-right">{s.absent}</td>

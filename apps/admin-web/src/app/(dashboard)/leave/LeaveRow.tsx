@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
+import { Avatar } from "@/components/Avatar";
 import { decideLeaveRequest, updateLeaveRequestAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral"; label: string }> = {
@@ -22,6 +23,7 @@ interface LeaveRowData {
   reason: string | null;
   employeeCode: string;
   employeeName: string;
+  employeePhotoUrl: string | null;
 }
 
 export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: { id: string; name_th: string }[] }) {
@@ -109,8 +111,13 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
   return (
     <tr>
       <td className="px-4 py-3 font-semibold">
-        {row.employeeName}
-        <div className="text-xs text-on-surface-variant">{row.employeeCode}</div>
+        <div className="flex items-center gap-2">
+          <Avatar url={row.employeePhotoUrl} size={28} />
+          <div>
+            {row.employeeName}
+            <div className="text-xs font-normal text-on-surface-variant">{row.employeeCode}</div>
+          </div>
+        </div>
       </td>
       <td className="px-4 py-3">{row.leaveTypeName}</td>
       <td className="px-4 py-3">

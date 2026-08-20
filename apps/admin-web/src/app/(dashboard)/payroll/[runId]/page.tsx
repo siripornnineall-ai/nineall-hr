@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { RunActions } from "./RunActions";
 import { PayrollCalcRow } from "./PayrollCalcRow";
 
@@ -31,9 +32,14 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
 
   const { data: calculations } = await supabase
     .from("payroll_employee_calculations")
-    .select("*")
+    .select("*, employees(photo_url)")
     .eq("payroll_run_id", runId)
     .order("employee_code_snapshot");
+
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (calculations ?? []).map((c) => (c.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
 
   const calcIds = (calculations ?? []).map((c) => c.id);
   const [{ data: payslips }, { data: earningItems }, { data: deductionItems }] = await Promise.all([
@@ -138,6 +144,10 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                       id: c.id,
                       employeeCode: c.employee_code_snapshot,
                       employeeName: c.employee_name_snapshot,
+                      employeePhotoUrl: (() => {
+                        const path = (c.employees as unknown as { photo_url: string | null } | null)?.photo_url;
+                        return path ? (signedByPath.get(path) ?? null) : null;
+                      })(),
                       baseAmount: Number(c.base_amount),
                       otAmount: Number(c.ot_amount),
                       grossEarnings: Number(c.gross_earnings),

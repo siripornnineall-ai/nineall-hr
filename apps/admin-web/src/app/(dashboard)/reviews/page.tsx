@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { AddReviewForm } from "./AddReviewForm";
 import { ReviewRow } from "./ReviewRow";
 
@@ -12,7 +13,7 @@ export default async function ReviewsPage() {
     supabase
       .from("performance_reviews")
       .select(
-        "id, review_period, rating, strengths, improvements, employee:employees!performance_reviews_employee_id_fkey(employee_code, first_name, last_name), reviewer:employees!performance_reviews_reviewer_employee_id_fkey(first_name, last_name)"
+        "id, review_period, rating, strengths, improvements, employee:employees!performance_reviews_employee_id_fkey(employee_code, first_name, last_name, photo_url), reviewer:employees!performance_reviews_reviewer_employee_id_fkey(first_name, last_name)"
       )
       .eq("org_id", user.orgId)
       .order("created_at", { ascending: false })
@@ -25,13 +26,19 @@ export default async function ReviewsPage() {
       .order("employee_code"),
   ]);
 
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((r) => (r.employee as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
   const rows = (data ?? []).map((r) => {
-    const emp = r.employee as unknown as { employee_code: string; first_name: string; last_name: string } | null;
+    const emp = r.employee as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
     const reviewer = r.reviewer as unknown as { first_name: string; last_name: string } | null;
     return {
       id: r.id,
       employeeCode: emp?.employee_code ?? "-",
       employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
+      employeePhotoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
       reviewPeriod: r.review_period,
       rating: r.rating,
       strengths: r.strengths,

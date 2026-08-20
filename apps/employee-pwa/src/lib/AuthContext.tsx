@@ -44,6 +44,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const employee = data.employees as unknown as { employee_code: string; photo_url: string | null; job_positions: { title: string } | null } | null;
+
+    // photo_url is a private-bucket storage path, not a fetchable URL — resolve it to a
+    // short-lived signed URL here so every consumer of `profile.photoUrl` can drop it
+    // straight into an <img src> without repeating this call.
+    let photoUrl: string | null = null;
+    if (employee?.photo_url) {
+      const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(employee.photo_url, 3600);
+      photoUrl = signed?.signedUrl ?? null;
+    }
+
     setProfile({
       profileId: data.id,
       orgId: data.org_id,
@@ -52,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fullName: data.full_name,
       mustChangePassword: data.must_change_password,
       employeeCode: employee?.employee_code ?? "",
-      photoUrl: employee?.photo_url ?? null,
+      photoUrl,
       jobTitle: employee?.job_positions?.title ?? null,
     });
   }

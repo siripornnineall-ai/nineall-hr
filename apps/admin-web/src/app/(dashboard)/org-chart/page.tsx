@@ -1,10 +1,13 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { Avatar } from "@/components/Avatar";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface EmployeeNode {
   id: string;
   name: string;
+  photoUrl: string | null;
   position: string | null;
   department: string | null;
   managerId: string | null;
@@ -17,16 +20,19 @@ export default async function OrgChartPage() {
 
   const { data } = await supabase
     .from("employees")
-    .select("id, first_name, last_name, manager_employee_id, job_positions(title), departments(name)")
+    .select("id, first_name, last_name, photo_url, manager_employee_id, job_positions(title), departments(name)")
     .eq("org_id", user.orgId)
     .in("employment_status", ["active", "probation"])
     .order("first_name");
+
+  const signedByPath = await signAvatarUrls(supabase, (data ?? []).map((e) => e.photo_url));
 
   const nodesById = new Map<string, EmployeeNode>();
   for (const e of data ?? []) {
     nodesById.set(e.id, {
       id: e.id,
       name: `${e.first_name} ${e.last_name}`,
+      photoUrl: e.photo_url ? (signedByPath.get(e.photo_url) ?? null) : null,
       position: (e.job_positions as unknown as { title: string } | null)?.title ?? null,
       department: (e.departments as unknown as { name: string } | null)?.name ?? null,
       managerId: e.manager_employee_id,
@@ -64,9 +70,7 @@ function OrgNode({ node, depth }: { node: EmployeeNode; depth: number }) {
   return (
     <div style={{ marginLeft: depth > 0 ? 28 : 0 }} className={depth > 0 ? "border-l border-outline-variant pl-4" : ""}>
       <div className="mb-2 flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-low px-4 py-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-container text-primary">
-          <span className="material-symbols-outlined text-[20px]">person</span>
-        </div>
+        <Avatar url={node.photoUrl} size={40} />
         <div>
           <p className="text-sm font-bold text-on-surface">{node.name}</p>
           <p className="text-xs text-on-surface-variant">

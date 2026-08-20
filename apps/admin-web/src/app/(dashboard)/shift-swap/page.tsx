@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { ShiftSwapRow } from "./ShiftSwapRow";
 
 export default async function ShiftSwapPage() {
@@ -10,21 +11,31 @@ export default async function ShiftSwapPage() {
   const { data } = await supabase
     .from("shift_swap_requests")
     .select(
-      "id, reason, status, created_at, requester:employees!shift_swap_requests_requester_employee_id_fkey(employee_code, first_name, last_name), target:employees!shift_swap_requests_target_employee_id_fkey(first_name, last_name), shift_assignments!shift_swap_requests_original_assignment_id_fkey(work_date, work_shifts(name))"
+      "id, reason, status, created_at, requester:employees!shift_swap_requests_requester_employee_id_fkey(employee_code, first_name, last_name, photo_url), target:employees!shift_swap_requests_target_employee_id_fkey(first_name, last_name, photo_url), shift_assignments!shift_swap_requests_original_assignment_id_fkey(work_date, work_shifts(name))"
     )
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false })
     .limit(50);
 
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).flatMap((r) => [
+      (r.requester as unknown as { photo_url: string | null } | null)?.photo_url,
+      (r.target as unknown as { photo_url: string | null } | null)?.photo_url,
+    ])
+  );
+
   const rows = (data ?? []).map((r) => {
-    const requester = r.requester as unknown as { employee_code: string; first_name: string; last_name: string } | null;
-    const target = r.target as unknown as { first_name: string; last_name: string } | null;
+    const requester = r.requester as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
+    const target = r.target as unknown as { first_name: string; last_name: string; photo_url: string | null } | null;
     const assignment = r.shift_assignments as unknown as { work_date: string; work_shifts: { name: string } | null } | null;
     return {
       id: r.id,
       requesterName: requester ? `${requester.first_name} ${requester.last_name}` : "-",
       requesterCode: requester?.employee_code ?? "-",
+      requesterPhotoUrl: requester?.photo_url ? (signedByPath.get(requester.photo_url) ?? null) : null,
       targetName: target ? `${target.first_name} ${target.last_name}` : null,
+      targetPhotoUrl: target?.photo_url ? (signedByPath.get(target.photo_url) ?? null) : null,
       workDate: assignment?.work_date ?? null,
       shiftName: assignment?.work_shifts?.name ?? null,
       reason: r.reason,

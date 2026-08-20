@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Avatar } from "@/components/Avatar";
 import { deleteReviewAction } from "./actions";
 
 export interface ReviewRowData {
   id: string;
   employeeCode: string;
   employeeName: string;
+  employeePhotoUrl: string | null;
   reviewPeriod: string;
   rating: number;
   strengths: string | null;
@@ -30,8 +32,13 @@ export function ReviewRow({ row }: { row: ReviewRowData }) {
   return (
     <tr>
       <td className="px-4 py-3 font-semibold">
-        {row.employeeName}
-        <div className="text-xs text-on-surface-variant">{row.employeeCode}</div>
+        <div className="flex items-center gap-2">
+          <Avatar url={row.employeePhotoUrl} size={28} />
+          <div>
+            {row.employeeName}
+            <div className="text-xs font-normal text-on-surface-variant">{row.employeeCode}</div>
+          </div>
+        </div>
       </td>
       <td className="px-4 py-3">{row.reviewPeriod}</td>
       <td className="px-4 py-3 text-center font-bold text-primary">{row.rating} / 5</td>

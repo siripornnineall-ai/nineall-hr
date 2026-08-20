@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
+import { Avatar } from "@/components/Avatar";
 import { updatePayrollCalcAction, deletePayrollCalcAction } from "../actions";
 
 interface LineItem {
@@ -13,6 +14,7 @@ export interface PayrollCalcRowData {
   id: string;
   employeeCode: string;
   employeeName: string;
+  employeePhotoUrl: string | null;
   baseAmount: number;
   otAmount: number;
   grossEarnings: number;
@@ -118,7 +120,12 @@ export function PayrollCalcRow({ row }: { row: PayrollCalcRowData }) {
   return (
     <tr className="hover:bg-primary/5">
       <td className="px-3 py-3">{row.employeeCode}</td>
-      <td className="px-3 py-3 font-semibold">{row.employeeName}</td>
+      <td className="px-3 py-3 font-semibold">
+        <div className="flex items-center gap-2">
+          <Avatar url={row.employeePhotoUrl} size={26} />
+          {row.employeeName}
+        </div>
+      </td>
       <td className="px-3 py-3 text-right">{fmt(row.baseAmount)}</td>
       <td className="px-3 py-3 text-right text-tertiary">{fmt(row.otAmount)}</td>
       <td className="px-3 py-3 text-right">{fmt(row.grossEarnings)}</td>

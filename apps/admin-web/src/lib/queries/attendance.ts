@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { signAvatarUrls } from "@/lib/avatars";
 
 export interface AttendanceRow {
   id: string;
   workDate: string;
   employeeCode: string;
   employeeName: string;
+  photoUrl: string | null;
   clockIn: string | null;
   clockOut: string | null;
   status: string;
@@ -22,7 +24,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
   const query = supabase
     .from("attendance_records")
     .select(
-      "id, work_date, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees(employee_code, first_name, last_name, manager_employee_id)"
+      "id, work_date, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees(employee_code, first_name, last_name, photo_url, manager_employee_id)"
     )
     .eq("org_id", orgId)
     .eq("work_date", workDate)
@@ -31,13 +33,25 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
   const { data, error } = await query;
   if (error) throw error;
 
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
   const rows: AttendanceRow[] = (data ?? []).map((r) => {
-    const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string; manager_employee_id: string | null };
+    const emp = r.employees as unknown as {
+      employee_code: string;
+      first_name: string;
+      last_name: string;
+      photo_url: string | null;
+      manager_employee_id: string | null;
+    };
     return {
       id: r.id,
       workDate: r.work_date,
       employeeCode: emp?.employee_code ?? "-",
       employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
+      photoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
       clockIn: r.clock_in_server_at,
       clockOut: r.clock_out_server_at,
       status: r.status,

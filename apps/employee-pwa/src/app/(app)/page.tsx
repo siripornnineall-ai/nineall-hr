@@ -104,9 +104,19 @@ export default function HomePage() {
     <div>
       <header className="safe-top rounded-b-3xl bg-primary-container px-5 pb-7 pt-4">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-lg font-bold text-white">{profile?.fullName ?? "-"}</p>
-            <p className="text-xs text-white/85">{profile?.jobTitle ?? ""}</p>
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20">
+              {profile?.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.photoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-[24px] text-white">person</span>
+              )}
+            </span>
+            <div>
+              <p className="text-lg font-bold text-white">{profile?.fullName ?? "-"}</p>
+              <p className="text-xs text-white/85">{profile?.jobTitle ?? ""}</p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-white">{now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false })}</p>
@@ -158,6 +168,7 @@ export default function HomePage() {
           <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
           <QuickLink href="/reviews" icon="military_tech" label="ผลประเมิน" />
           <QuickLink href="/training" icon="school" label="การอบรม" />
+          <QuickLink href="/announcements" icon="campaign" label="ประกาศ" />
         </div>
 
         {holidays.length > 0 && (

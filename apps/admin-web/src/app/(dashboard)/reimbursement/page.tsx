@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { ReimbursementRow } from "./ReimbursementRow";
 
 export default async function ReimbursementPage() {
@@ -9,14 +10,19 @@ export default async function ReimbursementPage() {
 
   const { data } = await supabase
     .from("reimbursement_requests")
-    .select("id, expense_date, category, amount, description, status, receipt_file_path, employees(employee_code, first_name, last_name)")
+    .select("id, expense_date, category, amount, description, status, receipt_file_path, employees(employee_code, first_name, last_name, photo_url)")
     .eq("org_id", user.orgId)
     .order("expense_date", { ascending: false })
     .limit(50);
 
+  const signedAvatarByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
   const rows = await Promise.all(
     (data ?? []).map(async (r) => {
-      const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string } | null;
+      const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
       let receiptUrl: string | null = null;
       if (r.receipt_file_path) {
         const { data: signed } = await supabase.storage.from("attachments").createSignedUrl(r.receipt_file_path, 3600);
@@ -32,6 +38,7 @@ export default async function ReimbursementPage() {
         receiptUrl,
         employeeCode: emp?.employee_code ?? "-",
         employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
+        employeePhotoUrl: emp?.photo_url ? (signedAvatarByPath.get(emp.photo_url) ?? null) : null,
       };
     })
   );
