@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
-import { updatePayrollCalcAction } from "../actions";
+import { updatePayrollCalcAction, deletePayrollCalcAction } from "../actions";
 
 interface LineItem {
   label: string;
@@ -31,8 +31,9 @@ function fmt(n: number): string {
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function PayrollCalcRow({ row, editable }: { row: PayrollCalcRowData; editable: boolean }) {
+export function PayrollCalcRow({ row }: { row: PayrollCalcRowData }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [baseAmount, setBaseAmount] = useState(String(row.baseAmount));
   const [otAmount, setOtAmount] = useState(String(row.otAmount));
   const [socialSecurityAmount, setSocialSecurityAmount] = useState(String(row.socialSecurityAmount));
@@ -54,6 +55,14 @@ export function PayrollCalcRow({ row, editable }: { row: PayrollCalcRowData; edi
       const result = await updatePayrollCalcAction(row.id, { baseAmount, otAmount, socialSecurityAmount, taxAmount, earningItems, deductionItems });
       if (result?.error) setError(result.error);
       else setEditing(false);
+    });
+  }
+
+  function remove() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deletePayrollCalcAction(row.id);
+      if (result?.error) setError(result.error);
     });
   }
 
@@ -130,11 +139,25 @@ export function PayrollCalcRow({ row, editable }: { row: PayrollCalcRowData; edi
           ) : (
             <span className="text-xs text-on-surface-variant">-</span>
           )}
-          {editable && (
-            <button onClick={() => setEditing(true)} className="text-xs font-bold text-primary hover:underline">
-              แก้ไข
+          <button onClick={() => setEditing(true)} className="text-xs font-bold text-primary hover:underline">
+            แก้ไข
+          </button>
+          {confirmingDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-status-danger">ลบแน่ใจ?</span>
+              <button onClick={remove} disabled={isPending} className="text-xs font-bold text-status-danger hover:underline">
+                ยืนยัน
+              </button>
+              <button onClick={() => setConfirmingDelete(false)} disabled={isPending} className="text-xs font-semibold text-on-surface-variant hover:underline">
+                ยกเลิก
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmingDelete(true)} className="text-xs font-bold text-status-danger hover:underline">
+              ลบ
             </button>
           )}
+          {error && <p className="text-[10px] text-status-danger">{error}</p>}
         </div>
       </td>
     </tr>

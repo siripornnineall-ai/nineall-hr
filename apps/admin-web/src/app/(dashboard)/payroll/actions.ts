@@ -426,13 +426,71 @@ interface PayrollLineItem {
   amount: number;
 }
 
+// A locked run's payslips were already generated off whatever numbers existed at lock
+// time (see lockPayrollRunAction). Editing or deleting a calc after that point would
+// otherwise leave the issued PDF silently out of sync with what's in the database —
+// so any edit/delete that touches a locked run re-renders (or removes) that one
+// employee's payslip PDF immediately, rather than requiring a separate unlock step.
+async function regeneratePayslipIfLocked(supabase: Awaited<ReturnType<typeof createClient>>, calcId: string) {
+  const { data: calc } = await supabase
+    .from("payroll_employee_calculations")
+    .select("*, payroll_runs!inner(id, status, org_id, payroll_periods(label, period_start, period_end, pay_date))")
+    .eq("id", calcId)
+    .single();
+  if (!calc) return;
+  const run = calc.payroll_runs as unknown as {
+    id: string;
+    status: string;
+    org_id: string;
+    payroll_periods: { label: string; period_start: string; period_end: string; pay_date: string } | null;
+  };
+  if (run.status !== "locked") return;
+
+  const { data: org } = await supabase.from("organizations").select("name, legal_name").eq("id", run.org_id).single();
+  const period = run.payroll_periods;
+
+  try {
+    const pdfBuffer = await generatePayslipBuffer({
+      orgName: org?.name ?? "-",
+      orgLegalName: org?.legal_name ?? null,
+      employeeCode: calc.employee_code_snapshot,
+      employeeName: calc.employee_name_snapshot,
+      department: calc.department_snapshot,
+      position: calc.position_snapshot,
+      periodLabel: period?.label ?? "-",
+      periodStart: period?.period_start ? new Date(period.period_start).toLocaleDateString("th-TH") : "-",
+      periodEnd: period?.period_end ? new Date(period.period_end).toLocaleDateString("th-TH") : "-",
+      payDate: period?.pay_date ? new Date(period.pay_date).toLocaleDateString("th-TH") : "-",
+      baseAmount: Number(calc.base_amount),
+      otAmount: Number(calc.ot_amount),
+      workedDays: Number(calc.worked_days),
+      absentDays: Number(calc.absent_days),
+      lateCount: Number(calc.late_count),
+      grossEarnings: Number(calc.gross_earnings),
+      socialSecurityAmount: Number(calc.social_security_amount),
+      taxAmount: Number(calc.tax_amount),
+      totalDeductions: Number(calc.total_deductions),
+      netPay: Number(calc.net_pay),
+    });
+
+    const path = `${run.org_id}/${calc.employee_id}/payslip-${run.id}.pdf`;
+    const { error: uploadError } = await supabase.storage.from("payslips").upload(path, pdfBuffer, { contentType: "application/pdf", upsert: true });
+    if (uploadError) {
+      console.error(`Payslip re-generation upload failed for ${calc.employee_code_snapshot}:`, uploadError.message);
+      return;
+    }
+    await supabase.from("payslips").update({ pdf_file_path: path, issued_at: new Date().toISOString() }).eq("payroll_calc_id", calcId);
+  } catch (err) {
+    console.error(`Payslip re-generation failed for ${calc.employee_code_snapshot}:`, err);
+  }
+}
+
 // Lets HR correct a single employee's auto-calculated numbers by hand (base pay, OT,
 // social security, tax) and attach ad-hoc earning/deduction line items on top — the
 // same payroll_earning_items/payroll_deduction_items tables calculatePayrollRunAction
 // already writes to, just edited directly instead of only being engine output.
-// Only allowed pre-lock: once a run is locked its payslips are already issued (see
-// lockPayrollRunAction), so further edits here wouldn't be reflected in what was handed
-// to the employee — unlockPayrollRunAction exists for that case.
+// Allowed even on a locked run (by explicit request) — regeneratePayslipIfLocked keeps
+// the issued PDF in sync instead of gating this behind unlockPayrollRunAction.
 export async function updatePayrollCalcAction(
   calcId: string,
   values: {
@@ -450,12 +508,11 @@ export async function updatePayrollCalcAction(
 
   const { data: calc } = await supabase
     .from("payroll_employee_calculations")
-    .select("payroll_run_id, payroll_runs!inner(status, org_id)")
+    .select("payroll_run_id, payroll_runs!inner(org_id)")
     .eq("id", calcId)
     .single();
-  const run = calc?.payroll_runs as unknown as { status: string; org_id: string } | undefined;
+  const run = calc?.payroll_runs as unknown as { org_id: string } | undefined;
   if (!calc || !run || run.org_id !== user.orgId) return { error: "ไม่พบรายการคำนวณนี้" };
-  if (run.status === "locked") return { error: "แก้ไขไม่ได้ เนื่องจากรอบนี้ถูกล็อกแล้ว กรุณาปลดล็อกก่อน" };
 
   const baseAmount = Number(values.baseAmount);
   const otAmount = Number(values.otAmount);
@@ -502,6 +559,41 @@ export async function updatePayrollCalcAction(
           .insert(deductionItems.map((i) => ({ payroll_calc_id: calcId, label: i.label, amount: i.amount, added_by: user.profileId })))
       : Promise.resolve(),
   ]);
+
+  await regeneratePayslipIfLocked(supabase, calcId);
+  revalidatePath(`/payroll/${calc.payroll_run_id}`);
+}
+
+// Removes a single employee's row from a payroll run — earning/deduction line items and
+// any issued payslip (DB row + uploaded PDF) go with it. Allowed on a locked run by
+// explicit request (fixing a mistaken entry shouldn't require unlocking the whole run,
+// which would also reopen every other employee's already-issued payslip to edits).
+export async function deletePayrollCalcAction(calcId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: calc } = await supabase
+    .from("payroll_employee_calculations")
+    .select("payroll_run_id, payroll_runs!inner(org_id)")
+    .eq("id", calcId)
+    .single();
+  const run = calc?.payroll_runs as unknown as { org_id: string } | undefined;
+  if (!calc || !run || run.org_id !== user.orgId) return { error: "ไม่พบรายการคำนวณนี้" };
+
+  const { data: payslip } = await supabase.from("payslips").select("pdf_file_path").eq("payroll_calc_id", calcId).maybeSingle();
+  if (payslip?.pdf_file_path) {
+    await supabase.storage.from("payslips").remove([payslip.pdf_file_path]);
+  }
+
+  await Promise.all([
+    supabase.from("payroll_earning_items").delete().eq("payroll_calc_id", calcId),
+    supabase.from("payroll_deduction_items").delete().eq("payroll_calc_id", calcId),
+    supabase.from("payslips").delete().eq("payroll_calc_id", calcId),
+  ]);
+
+  const { error } = await supabase.from("payroll_employee_calculations").delete().eq("id", calcId);
+  if (error) return { error: error.message };
 
   revalidatePath(`/payroll/${calc.payroll_run_id}`);
 }

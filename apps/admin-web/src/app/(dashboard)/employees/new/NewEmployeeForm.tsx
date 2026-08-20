@@ -3,6 +3,9 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createEmployeeAction, type CreateEmployeeState } from "../actions";
+import { AddressBlock, type AddressValue } from "../AddressBlock";
+import { DateField } from "../DateField";
+import { BankNameSelect } from "../BankNameSelect";
 
 const initialState: CreateEmployeeState = {};
 
@@ -19,6 +22,20 @@ export function NewEmployeeForm({
   const [createLogin, setCreateLogin] = useState(true);
   const [departmentId, setDepartmentId] = useState("");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
+  const [idCardAddress, setIdCardAddress] = useState<AddressValue>({});
+  const [currentAddress, setCurrentAddress] = useState<AddressValue>({});
+  const [sameAsIdCard, setSameAsIdCard] = useState(false);
+
+  function patchIdCardAddress(patch: Partial<AddressValue>) {
+    const next = { ...idCardAddress, ...patch };
+    setIdCardAddress(next);
+    if (sameAsIdCard) setCurrentAddress(next);
+  }
+
+  function toggleSameAsIdCard(checked: boolean) {
+    setSameAsIdCard(checked);
+    if (checked) setCurrentAddress(idCardAddress);
+  }
 
   if (state.success) {
     return (
@@ -58,12 +75,15 @@ export function NewEmployeeForm({
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="รหัสพนักงาน" name="employeeCode" required />
-        <Field label="วันที่เริ่มงาน" name="hireDate" type="date" required />
+        <DateField label="วันที่เริ่มงาน" name="hireDate" required />
         <Field label="ชื่อ" name="firstName" required />
         <Field label="นามสกุล" name="lastName" required />
         <Field label="ชื่อเล่น" name="nickname" />
         <Field label="เบอร์โทร" name="phone" />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" />
+        <Field label="เลขบัตรประชาชน" name="nationalId" />
+        <Field label="เลขผู้เสียภาษี" name="taxId" />
+        <Field label="เลขประกันสังคม" name="socialSecurityId" />
         <div className="space-y-1">
           <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">
             แผนก
@@ -106,6 +126,36 @@ export function NewEmployeeForm({
         />
         <Field label="เงินเดือน / อัตราค่าจ้าง (บาท)" name="baseAmountBaht" type="number" step="0.01" required />
       </fieldset>
+
+      <div className="space-y-3 rounded-lg border border-outline-variant p-4">
+        <p className="text-sm font-semibold text-on-surface">บัญชีธนาคาร (ไม่บังคับ)</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <BankNameSelect name="bankName" />
+          <Field label="ชื่อบัญชี" name="bankAccountName" />
+          <Field label="เลขที่บัญชี" name="bankAccountNumber" />
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-outline-variant p-4">
+        <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน (ไม่บังคับ)</p>
+        <AddressBlock namePrefix="idCard" value={idCardAddress} onChange={patchIdCardAddress} />
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-outline-variant p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-on-surface">ที่อยู่ปัจจุบัน (ไม่บังคับ)</p>
+          <label className="flex items-center gap-2 text-xs text-on-surface-variant">
+            <input type="checkbox" checked={sameAsIdCard} onChange={(e) => toggleSameAsIdCard(e.target.checked)} />
+            เหมือนที่อยู่ตามบัตรประชาชน
+          </label>
+        </div>
+        <AddressBlock
+          namePrefix="current"
+          value={currentAddress}
+          onChange={(patch) => setCurrentAddress({ ...currentAddress, ...patch })}
+          disabled={sameAsIdCard}
+        />
+      </div>
 
       <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
         <label className="flex items-center gap-2 text-sm font-semibold">

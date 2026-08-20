@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { LeaveRow } from "./LeaveRow";
+import { AddBackdatedLeaveForm } from "./AddBackdatedLeaveForm";
 
 export default async function LeavePage() {
   const user = await requireUser();
@@ -11,7 +12,7 @@ export default async function LeavePage() {
   // (employee_id and delegate_employee_id), so a bare `employees(...)` embed is
   // ambiguous to PostgREST and errors out silently (same bug as employees/[id]'s
   // teams embed — see that page's comment).
-  const [{ data }, { data: leaveTypes }] = await Promise.all([
+  const [{ data }, { data: leaveTypes }, { data: employees }] = await Promise.all([
     supabase
       .from("leave_requests")
       .select(
@@ -21,6 +22,12 @@ export default async function LeavePage() {
       .order("created_at", { ascending: false })
       .limit(50),
     supabase.from("leave_types").select("id, name_th").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),
+    supabase
+      .from("employees")
+      .select("id, employee_code, first_name, last_name")
+      .eq("org_id", user.orgId)
+      .in("employment_status", ["active", "probation"])
+      .order("employee_code"),
   ]);
 
   const rows = (data ?? []).map((r) => {
@@ -44,6 +51,7 @@ export default async function LeavePage() {
     <>
       <Topbar title="การลา" subtitle="คำขอลาทั้งหมด" />
       <div className="space-y-4 p-4 md:p-8">
+        <AddBackdatedLeaveForm employees={employees ?? []} leaveTypes={leaveTypes ?? []} />
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">

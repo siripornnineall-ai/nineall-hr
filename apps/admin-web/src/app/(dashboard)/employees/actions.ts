@@ -171,6 +171,11 @@ export async function createEmployeeAction(
       manager_employee_id: input.managerEmployeeId ?? null,
       employment_type: input.employmentType,
       hire_date: input.hireDate,
+      national_id: String(raw.nationalId ?? "").trim() || null,
+      tax_id: String(raw.taxId ?? "").trim() || null,
+      social_security_id: String(raw.socialSecurityId ?? "").trim() || null,
+      id_card_address: buildAddress(raw, "idCard"),
+      current_address: buildAddress(raw, "current"),
       created_by: user.profileId,
     })
     .select("id, employee_code")
@@ -187,6 +192,19 @@ export async function createEmployeeAction(
     base_amount: input.baseAmountBaht,
     created_by: user.profileId,
   });
+
+  const bankName = String(raw.bankName ?? "").trim();
+  const bankAccountName = String(raw.bankAccountName ?? "").trim();
+  const bankAccountNumber = String(raw.bankAccountNumber ?? "").trim();
+  if (bankName || bankAccountName || bankAccountNumber) {
+    await supabase.from("bank_accounts").insert({
+      employee_id: employee.id,
+      bank_name: bankName,
+      account_name: bankAccountName,
+      account_number: bankAccountNumber,
+      is_primary: true,
+    });
+  }
 
   await grantLeaveBalancesForEmployee(supabase, employee.id, user.orgId, input.hireDate, new Date().getFullYear());
 
@@ -269,6 +287,8 @@ export async function updateEmployeeAction(
       employment_type: input.employmentType,
       hire_date: input.hireDate,
       national_id: String(raw.nationalId ?? "").trim() || null,
+      tax_id: String(raw.taxId ?? "").trim() || null,
+      social_security_id: String(raw.socialSecurityId ?? "").trim() || null,
       id_card_address: buildAddress(raw, "idCard"),
       current_address: buildAddress(raw, "current"),
       updated_by: user.profileId,

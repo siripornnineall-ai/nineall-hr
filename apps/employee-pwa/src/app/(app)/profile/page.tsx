@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
+import { THAI_BANKS } from "@/lib/thaiBanks";
 
 interface AddressValue {
   houseNo?: string;
@@ -25,6 +26,8 @@ interface EditableProfile {
   bio: string;
   photoUrl: string | null;
   nationalId: string;
+  taxId: string;
+  socialSecurityId: string;
   idCardAddress: AddressValue;
   currentAddress: AddressValue;
 }
@@ -72,7 +75,7 @@ export default function ProfilePage() {
     setEditLoadFailed(false);
     supabase
       .from("employees")
-      .select("first_name, last_name, nickname, bio, photo_url, national_id, id_card_address, current_address")
+      .select("first_name, last_name, nickname, bio, photo_url, national_id, tax_id, social_security_id, id_card_address, current_address")
       .eq("id", profile.employeeId)
       .single()
       .then(async ({ data, error }) => {
@@ -87,6 +90,8 @@ export default function ProfilePage() {
           bio: data.bio ?? "",
           photoUrl: data.photo_url,
           nationalId: data.national_id ?? "",
+          taxId: data.tax_id ?? "",
+          socialSecurityId: data.social_security_id ?? "",
           idCardAddress: (data.id_card_address as AddressValue | null) ?? {},
           currentAddress: (data.current_address as AddressValue | null) ?? {},
         });
@@ -330,6 +335,17 @@ export default function ProfilePage() {
               className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขผู้เสียภาษี</label>
+              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">{edit.taxId || "-"}</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขประกันสังคม</label>
+              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">{edit.socialSecurityId || "-"}</p>
+            </div>
+          </div>
+          <p className="text-xs text-on-surface-variant">เลขผู้เสียภาษี/ประกันสังคมกรอกโดยฝ่ายบุคคลเท่านั้น หากไม่ถูกต้องกรุณาแจ้ง HR</p>
 
           <div className="space-y-2 border-t border-outline-variant pt-3">
             <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน</p>
@@ -396,11 +412,18 @@ export default function ProfilePage() {
           <h2 className="font-bold text-on-surface">บัญชีธนาคาร</h2>
           <div>
             <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ธนาคาร</label>
-            <input
+            <select
               value={bank.bankName}
               onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
               className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            />
+            >
+              <option value="">-- เลือกธนาคาร --</option>
+              {THAI_BANKS.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อบัญชี</label>

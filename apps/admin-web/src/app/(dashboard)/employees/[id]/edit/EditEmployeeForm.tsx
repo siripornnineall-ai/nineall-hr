@@ -3,19 +3,9 @@
 import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateEmployeeAction, type UpdateEmployeeState } from "../../actions";
-import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
-
-interface AddressValue {
-  houseNo?: string;
-  moo?: string;
-  soi?: string;
-  yaek?: string;
-  road?: string;
-  subDistrict?: string;
-  district?: string;
-  province?: string;
-  postalCode?: string;
-}
+import { AddressBlock, type AddressValue } from "../../AddressBlock";
+import { DateField } from "../../DateField";
+import { BankNameSelect } from "../../BankNameSelect";
 
 interface EmployeeRow {
   id: string;
@@ -32,25 +22,13 @@ interface EmployeeRow {
   job_position_id: string | null;
   manager_employee_id: string | null;
   national_id: string | null;
+  tax_id: string | null;
+  social_security_id: string | null;
   id_card_address: AddressValue | null;
   current_address: AddressValue | null;
 }
 
 const initialState: UpdateEmployeeState = {};
-
-// Free-text sub-fields only — province/district/subDistrict/postalCode are handled by
-// the cascading selects in ThaiAddressCascadeFields instead.
-const ADDRESS_TEXT_FIELDS: { key: keyof AddressValue; label: string }[] = [
-  { key: "houseNo", label: "เลขที่" },
-  { key: "moo", label: "หมู่ที่" },
-  { key: "soi", label: "ตรอก/ซอย" },
-  { key: "yaek", label: "แยก" },
-  { key: "road", label: "ถนน" },
-];
-
-function capitalize(key: string): string {
-  return key.charAt(0).toUpperCase() + key.slice(1);
-}
 
 export function EditEmployeeForm({
   employee,
@@ -100,13 +78,15 @@ export function EditEmployeeForm({
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="รหัสพนักงาน" name="employeeCode" defaultValue={employee.employee_code} required />
-        <Field label="วันที่เริ่มงาน" name="hireDate" type="date" defaultValue={employee.hire_date} required />
+        <DateField label="วันที่เริ่มงาน" name="hireDate" defaultValue={employee.hire_date} required />
         <Field label="ชื่อ" name="firstName" defaultValue={employee.first_name} required />
         <Field label="นามสกุล" name="lastName" defaultValue={employee.last_name} required />
         <Field label="ชื่อเล่น" name="nickname" defaultValue={employee.nickname ?? ""} />
         <Field label="เบอร์โทร" name="phone" defaultValue={employee.phone ?? ""} />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" defaultValue={employee.personal_email ?? ""} />
         <Field label="เลขบัตรประชาชน" name="nationalId" defaultValue={employee.national_id ?? ""} />
+        <Field label="เลขผู้เสียภาษี" name="taxId" defaultValue={employee.tax_id ?? ""} />
+        <Field label="เลขประกันสังคม" name="socialSecurityId" defaultValue={employee.social_security_id ?? ""} />
         <Select label="สาขา" name="branchId" defaultValue={employee.branch_id ?? ""} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
         <div className="space-y-1">
           <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">
@@ -173,7 +153,7 @@ export function EditEmployeeForm({
       <div className="space-y-3 rounded-lg border border-outline-variant p-4">
         <p className="text-sm font-semibold text-on-surface">บัญชีธนาคาร</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="ธนาคาร" name="bankName" defaultValue={bankAccount?.bank_name ?? ""} />
+          <BankNameSelect name="bankName" defaultValue={bankAccount?.bank_name ?? ""} />
           <Field label="ชื่อบัญชี" name="bankAccountName" defaultValue={bankAccount?.account_name ?? ""} />
           <Field label="เลขที่บัญชี" name="bankAccountNumber" defaultValue={bankAccount?.account_number ?? ""} />
         </div>
@@ -181,18 +161,7 @@ export function EditEmployeeForm({
 
       <div className="space-y-3 rounded-lg border border-outline-variant p-4">
         <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน</p>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {ADDRESS_TEXT_FIELDS.map((f) => (
-            <AddressField
-              key={f.key}
-              label={f.label}
-              name={`idCard${capitalize(f.key)}`}
-              value={idCardAddress[f.key] ?? ""}
-              onChange={(v) => patchIdCardAddress({ [f.key]: v })}
-            />
-          ))}
-          <ThaiAddressCascadeFields namePrefix="idCard" value={idCardAddress} onChange={patchIdCardAddress} />
-        </div>
+        <AddressBlock namePrefix="idCard" value={idCardAddress} onChange={patchIdCardAddress} />
       </div>
 
       <div className="space-y-3 rounded-lg border border-outline-variant p-4">
@@ -203,24 +172,12 @@ export function EditEmployeeForm({
             เหมือนที่อยู่ตามบัตรประชาชน
           </label>
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {ADDRESS_TEXT_FIELDS.map((f) => (
-            <AddressField
-              key={f.key}
-              label={f.label}
-              name={`current${capitalize(f.key)}`}
-              value={currentAddress[f.key] ?? ""}
-              onChange={(v) => setCurrentAddress({ ...currentAddress, [f.key]: v })}
-              disabled={sameAsIdCard}
-            />
-          ))}
-          <ThaiAddressCascadeFields
-            namePrefix="current"
-            value={currentAddress}
-            onChange={(patch) => setCurrentAddress({ ...currentAddress, ...patch })}
-            disabled={sameAsIdCard}
-          />
-        </div>
+        <AddressBlock
+          namePrefix="current"
+          value={currentAddress}
+          onChange={(patch) => setCurrentAddress({ ...currentAddress, ...patch })}
+          disabled={sameAsIdCard}
+        />
       </div>
 
       <div className="flex gap-3">
@@ -233,36 +190,6 @@ export function EditEmployeeForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function AddressField({
-  label,
-  name,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="space-y-1">
-      <label className="block text-xs font-semibold text-on-surface-variant" htmlFor={name}>
-        {label}
-      </label>
-      <input
-        id={name}
-        name={name}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        readOnly={disabled}
-        className="h-10 w-full rounded-lg border border-outline-variant bg-surface px-3 text-sm outline-none focus:border-primary read-only:bg-surface-container-low"
-      />
-    </div>
   );
 }
 

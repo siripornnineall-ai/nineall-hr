@@ -68,7 +68,6 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
   const period = run.payroll_periods as unknown as { label: string; period_start: string; period_end: string; pay_date: string } | null;
   const anomalyCount = (calculations ?? []).filter((c) => c.has_anomaly).length;
   const stepIndex = STEPS.findIndex((s) => s.key === (STEP_STATUS_ALIAS[run.status] ?? run.status));
-  const editable = run.status !== "locked";
 
   return (
     <>
@@ -135,7 +134,6 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                 {(calculations ?? []).map((c) => (
                   <PayrollCalcRow
                     key={c.id}
-                    editable={editable}
                     row={{
                       id: c.id,
                       employeeCode: c.employee_code_snapshot,
