@@ -20,7 +20,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, nickname, bio, phone, personal_email, hire_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, nickname, title_prefix, gender, gender_identity, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -137,6 +137,11 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             <Info label="ทีม" value={team ?? "-"} />
             <Info label="ประเภทการจ้าง" value={employee.employment_type} />
             <Info label="วันที่เริ่มงาน" value={new Date(employee.hire_date).toLocaleDateString("th-TH")} />
+            <Info
+              label="วันที่ผ่านทดลองงาน"
+              value={employee.probation_end_date ? new Date(employee.probation_end_date).toLocaleDateString("th-TH") : "-"}
+            />
+            <Info label="คำนำหน้า/เพศ/เพศสภาพ" value={[employee.title_prefix, employee.gender, employee.gender_identity].filter(Boolean).join(" / ") || "-"} />
             <Info label="เบอร์โทร" value={employee.phone ?? "-"} />
             <Info label="อีเมล" value={employee.personal_email ?? "-"} />
             {canSeeSalary && (

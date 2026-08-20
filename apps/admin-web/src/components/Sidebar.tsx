@@ -38,7 +38,7 @@ export function Sidebar({ role, fullName, roleLabel }: { role: UserRole; fullNam
           <p className="text-xs text-white/60">HR Management System</p>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 px-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2">
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (

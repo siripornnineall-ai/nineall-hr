@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { LoginForm } from "./LoginForm";
 
 export default function LoginPage() {
@@ -15,6 +16,9 @@ export default function LoginPage() {
 
         <div className="rounded-2xl border border-outline-variant bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
           <LoginForm />
+          <Link href="/forgot-password" className="mt-4 block text-center text-sm font-semibold text-primary">
+            ลืมรหัสผ่าน?
+          </Link>
         </div>
 
         <p className="text-center text-xs text-on-surface-variant">

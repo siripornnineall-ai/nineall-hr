@@ -5,13 +5,14 @@ import { employeeCreateSchema, employeeUpdateSchema } from "@nineall-hr/shared-v
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { calculateProbationEndDate } from "@/lib/probation";
 
 export interface CreateEmployeeState {
   error?: string;
   success?: boolean;
   employeeCode?: string;
   loginEmail?: string;
-  tempPassword?: string;
+  welcomeEmailSent?: boolean;
 }
 
 // Address sub-fields are read straight off the raw FormData rather than added to the
@@ -57,9 +58,20 @@ async function grantLeaveBalancesForEmployee(
       leaveTypes.map((t) => t.id)
     )
     .order("effective_date", { ascending: false });
-  const latestPolicyByType = new Map<string, { days_per_year: number; min_service_months: number }>();
+
+  // Group every tier belonging to the latest policy "version" (effective_date) per
+  // leave type — a type can have several tiers at once (e.g. annual leave's 1/2-3/4-6/
+  // 7+ year brackets), each its own row sharing that effective_date.
+  const latestEffectiveDateByType = new Map<string, string>();
   for (const p of policyRows ?? []) {
-    if (!latestPolicyByType.has(p.leave_type_id)) latestPolicyByType.set(p.leave_type_id, p);
+    if (!latestEffectiveDateByType.has(p.leave_type_id)) latestEffectiveDateByType.set(p.leave_type_id, p.effective_date);
+  }
+  const tiersByType = new Map<string, { days_per_year: number; min_service_months: number }[]>();
+  for (const p of policyRows ?? []) {
+    if (p.effective_date !== latestEffectiveDateByType.get(p.leave_type_id)) continue;
+    const list = tiersByType.get(p.leave_type_id) ?? [];
+    list.push({ days_per_year: Number(p.days_per_year), min_service_months: Number(p.min_service_months) });
+    tiersByType.set(p.leave_type_id, list);
   }
 
   const hire = new Date(hireDate);
@@ -70,21 +82,26 @@ async function grantLeaveBalancesForEmployee(
 
   const rows: { employee_id: string; leave_type_id: string; year: number; entitled_days: number }[] = [];
   for (const t of leaveTypes) {
-    const policy = latestPolicyByType.get(t.id);
-    if (!policy) continue;
-    const daysPerYear = Number(policy.days_per_year);
-    const minMonths = Number(policy.min_service_months);
+    const tiers = tiersByType.get(t.id);
+    if (!tiers || tiers.length === 0) continue;
 
-    if (minMonths > 0) {
-      // Tenure-gated (e.g. annual leave): nothing until eligible, full entitlement once eligible.
-      if (monthsOfServiceAsOfNow >= minMonths) {
-        rows.push({ employee_id: employeeId, leave_type_id: t.id, year, entitled_days: daysPerYear });
+    const gatedTiers = tiers.filter((x) => x.min_service_months > 0);
+    if (gatedTiers.length > 0) {
+      // Tenure-gated (e.g. annual leave's 1/2-3/4-6/7+ year brackets): grant the
+      // highest bracket the employee's current tenure qualifies for; nothing if they
+      // haven't reached even the lowest bracket yet.
+      const qualifying = gatedTiers
+        .filter((x) => monthsOfServiceAsOfNow >= x.min_service_months)
+        .sort((a, b) => b.min_service_months - a.min_service_months);
+      if (qualifying.length > 0) {
+        rows.push({ employee_id: employeeId, leave_type_id: t.id, year, entitled_days: qualifying[0].days_per_year });
       }
       continue;
     }
 
     // Available from day one, prorated by join month for the year they joined;
     // full entitlement for any year fully worked.
+    const daysPerYear = tiers[0].days_per_year;
     let entitled = daysPerYear;
     if (hireYear === year) {
       const monthsRemainingInYear = 13 - hireMonth;
@@ -171,6 +188,10 @@ export async function createEmployeeAction(
       manager_employee_id: input.managerEmployeeId ?? null,
       employment_type: input.employmentType,
       hire_date: input.hireDate,
+      probation_end_date: calculateProbationEndDate(input.hireDate),
+      title_prefix: String(raw.titlePrefix ?? "").trim() || null,
+      gender: String(raw.gender ?? "").trim() || null,
+      gender_identity: String(raw.genderIdentity ?? "").trim() || null,
       national_id: String(raw.nationalId ?? "").trim() || null,
       tax_id: String(raw.taxId ?? "").trim() || null,
       social_security_id: String(raw.socialSecurityId ?? "").trim() || null,
@@ -208,13 +229,15 @@ export async function createEmployeeAction(
 
   await grantLeaveBalancesForEmployee(supabase, employee.id, user.orgId, input.hireDate, new Date().getFullYear());
 
-  let tempPassword: string | undefined;
+  let welcomeEmailSent = false;
   if (createLoginAccount) {
     const admin = createAdminClient();
-    tempPassword = generateTempPassword();
+    // The generated password is never shown to anyone — the employee never learns it.
+    // It only exists because createUser requires a password; resetPasswordForEmail
+    // below immediately sends them a link to set their own, which is the only way in.
     const { data: authUser, error: authError } = await admin.auth.admin.createUser({
       email: loginEmail,
-      password: tempPassword,
+      password: generateTempPassword(),
       email_confirm: true,
     });
     if (authError || !authUser.user) {
@@ -229,6 +252,14 @@ export async function createEmployeeAction(
       email: loginEmail,
       must_change_password: true,
     });
+
+    // Sends Supabase's own recovery email (same mechanism as the existing "forgot
+    // password" flow) pointing at the employee app's set-password page — this is what
+    // was missing: previously the account existed but nothing ever told the employee,
+    // so they had no way to learn the login existed or set a password for it.
+    const redirectTo = `${process.env.NEXT_PUBLIC_EMPLOYEE_APP_URL ?? "http://localhost:3011"}/reset-password`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(loginEmail, { redirectTo });
+    welcomeEmailSent = !resetError;
   }
 
   revalidatePath("/employees");
@@ -236,7 +267,7 @@ export async function createEmployeeAction(
     success: true,
     employeeCode: employee.employee_code,
     loginEmail: createLoginAccount ? loginEmail : undefined,
-    tempPassword,
+    welcomeEmailSent,
   };
 }
 
@@ -286,6 +317,10 @@ export async function updateEmployeeAction(
       manager_employee_id: input.managerEmployeeId ?? null,
       employment_type: input.employmentType,
       hire_date: input.hireDate,
+      probation_end_date: calculateProbationEndDate(input.hireDate),
+      title_prefix: String(raw.titlePrefix ?? "").trim() || null,
+      gender: String(raw.gender ?? "").trim() || null,
+      gender_identity: String(raw.genderIdentity ?? "").trim() || null,
       national_id: String(raw.nationalId ?? "").trim() || null,
       tax_id: String(raw.taxId ?? "").trim() || null,
       social_security_id: String(raw.socialSecurityId ?? "").trim() || null,

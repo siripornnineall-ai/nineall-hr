@@ -6,6 +6,11 @@ import { createEmployeeAction, type CreateEmployeeState } from "../actions";
 import { AddressBlock, type AddressValue } from "../AddressBlock";
 import { DateField } from "../DateField";
 import { BankNameSelect } from "../BankNameSelect";
+import { calculateProbationEndDate } from "@/lib/probation";
+
+const TITLE_PREFIXES = ["นาย", "นาง", "นางสาว"];
+const GENDERS = ["ชาย", "หญิง", "อื่น ๆ"];
+const GENDER_IDENTITIES = ["ชาย", "หญิง", "LGBTQ+", "ไม่ระบุ"];
 
 const initialState: CreateEmployeeState = {};
 
@@ -20,6 +25,7 @@ export function NewEmployeeForm({
 }) {
   const [state, formAction, isPending] = useActionState(createEmployeeAction, initialState);
   const [createLogin, setCreateLogin] = useState(true);
+  const [hireDate, setHireDate] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
   const [idCardAddress, setIdCardAddress] = useState<AddressValue>({});
@@ -44,17 +50,20 @@ export function NewEmployeeForm({
           <span className="material-symbols-outlined">check_circle</span>
           บันทึกพนักงาน {state.employeeCode} สำเร็จ
         </h3>
-        {state.tempPassword && (
+        {state.loginEmail && (
           <div className="mt-4 rounded-lg bg-white p-4 text-sm">
             <p>
               บัญชีเข้าสู่ระบบ: <span className="font-mono font-bold">{state.loginEmail}</span>
             </p>
-            <p>
-              รหัสผ่านชั่วคราว: <span className="font-mono font-bold text-primary">{state.tempPassword}</span>
-            </p>
-            <p className="mt-2 text-xs text-on-surface-variant">
-              กรุณาแจ้งพนักงานให้เปลี่ยนรหัสผ่านทันทีที่เข้าสู่ระบบครั้งแรก (ระบบบังคับเปลี่ยนรหัสผ่านอัตโนมัติ)
-            </p>
+            {state.welcomeEmailSent ? (
+              <p className="mt-2 text-status-success">
+                ระบบส่งอีเมลให้พนักงานตั้งรหัสผ่านของตัวเองแล้ว กรุณาแจ้งพนักงานให้ตรวจสอบกล่องจดหมาย (รวมถึงโฟลเดอร์สแปม)
+              </p>
+            ) : (
+              <p className="mt-2 text-status-danger">
+                สร้างบัญชีสำเร็จ แต่ส่งอีเมลแจ้งพนักงานไม่สำเร็จ — ให้พนักงานกด &quot;ลืมรหัสผ่าน?&quot; ที่หน้าเข้าสู่ระบบของแอปพนักงานด้วยอีเมลนี้เพื่อตั้งรหัสผ่านเอง
+              </p>
+            )}
           </div>
         )}
         <div className="mt-4 flex gap-3">
@@ -75,10 +84,23 @@ export function NewEmployeeForm({
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="รหัสพนักงาน" name="employeeCode" required />
-        <DateField label="วันที่เริ่มงาน" name="hireDate" required />
+        <div className="space-y-1">
+          <DateField label="วันที่เริ่มงาน" name="hireDate" required value={hireDate} onChange={setHireDate} />
+          {hireDate && (
+            <p className="text-xs text-on-surface-variant">
+              ผ่านทดลองงาน (119 วัน):{" "}
+              <span className="font-semibold text-primary">
+                {new Date(calculateProbationEndDate(hireDate)!).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            </p>
+          )}
+        </div>
+        <Select label="คำนำหน้าชื่อ" name="titlePrefix" options={TITLE_PREFIXES.map((v) => ({ value: v, label: v }))} />
         <Field label="ชื่อ" name="firstName" required />
         <Field label="นามสกุล" name="lastName" required />
         <Field label="ชื่อเล่น" name="nickname" />
+        <Select label="เพศ" name="gender" options={GENDERS.map((v) => ({ value: v, label: v }))} />
+        <Select label="เพศสภาพ" name="genderIdentity" options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))} />
         <Field label="เบอร์โทร" name="phone" />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" />
         <Field label="เลขบัตรประชาชน" name="nationalId" />

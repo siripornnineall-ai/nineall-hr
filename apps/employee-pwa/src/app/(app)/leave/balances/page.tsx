@@ -52,18 +52,30 @@ export default function LeaveBalancesPage() {
           ขอลางาน →
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3">
         {balances.map((b) => {
           const type = leaveTypes.find((t) => t.id === b.leave_type_id);
-          const remaining = Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days);
+          const total = Number(b.entitled_days) + Number(b.carried_over_days);
+          const used = Number(b.used_days) + Number(b.pending_days);
+          const remaining = total - used;
+          const usedPct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
           return (
             <div key={b.leave_type_id} className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-              <p className="text-xs text-on-surface-variant">{type?.name_th ?? "-"}</p>
-              <p className="mt-1 text-xl font-bold text-primary">{remaining} วัน</p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold text-on-surface">{type?.name_th ?? "-"}</p>
+                <p className="text-sm font-bold text-primary">{remaining} วัน</p>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${usedPct}%` }} />
+              </div>
+              <div className="mt-1.5 flex items-center justify-between text-[11px] text-on-surface-variant">
+                <span>ใช้ไป {used} วัน</span>
+                <span>ทั้งหมด {total} วัน</span>
+              </div>
             </div>
           );
         })}
-        {loaded && balances.length === 0 && <p className="col-span-2 text-sm text-on-surface-variant">ยังไม่มีข้อมูลวันลาคงเหลือ</p>}
+        {loaded && balances.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีข้อมูลวันลาคงเหลือ</p>}
       </div>
     </div>
   );

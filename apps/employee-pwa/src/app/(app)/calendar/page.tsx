@@ -16,6 +16,21 @@ interface LeaveRange {
   leave_types: { name_th: string } | null;
 }
 
+interface AttendanceDay {
+  work_date: string;
+  status: string;
+  late_minutes: number;
+}
+
+const ATTENDANCE_DOT_CLASS: Record<string, string> = {
+  on_time: "bg-status-success",
+  late: "bg-status-warning",
+  early_leave: "bg-status-warning",
+  absent: "bg-status-danger",
+  work_from_home: "bg-secondary",
+  off_site: "bg-secondary",
+};
+
 const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const THAI_MONTHS = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -32,12 +47,13 @@ export default function CalendarPage() {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [leaveRanges, setLeaveRanges] = useState<LeaveRange[]>([]);
+  const [attendanceDays, setAttendanceDays] = useState<AttendanceDay[]>([]);
 
   const load = useCallback(async () => {
     if (!profile) return;
     const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
     const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
-    const [{ data: h }, { data: l }] = await Promise.all([
+    const [{ data: h }, { data: l }, { data: a }] = await Promise.all([
       supabase
         .from("company_holidays")
         .select("holiday_date, name")
@@ -51,9 +67,16 @@ export default function CalendarPage() {
         .eq("status", "approved")
         .lte("start_date", toIso(monthEnd))
         .gte("end_date", toIso(monthStart)),
+      supabase
+        .from("attendance_records")
+        .select("work_date, status, late_minutes")
+        .eq("employee_id", profile.employeeId)
+        .gte("work_date", toIso(monthStart))
+        .lte("work_date", toIso(monthEnd)),
     ]);
     setHolidays(h ?? []);
     setLeaveRanges((l ?? []) as unknown as LeaveRange[]);
+    setAttendanceDays(a ?? []);
   }, [profile, supabase, viewDate]);
 
   useEffect(() => {
@@ -61,6 +84,7 @@ export default function CalendarPage() {
   }, [load]);
 
   const holidayByDate = new Map(holidays.map((h) => [h.holiday_date, h.name]));
+  const attendanceByDate = new Map(attendanceDays.map((a) => [a.work_date, a]));
 
   function leaveOnDate(iso: string): string | null {
     const match = leaveRanges.find((l) => iso >= l.start_date && iso <= l.end_date);
@@ -108,17 +132,20 @@ export default function CalendarPage() {
             const iso = toIso(new Date(viewDate.getFullYear(), viewDate.getMonth(), day));
             const holidayName = holidayByDate.get(iso);
             const leaveName = leaveOnDate(iso);
+            const attendance = attendanceByDate.get(iso);
             const isToday = iso === todayIso;
+            const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status] : undefined;
             return (
               <div
                 key={idx}
                 className={clsx(
-                  "flex aspect-square flex-col items-center justify-center rounded-lg text-xs",
+                  "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg text-xs",
                   isToday && "ring-2 ring-primary",
                   holidayName ? "bg-status-danger/10 text-status-danger" : leaveName ? "bg-secondary/10 text-secondary" : "text-on-surface"
                 )}
               >
                 <span className="font-semibold">{day}</span>
+                {dotClass && <span className={clsx("h-1.5 w-1.5 rounded-full", dotClass)} />}
               </div>
             );
           })}

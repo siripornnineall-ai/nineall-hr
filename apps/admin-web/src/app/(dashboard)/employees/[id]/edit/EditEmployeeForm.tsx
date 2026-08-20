@@ -6,6 +6,11 @@ import { updateEmployeeAction, type UpdateEmployeeState } from "../../actions";
 import { AddressBlock, type AddressValue } from "../../AddressBlock";
 import { DateField } from "../../DateField";
 import { BankNameSelect } from "../../BankNameSelect";
+import { calculateProbationEndDate } from "@/lib/probation";
+
+const TITLE_PREFIXES = ["นาย", "นาง", "นางสาว"];
+const GENDERS = ["ชาย", "หญิง", "อื่น ๆ"];
+const GENDER_IDENTITIES = ["ชาย", "หญิง", "LGBTQ+", "ไม่ระบุ"];
 
 interface EmployeeRow {
   id: string;
@@ -13,9 +18,13 @@ interface EmployeeRow {
   first_name: string;
   last_name: string;
   nickname: string | null;
+  title_prefix: string | null;
+  gender: string | null;
+  gender_identity: string | null;
   phone: string | null;
   personal_email: string | null;
   hire_date: string;
+  probation_end_date: string | null;
   employment_type: string;
   branch_id: string | null;
   department_id: string | null;
@@ -50,6 +59,7 @@ export function EditEmployeeForm({
   const router = useRouter();
   const boundAction = updateEmployeeAction.bind(null, employee.id);
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
+  const [hireDate, setHireDate] = useState(employee.hire_date);
   const [departmentId, setDepartmentId] = useState(employee.department_id ?? "");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
   const [idCardAddress, setIdCardAddress] = useState<AddressValue>(employee.id_card_address ?? {});
@@ -78,10 +88,28 @@ export function EditEmployeeForm({
 
       <fieldset className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="รหัสพนักงาน" name="employeeCode" defaultValue={employee.employee_code} required />
-        <DateField label="วันที่เริ่มงาน" name="hireDate" defaultValue={employee.hire_date} required />
+        <div className="space-y-1">
+          <DateField label="วันที่เริ่มงาน" name="hireDate" required value={hireDate} onChange={setHireDate} />
+          {hireDate && (
+            <p className="text-xs text-on-surface-variant">
+              ผ่านทดลองงาน (119 วัน):{" "}
+              <span className="font-semibold text-primary">
+                {new Date(calculateProbationEndDate(hireDate)!).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            </p>
+          )}
+        </div>
+        <Select label="คำนำหน้าชื่อ" name="titlePrefix" defaultValue={employee.title_prefix ?? ""} options={TITLE_PREFIXES.map((v) => ({ value: v, label: v }))} />
         <Field label="ชื่อ" name="firstName" defaultValue={employee.first_name} required />
         <Field label="นามสกุล" name="lastName" defaultValue={employee.last_name} required />
         <Field label="ชื่อเล่น" name="nickname" defaultValue={employee.nickname ?? ""} />
+        <Select label="เพศ" name="gender" defaultValue={employee.gender ?? ""} options={GENDERS.map((v) => ({ value: v, label: v }))} />
+        <Select
+          label="เพศสภาพ"
+          name="genderIdentity"
+          defaultValue={employee.gender_identity ?? ""}
+          options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))}
+        />
         <Field label="เบอร์โทร" name="phone" defaultValue={employee.phone ?? ""} />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" defaultValue={employee.personal_email ?? ""} />
         <Field label="เลขบัตรประชาชน" name="nationalId" defaultValue={employee.national_id ?? ""} />
