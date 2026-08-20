@@ -151,6 +151,13 @@ export default function HomePage() {
           </Link>
         </div>
 
+        <div className="grid grid-cols-4 gap-2">
+          <QuickLink href="/reimbursement" icon="receipt_long" label="เบิกเงิน" />
+          <QuickLink href="/shift-swap" icon="swap_horiz" label="สลับกะ" />
+          <QuickLink href="/calendar" icon="calendar_month" label="ปฏิทิน" />
+          <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
+        </div>
+
         {holidays.length > 0 && (
           <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
             <p className="mb-3 text-sm font-bold text-on-surface">วันหยุดที่กำลังจะมาถึง</p>
@@ -189,6 +196,18 @@ function StatCard({ href, icon, color, label, value }: { href: string; icon: str
       </span>
       <p className="mt-2 text-xs text-on-surface-variant">{label}</p>
       <p className="mt-0.5 text-base font-bold text-on-surface">{value}</p>
+    </Link>
+  );
+}
+
+function QuickLink({ href, icon, label }: { href: string; icon: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col items-center gap-1 rounded-2xl bg-white py-3 text-on-surface shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-95 transition-transform"
+    >
+      <span className="material-symbols-outlined text-[20px] text-primary">{icon}</span>
+      <span className="text-[10px] font-bold">{label}</span>
     </Link>
   );
 }
