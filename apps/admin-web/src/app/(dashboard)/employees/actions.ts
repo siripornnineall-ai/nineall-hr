@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { employeeCreateSchema, employeeUpdateSchema } from "@nineall-hr/shared-validation";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateProbationEndDate } from "@/lib/probation";
 
 export interface CreateEmployeeState {
@@ -27,13 +26,6 @@ function buildAddress(raw: Record<string, FormDataEntryValue>, prefix: "idCard" 
     if (value) address[key[0].toLowerCase() + key.slice(1)] = value;
   }
   return Object.keys(address).length > 0 ? address : null;
-}
-
-function generateTempPassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  let out = "";
-  for (let i = 0; i < 10; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out + "!1";
 }
 
 // Prorates by join month, except leave types with a min-service requirement (annual
@@ -233,27 +225,19 @@ export async function createEmployeeAction(
 
   let welcomeEmailSent = false;
   if (createLoginAccount) {
-    const admin = createAdminClient();
-    // The generated password is never shown to anyone — the employee never learns it.
-    // It only exists because createUser requires a password; resetPasswordForEmail
-    // below immediately sends them a link to set their own, which is the only way in.
-    const { data: authUser, error: authError } = await admin.auth.admin.createUser({
-      email: loginEmail,
-      password: generateTempPassword(),
-      email_confirm: true,
+    // Creates the auth user + profile via a security-definer SQL function instead of the
+    // Admin API (admin.auth.admin.createUser), which needs SUPABASE_SERVICE_ROLE_KEY — a
+    // key this project's owner has never had reliable access to (see migration 0037's
+    // comment). The function runs with the migration role's privileges and needs no
+    // service-role key at all, so this can't silently break the same way again.
+    const { error: createAccountError } = await supabase.rpc("create_employee_login_account", {
+      p_employee_id: employee.id,
+      p_email: loginEmail,
+      p_full_name: `${input.firstName} ${input.lastName}`,
     });
-    if (authError || !authUser.user) {
-      return { error: `สร้างบัญชีพนักงานไม่สำเร็จ: ${authError?.message ?? "unknown error"}` };
+    if (createAccountError) {
+      return { error: `สร้างบัญชีพนักงานไม่สำเร็จ: ${createAccountError.message}` };
     }
-    await admin.from("profiles").insert({
-      id: authUser.user.id,
-      org_id: user.orgId,
-      employee_id: employee.id,
-      role: "employee",
-      full_name: `${input.firstName} ${input.lastName}`,
-      email: loginEmail,
-      must_change_password: true,
-    });
 
     // Sends Supabase's own recovery email (same mechanism as the existing "forgot
     // password" flow) pointing at the employee app's set-password page — this is what
