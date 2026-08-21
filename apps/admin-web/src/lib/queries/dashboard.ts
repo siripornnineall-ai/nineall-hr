@@ -25,7 +25,7 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats> 
     pendingCorrectionRes,
     announcementsRes,
   ] = await Promise.all([
-    supabase.from("employees").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("employment_status", "active"),
+    supabase.from("employees").select("id", { count: "exact", head: true }).eq("org_id", orgId).is("deleted_at", null).eq("employment_status", "active"),
     supabase.from("attendance_records").select("status, clock_out_server_at").eq("org_id", orgId).eq("work_date", today),
     supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "pending"),
     supabase.from("overtime_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "pending"),

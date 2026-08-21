@@ -6,6 +6,7 @@ import { updateEmployeeAction, type UpdateEmployeeState } from "../../actions";
 import { AddressBlock, type AddressValue } from "../../AddressBlock";
 import { DateField } from "../../DateField";
 import { BankNameSelect } from "../../BankNameSelect";
+import { ThaiIdField } from "../../ThaiIdField";
 import { calculateProbationEndDate } from "@/lib/probation";
 
 const TITLE_PREFIXES = ["นาย", "นาง", "นางสาว"];
@@ -116,9 +117,9 @@ export function EditEmployeeForm({
         />
         <Field label="เบอร์โทร" name="phone" defaultValue={employee.phone ?? ""} />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" defaultValue={employee.personal_email ?? ""} />
-        <Field label="เลขบัตรประชาชน" name="nationalId" defaultValue={employee.national_id ?? ""} />
-        <Field label="เลขผู้เสียภาษี" name="taxId" defaultValue={employee.tax_id ?? ""} />
-        <Field label="เลขประกันสังคม" name="socialSecurityId" defaultValue={employee.social_security_id ?? ""} />
+        <ThaiIdField label="เลขบัตรประชาชน" name="nationalId" defaultValue={employee.national_id} />
+        <ThaiIdField label="เลขผู้เสียภาษี" name="taxId" defaultValue={employee.tax_id} />
+        <ThaiIdField label="เลขประกันสังคม" name="socialSecurityId" defaultValue={employee.social_security_id} />
         <Select label="สาขา" name="branchId" defaultValue={employee.branch_id ?? ""} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
         <div className="space-y-1">
           <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">

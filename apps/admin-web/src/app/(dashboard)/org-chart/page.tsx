@@ -22,6 +22,7 @@ export default async function OrgChartPage() {
     .from("employees")
     .select("id, first_name, last_name, photo_url, manager_employee_id, job_positions(title), departments(name)")
     .eq("org_id", user.orgId)
+    .is("deleted_at", null)
     .in("employment_status", ["active", "probation"])
     .order("first_name");
 

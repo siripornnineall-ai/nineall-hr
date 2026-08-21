@@ -121,6 +121,7 @@ export async function calculatePayrollRunAction(runId: string) {
     .from("employees")
     .select("id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, departments(name), job_positions(title)")
     .eq("org_id", user.orgId)
+    .is("deleted_at", null)
     .in("employment_status", ["active", "probation", "resigned"]);
 
   // Each employee needs ~5 reads + ~4 writes to calculate. Running employees sequentially

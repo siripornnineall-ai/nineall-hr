@@ -6,6 +6,7 @@ import { createEmployeeAction, type CreateEmployeeState } from "../actions";
 import { AddressBlock, type AddressValue } from "../AddressBlock";
 import { DateField } from "../DateField";
 import { BankNameSelect } from "../BankNameSelect";
+import { ThaiIdField } from "../ThaiIdField";
 import { calculateProbationEndDate } from "@/lib/probation";
 
 const TITLE_PREFIXES = ["นาย", "นาง", "นางสาว"];
@@ -101,9 +102,9 @@ export function NewEmployeeForm({
         <Select label="เพศสภาพ" name="genderIdentity" options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))} />
         <Field label="เบอร์โทร" name="phone" />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" />
-        <Field label="เลขบัตรประชาชน" name="nationalId" />
-        <Field label="เลขผู้เสียภาษี" name="taxId" />
-        <Field label="เลขประกันสังคม" name="socialSecurityId" />
+        <ThaiIdField label="เลขบัตรประชาชน" name="nationalId" />
+        <ThaiIdField label="เลขผู้เสียภาษี" name="taxId" />
+        <ThaiIdField label="เลขประกันสังคม" name="socialSecurityId" />
         <div className="space-y-1">
           <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="departmentId">
             แผนก

@@ -121,6 +121,7 @@ export async function listManagerCandidates(orgId: string) {
     .from("employees")
     .select("id, first_name, last_name")
     .eq("org_id", orgId)
+    .is("deleted_at", null)
     .eq("employment_status", "active")
     .order("first_name");
   return data ?? [];

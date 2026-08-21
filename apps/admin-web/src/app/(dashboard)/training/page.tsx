@@ -20,6 +20,7 @@ export default async function TrainingPage() {
       .from("employees")
       .select("id, employee_code, first_name, last_name")
       .eq("org_id", user.orgId)
+      .is("deleted_at", null)
       .in("employment_status", ["active", "probation"])
       .order("employee_code"),
   ]);
