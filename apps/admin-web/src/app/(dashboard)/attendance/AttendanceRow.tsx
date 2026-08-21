@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
 import { updateAttendanceTimeAction } from "./actions";
@@ -34,6 +35,7 @@ function toTimeInputValue(iso: string | null): string {
 interface AttendanceRowData {
   id: string;
   workDate: string;
+  employeeId: string;
   employeeCode: string;
   employeeName: string;
   photoUrl: string | null;
@@ -132,13 +134,13 @@ export function AttendanceRow({
     <tr className={zebra ? "bg-row-zebra hover:bg-row-hover" : "hover:bg-row-hover"}>
       <td className="px-4 py-3">{row.employeeCode}</td>
       <td className="px-4 py-3 font-semibold">
-        <div className="flex items-center gap-2">
+        <Link href={`/attendance/${row.employeeId}`} className="flex items-center gap-2 hover:text-primary hover:underline">
           <Avatar url={row.photoUrl} size={28} />
           <span>
             {row.employeeName}
             {row.needsReview && <span className="ml-2 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-700">ต้องตรวจสอบ</span>}
           </span>
-        </div>
+        </Link>
       </td>
       <td className="px-4 py-3">{formatTime(row.clockIn)}</td>
       <td className="px-4 py-3">{formatTime(row.clockOut)}</td>
