@@ -132,6 +132,54 @@ export async function syncLeaveBalancesAction(): Promise<{ error?: string; grant
   return { grantedCount: employees?.length ?? 0 };
 }
 
+// Shared by createEmployeeAction (new employee + login in one step) and
+// createEmployeeLoginAccountAction (adding a login account to an already-existing
+// employee, e.g. after the first attempt failed or was skipped).
+async function createLoginAccountAndSendWelcomeEmail(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  employeeId: string,
+  email: string,
+  fullName: string
+): Promise<{ error?: string; welcomeEmailSent: boolean }> {
+  // Creates the auth user + profile via a security-definer SQL function instead of the
+  // Admin API (admin.auth.admin.createUser), which needs SUPABASE_SERVICE_ROLE_KEY — a
+  // key this project's owner has never had reliable access to (see migration 0037's
+  // comment). The function runs with the migration role's privileges and needs no
+  // service-role key at all, so this can't silently break the same way again.
+  const { error: createAccountError } = await supabase.rpc("create_employee_login_account", {
+    p_employee_id: employeeId,
+    p_email: email,
+    p_full_name: fullName,
+  });
+  if (createAccountError) {
+    return { error: `สร้างบัญชีพนักงานไม่สำเร็จ: ${createAccountError.message}`, welcomeEmailSent: false };
+  }
+
+  // Sends Supabase's own recovery email (same mechanism as the existing "forgot
+  // password" flow) pointing at the employee app's set-password page — this is what
+  // was missing: previously the account existed but nothing ever told the employee,
+  // so they had no way to learn the login existed or set a password for it.
+  const redirectTo = `${process.env.NEXT_PUBLIC_EMPLOYEE_APP_URL ?? "http://localhost:3011"}/reset-password`;
+  const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  return { welcomeEmailSent: !resetError };
+}
+
+export async function createEmployeeLoginAccountAction(
+  employeeId: string,
+  fullName: string,
+  loginEmail: string
+): Promise<{ error?: string }> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const result = await createLoginAccountAndSendWelcomeEmail(supabase, employeeId, loginEmail, fullName);
+  if (result.error) return { error: result.error };
+
+  revalidatePath(`/employees/${employeeId}`);
+  return {};
+}
+
 export async function createEmployeeAction(
   _prevState: CreateEmployeeState,
   formData: FormData
@@ -225,27 +273,9 @@ export async function createEmployeeAction(
 
   let welcomeEmailSent = false;
   if (createLoginAccount) {
-    // Creates the auth user + profile via a security-definer SQL function instead of the
-    // Admin API (admin.auth.admin.createUser), which needs SUPABASE_SERVICE_ROLE_KEY — a
-    // key this project's owner has never had reliable access to (see migration 0037's
-    // comment). The function runs with the migration role's privileges and needs no
-    // service-role key at all, so this can't silently break the same way again.
-    const { error: createAccountError } = await supabase.rpc("create_employee_login_account", {
-      p_employee_id: employee.id,
-      p_email: loginEmail,
-      p_full_name: `${input.firstName} ${input.lastName}`,
-    });
-    if (createAccountError) {
-      return { error: `สร้างบัญชีพนักงานไม่สำเร็จ: ${createAccountError.message}` };
-    }
-
-    // Sends Supabase's own recovery email (same mechanism as the existing "forgot
-    // password" flow) pointing at the employee app's set-password page — this is what
-    // was missing: previously the account existed but nothing ever told the employee,
-    // so they had no way to learn the login existed or set a password for it.
-    const redirectTo = `${process.env.NEXT_PUBLIC_EMPLOYEE_APP_URL ?? "http://localhost:3011"}/reset-password`;
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(loginEmail, { redirectTo });
-    welcomeEmailSent = !resetError;
+    const result = await createLoginAccountAndSendWelcomeEmail(supabase, employee.id, loginEmail, `${input.firstName} ${input.lastName}`);
+    if (result.error) return { error: result.error };
+    welcomeEmailSent = result.welcomeEmailSent;
   }
 
   revalidatePath("/employees");

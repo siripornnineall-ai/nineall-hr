@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
 import { OffboardButton } from "./OffboardButton";
 import { DeleteEmployeeButton } from "./DeleteEmployeeButton";
+import { CreateLoginAccountButton } from "./CreateLoginAccountButton";
 import { EmployeeDetailTabs } from "./EmployeeDetailTabs";
 
 interface AddressValue {
@@ -55,6 +56,9 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     .maybeSingle();
 
   if (!employee) notFound();
+
+  const { data: existingProfile } = await supabase.from("profiles").select("id").eq("employee_id", employee.id).maybeSingle();
+  const hasLoginAccount = !!existingProfile;
 
   // photo_url is a private-bucket storage path, not a fetchable URL.
   let photoUrl: string | null = null;
@@ -212,6 +216,13 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
               >
                 แก้ไขข้อมูล
               </Link>
+              {!hasLoginAccount && (
+                <CreateLoginAccountButton
+                  employeeId={employee.id}
+                  fullName={`${employee.first_name} ${employee.last_name}`}
+                  defaultEmail={employee.personal_email}
+                />
+              )}
               <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
               <DeleteEmployeeButton employeeId={employee.id} />
             </>
