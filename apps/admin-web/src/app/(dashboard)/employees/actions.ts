@@ -432,6 +432,24 @@ export async function updateEmployeeAction(
  * explicit, single place enforcing "only super_admin/hr may offboard" independent of both the
  * trigger and RLS — not because either of those is insufficient on its own.
  */
+// Soft-deletes an employee that was added by mistake / never actually worked here —
+// distinct from offboardEmployeeAction (resigned/terminated), which is for real past
+// employees and deliberately keeps them visible in history/reports. Deleting also frees
+// up the employee_code for reuse (see migration 0036) and deactivates any login account.
+export async function deleteEmployeeAction(employeeId: string, reason: string) {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_employee", {
+    p_employee_id: employeeId,
+    p_reason: reason || null,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/employees");
+}
+
 export async function offboardEmployeeAction(
   employeeId: string,
   status: "resigned" | "terminated",

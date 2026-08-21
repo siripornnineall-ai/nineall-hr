@@ -24,11 +24,14 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, org_id, employee_id, role, full_name, email")
+    .select("id, org_id, employee_id, role, full_name, email, is_active")
     .eq("id", user.id)
     .single();
 
-  if (!profile) return null;
+  // is_active is set false by offboardEmployeeAction/deleteEmployeeAction — treat that the
+  // same as no profile at all, so an offboarded/deleted employee's still-valid session
+  // can't keep using the app.
+  if (!profile || !profile.is_active) return null;
 
   return {
     authUserId: user.id,

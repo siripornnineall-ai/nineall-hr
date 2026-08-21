@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { Badge } from "@/components/Badge";
 import { OffboardButton } from "./OffboardButton";
+import { DeleteEmployeeButton } from "./DeleteEmployeeButton";
 import { EmployeeDetailTabs } from "./EmployeeDetailTabs";
 
 interface AddressValue {
@@ -212,6 +213,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
                 แก้ไขข้อมูล
               </Link>
               <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
+              <DeleteEmployeeButton employeeId={employee.id} />
             </>
           )}
         </div>
