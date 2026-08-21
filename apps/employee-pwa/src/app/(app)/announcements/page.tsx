@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { isAnnouncementVisibleTo } from "@/lib/announcementVisibility";
 
 interface AnnouncementRow {
   id: string;
@@ -37,15 +39,17 @@ export default function AnnouncementsPage() {
           .order("publish_at", { ascending: false }),
       ]);
 
-      const visible = (rows ?? []).filter((a) => {
-        if (a.expire_at && new Date(a.expire_at) < new Date()) return false;
-        if (a.target_type === "all") return true;
-        if (a.target_type === "employee") return a.target_ids.includes(profile!.employeeId);
-        if (a.target_type === "department") return !!employee?.department_id && a.target_ids.includes(employee.department_id);
-        if (a.target_type === "team") return !!employee?.team_id && a.target_ids.includes(employee.team_id);
-        if (a.target_type === "branch") return !!employee?.branch_id && a.target_ids.includes(employee.branch_id);
-        return false;
-      });
+      const visible = (rows ?? []).filter((a) =>
+        isAnnouncementVisibleTo(
+          { targetType: a.target_type, targetIds: a.target_ids, expireAt: a.expire_at },
+          {
+            employeeId: profile!.employeeId,
+            departmentId: employee?.department_id ?? null,
+            teamId: employee?.team_id ?? null,
+            branchId: employee?.branch_id ?? null,
+          }
+        )
+      );
 
       setAnnouncements(visible);
       setLoaded(true);
@@ -62,13 +66,17 @@ export default function AnnouncementsPage() {
 
       <div className="space-y-3">
         {announcements.map((a) => (
-          <article key={a.id} className="space-y-2 rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <Link
+            key={a.id}
+            href={`/announcements/${a.id}`}
+            className="block space-y-2 rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-transform active:scale-95"
+          >
             <div className="flex items-start justify-between gap-3">
               <p className="font-bold text-on-surface">{a.title}</p>
               <span className="shrink-0 text-xs text-on-surface-variant">{new Date(a.publish_at).toLocaleDateString("th-TH")}</span>
             </div>
-            <p className="whitespace-pre-line text-sm text-on-surface-variant">{a.body}</p>
-          </article>
+            <p className="line-clamp-2 whitespace-pre-line text-sm text-on-surface-variant">{a.body}</p>
+          </Link>
         ))}
       </div>
     </div>
