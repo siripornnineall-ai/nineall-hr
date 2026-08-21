@@ -50,6 +50,13 @@ export default async function EmployeesPage({
         <div className="flex items-center justify-end gap-3">
           <SyncLeaveBalancesButton />
           <Link
+            href="/employees/import"
+            className="flex h-12 items-center gap-2 rounded-xl border border-primary px-6 font-bold text-primary transition-all hover:bg-primary/5 active:scale-95"
+          >
+            <span className="material-symbols-outlined">upload_file</span>
+            นำเข้าจาก Excel
+          </Link>
+          <Link
             href="/employees/new"
             className="flex h-12 items-center gap-2 rounded-xl bg-primary px-6 font-bold text-white shadow-md transition-all hover:bg-primary-container active:scale-95"
           >

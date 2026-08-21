@@ -31,7 +31,7 @@ function buildAddress(raw: Record<string, FormDataEntryValue>, prefix: "idCard" 
 // leave): those grant nothing until the employee reaches that tenure, then the full
 // yearly entitlement (not prorated) — matches how Thai annual leave is actually meant
 // to work, distinct from leave types available from day one.
-async function grantLeaveBalancesForEmployee(
+export async function grantLeaveBalancesForEmployee(
   supabase: Awaited<ReturnType<typeof createClient>>,
   employeeId: string,
   orgId: string,
@@ -139,7 +139,7 @@ export async function syncLeaveBalancesAction(): Promise<{ error?: string; grant
 // project's Auth Redirect URL allow-list and its shared/rate-limited built-in mailer,
 // both of which proved unreliable in practice (see migrations 0037-0039). The employee
 // still must change this password on first login (must_change_password stays true).
-async function createEmployeeLoginAccount(
+export async function createEmployeeLoginAccount(
   supabase: Awaited<ReturnType<typeof createClient>>,
   employeeId: string,
   email: string,
