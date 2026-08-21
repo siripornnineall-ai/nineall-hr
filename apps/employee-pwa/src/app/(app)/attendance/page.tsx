@@ -106,7 +106,21 @@ export default function AttendancePage() {
       });
 
       if (fnError || !data?.ok) {
-        throw new Error(data?.error ?? fnError?.message ?? "บันทึกเวลาไม่สำเร็จ");
+        // supabase-js doesn't parse the response body into `data` when the edge
+        // function returns a non-2xx status — it only sets a generic message
+        // ("Edge Function returned a non-2xx status code") on `fnError`. The real,
+        // specific reason (e.g. "already clocked out today") is still sitting in the
+        // raw response body on `fnError.context`, so read it from there instead.
+        let specificError: string | undefined = data?.error;
+        if (!specificError && fnError && "context" in fnError && fnError.context instanceof Response) {
+          try {
+            const body = await fnError.context.clone().json();
+            specificError = body?.error;
+          } catch {
+            // response body wasn't JSON — fall through to the generic message
+          }
+        }
+        throw new Error(specificError ?? fnError?.message ?? "บันทึกเวลาไม่สำเร็จ");
       }
 
       streamRef.current?.getTracks().forEach((t) => t.stop());
