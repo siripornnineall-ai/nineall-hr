@@ -33,3 +33,14 @@ export async function createAnnouncementAction(_prev: AnnouncementActionState, f
   revalidatePath("/announcements");
   return {};
 }
+
+export async function deleteAnnouncementAction(announcementId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("announcements").delete().eq("id", announcementId).eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/announcements");
+}

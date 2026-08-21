@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { NewAnnouncementForm } from "./NewAnnouncementForm";
+import { DeleteAnnouncementButton } from "./DeleteAnnouncementButton";
 
 export default async function AnnouncementsPage() {
   const user = await requireUser();
@@ -23,9 +24,12 @@ export default async function AnnouncementsPage() {
           {(data ?? []).length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีประกาศ</p>}
           {(data ?? []).map((a) => (
             <article key={a.id} className="rounded-xl border border-outline-variant bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <h3 className="font-bold">{a.title}</h3>
-                <span className="text-xs text-on-surface-variant">{new Date(a.publish_at).toLocaleDateString("th-TH")}</span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-xs text-on-surface-variant">{new Date(a.publish_at).toLocaleDateString("th-TH")}</span>
+                  {canCreate && <DeleteAnnouncementButton announcementId={a.id} />}
+                </div>
               </div>
               <p className="mt-2 whitespace-pre-line text-sm text-on-surface-variant">{a.body}</p>
             </article>
