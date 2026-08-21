@@ -19,7 +19,7 @@ interface OvertimeRow {
 // Mirrors the org's currently configured policy_settings.ot_rate (normal/holiday
 // multipliers). Regular employees can't read policy_settings directly (admin/HR
 // only via RLS), so this is a best-effort default rather than a live lookup.
-const OT_RATE = { normal: 1.5, holiday: 3 };
+const OT_RATE = { normal: 1, holiday: 3 };
 
 const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
 const STATUS_CLASS: Record<string, string> = {
