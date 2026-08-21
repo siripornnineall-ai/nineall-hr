@@ -14,6 +14,7 @@ const NAV_ITEMS: { href: string; label: string; icon: string; roles?: UserRole[]
   { href: "/overtime", label: "OT", icon: "history_toggle_off" },
   { href: "/reimbursement", label: "เบิกค่าใช้จ่าย", icon: "receipt_long" },
   { href: "/shift-swap", label: "สลับกะ", icon: "swap_horiz" },
+  { href: "/schedule", label: "ตารางกะประจำ", icon: "calendar_view_week", roles: ["super_admin", "hr"] },
   { href: "/org-chart", label: "ผังองค์กร", icon: "account_tree" },
   { href: "/recruitment", label: "รับสมัครงาน", icon: "work" },
   { href: "/reviews", label: "ประเมินผลงาน", icon: "military_tech" },
