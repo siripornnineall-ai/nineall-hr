@@ -179,9 +179,9 @@ export default function HomePage() {
                 const d = new Date(h.holiday_date);
                 return (
                   <li key={h.id} className="flex items-center gap-3">
-                    <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full bg-primary-container text-primary">
+                    <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full bg-primary-container text-white">
                       <span className="text-xl font-bold leading-none">{d.getDate()}</span>
-                      <span className="mt-0.5 text-[11px] leading-none">{d.toLocaleDateString("th-TH", { month: "short" })}</span>
+                      <span className="mt-0.5 text-[11px] font-semibold leading-none">{d.toLocaleDateString("th-TH", { month: "short" })}</span>
                     </div>
                     <div>
                       <p className="text-sm text-on-surface">{h.name}</p>
