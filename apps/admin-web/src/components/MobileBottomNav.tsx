@@ -6,6 +6,7 @@ import clsx from "clsx";
 
 const ITEMS = [
   { href: "/dashboard", label: "หน้าแรก", icon: "home" },
+  { href: "/employees", label: "พนักงาน", icon: "group" },
   { href: "/attendance", label: "เช็คอิน", icon: "fingerprint" },
   { href: "/leave", label: "การลา", icon: "event_note" },
   { href: "/payroll", label: "เงินเดือน", icon: "receipt_long" },

@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
 import { THAI_BANKS } from "@/lib/thaiBanks";
+import { formatThaiId13, formatThaiBankAccount } from "@nineall-hr/shared-validation";
 
 interface AddressValue {
   houseNo?: string;
@@ -23,6 +24,7 @@ interface EditableProfile {
   firstName: string;
   lastName: string;
   nickname: string;
+  phone: string;
   bio: string;
   photoUrl: string | null;
   nationalId: string;
@@ -75,7 +77,7 @@ export default function ProfilePage() {
     setEditLoadFailed(false);
     supabase
       .from("employees")
-      .select("first_name, last_name, nickname, bio, photo_url, national_id, tax_id, social_security_id, id_card_address, current_address")
+      .select("first_name, last_name, nickname, phone, bio, photo_url, national_id, tax_id, social_security_id, id_card_address, current_address")
       .eq("id", profile.employeeId)
       .single()
       .then(async ({ data, error }) => {
@@ -87,6 +89,7 @@ export default function ProfilePage() {
           firstName: data.first_name ?? "",
           lastName: data.last_name ?? "",
           nickname: data.nickname ?? "",
+          phone: data.phone ?? "",
           bio: data.bio ?? "",
           photoUrl: data.photo_url,
           nationalId: data.national_id ?? "",
@@ -157,8 +160,9 @@ export default function ProfilePage() {
         first_name: edit.firstName.trim(),
         last_name: edit.lastName.trim(),
         nickname: edit.nickname.trim() || null,
+        phone: edit.phone.trim() || null,
         bio: edit.bio.trim() || null,
-        national_id: edit.nationalId.trim() || null,
+        national_id: edit.nationalId.trim() ? formatThaiId13(edit.nationalId.trim()) : null,
         id_card_address: Object.keys(edit.idCardAddress).length > 0 ? edit.idCardAddress : null,
         current_address: Object.keys(edit.currentAddress).length > 0 ? edit.currentAddress : null,
       })
@@ -199,7 +203,7 @@ export default function ProfilePage() {
       employee_id: profile.employeeId,
       bank_name: bank.bankName.trim(),
       account_name: bank.accountName.trim(),
-      account_number: bank.accountNumber.trim(),
+      account_number: formatThaiBankAccount(bank.accountNumber.trim()),
       is_primary: true,
     };
     const { data, error } = bank.id
@@ -318,6 +322,15 @@ export default function ProfilePage() {
             />
           </div>
           <div>
+            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เบอร์โทร</label>
+            <input
+              type="tel"
+              value={edit.phone}
+              onChange={(e) => setEdit({ ...edit, phone: e.target.value })}
+              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+            />
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-semibold text-on-surface-variant">แนะนำตัว (ไม่บังคับ)</label>
             <textarea
               value={edit.bio}
@@ -332,17 +345,23 @@ export default function ProfilePage() {
             <input
               value={edit.nationalId}
               onChange={(e) => setEdit({ ...edit, nationalId: e.target.value })}
+              onBlur={(e) => setEdit({ ...edit, nationalId: formatThaiId13(e.target.value) })}
+              placeholder="เช่น 1-2345-67890-12-3"
               className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขผู้เสียภาษี</label>
-              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">{edit.taxId || "-"}</p>
+              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">
+                {edit.taxId ? formatThaiId13(edit.taxId) : "-"}
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขประกันสังคม</label>
-              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">{edit.socialSecurityId || "-"}</p>
+              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">
+                {edit.socialSecurityId ? formatThaiId13(edit.socialSecurityId) : "-"}
+              </p>
             </div>
           </div>
           <p className="text-xs text-on-surface-variant">เลขผู้เสียภาษี/ประกันสังคมกรอกโดยฝ่ายบุคคลเท่านั้น หากไม่ถูกต้องกรุณาแจ้ง HR</p>
@@ -438,6 +457,7 @@ export default function ProfilePage() {
             <input
               value={bank.accountNumber}
               onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })}
+              onBlur={(e) => setBank({ ...bank, accountNumber: formatThaiBankAccount(e.target.value) })}
               className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
             />
           </div>

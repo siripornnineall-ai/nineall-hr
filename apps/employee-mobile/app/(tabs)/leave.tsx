@@ -43,7 +43,7 @@ export default function LeaveScreen() {
     if (!profile) return;
     const year = new Date().getFullYear();
     const [{ data: types }, { data: bal }, { data: reqs }] = await Promise.all([
-      supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true),
+      supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
       supabase.from("leave_balances").select("leave_type_id, entitled_days, carried_over_days, used_days, pending_days").eq("employee_id", profile.employeeId).eq("year", year),
       supabase
         .from("leave_requests")

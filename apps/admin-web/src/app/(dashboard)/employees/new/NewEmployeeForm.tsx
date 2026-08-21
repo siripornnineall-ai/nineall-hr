@@ -7,6 +7,7 @@ import { AddressBlock, type AddressValue } from "../AddressBlock";
 import { DateField } from "../DateField";
 import { BankNameSelect } from "../BankNameSelect";
 import { ThaiIdField } from "../ThaiIdField";
+import { BankAccountNumberField } from "../BankAccountNumberField";
 import { calculateProbationEndDate } from "@/lib/probation";
 
 const TITLE_PREFIXES = ["นาย", "นาง", "นางสาว"];
@@ -153,7 +154,7 @@ export function NewEmployeeForm({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <BankNameSelect name="bankName" />
           <Field label="ชื่อบัญชี" name="bankAccountName" />
-          <Field label="เลขที่บัญชี" name="bankAccountNumber" />
+          <BankAccountNumberField />
         </div>
       </div>
 

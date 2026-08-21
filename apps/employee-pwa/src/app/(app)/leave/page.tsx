@@ -53,7 +53,7 @@ export default function LeavePage() {
   const load = useCallback(async () => {
     if (!profile) return;
     const [{ data: types }, { data: policies }, { data: reqs }] = await Promise.all([
-      supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true),
+      supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
       supabase
         .from("leave_policies")
         .select("leave_type_id, allow_half_day, allow_hourly, requires_attachment, attachment_required_after_days, effective_date")

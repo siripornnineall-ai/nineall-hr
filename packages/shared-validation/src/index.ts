@@ -131,3 +131,25 @@ export const announcementSchema = z.object({
   expireAt: z.string().optional(),
 });
 export type AnnouncementInput = z.infer<typeof announcementSchema>;
+
+// Thai 13-digit IDs (citizen ID, tax ID, and — for most employees — the Social
+// Security Office member number, which is just the citizen ID) are conventionally
+// displayed with dashes as 1-2345-67890-12-3. Only formats when there are exactly 13
+// digits, so a foreign hire's passport number (letters, different length) is left
+// exactly as typed.
+export function formatThaiId13(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length !== 13) return raw.trim();
+  return `${digits[0]}-${digits.slice(1, 5)}-${digits.slice(5, 10)}-${digits.slice(10, 12)}-${digits[12]}`;
+}
+
+// Most Thai banks group a 10-digit account number as XXX-X-XXXXX-X (3-1-5-1). Exact
+// grouping conventions vary slightly by bank (e.g. SCB's own passbooks show 3-6-1),
+// but this is purely a display separator — the underlying digits are never changed —
+// so the common pattern is used for every bank rather than hardcoding all ~18 banks'
+// individual conventions.
+export function formatThaiBankAccount(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length !== 10) return raw.trim();
+  return `${digits.slice(0, 3)}-${digits[3]}-${digits.slice(4, 9)}-${digits[9]}`;
+}

@@ -1,16 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-// Thai 13-digit IDs (citizen ID, tax ID, and — for most employees — the Social Security
-// Office member number, which is just the citizen ID) are conventionally displayed with
-// dashes as 1-2345-67890-12-3. Only auto-formats when there are exactly 13 digits, so a
-// foreign hire's passport number (letters, different length) is left exactly as typed.
-function formatThaiId13(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length !== 13) return raw.trim();
-  return `${digits[0]}-${digits.slice(1, 5)}-${digits.slice(5, 10)}-${digits.slice(10, 12)}-${digits[12]}`;
-}
+import { formatThaiId13 } from "@nineall-hr/shared-validation";
 
 export function ThaiIdField({ label, name, defaultValue }: { label: string; name: string; defaultValue?: string | null }) {
   const [value, setValue] = useState(() => formatThaiId13(defaultValue ?? ""));
