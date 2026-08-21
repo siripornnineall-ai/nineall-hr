@@ -25,6 +25,7 @@ export function NewEmployeeForm({
 }) {
   const [state, formAction, isPending] = useActionState(createEmployeeAction, initialState);
   const [createLogin, setCreateLogin] = useState(true);
+  const [loginPassword, setLoginPassword] = useState("");
   const [hireDate, setHireDate] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
@@ -55,15 +56,10 @@ export function NewEmployeeForm({
             <p>
               บัญชีเข้าสู่ระบบ: <span className="font-mono font-bold">{state.loginEmail}</span>
             </p>
-            {state.welcomeEmailSent ? (
-              <p className="mt-2 text-status-success">
-                ระบบส่งอีเมลให้พนักงานตั้งรหัสผ่านของตัวเองแล้ว กรุณาแจ้งพนักงานให้ตรวจสอบกล่องจดหมาย (รวมถึงโฟลเดอร์สแปม)
-              </p>
-            ) : (
-              <p className="mt-2 text-status-danger">
-                สร้างบัญชีสำเร็จ แต่ส่งอีเมลแจ้งพนักงานไม่สำเร็จ — ให้พนักงานกด &quot;ลืมรหัสผ่าน?&quot; ที่หน้าเข้าสู่ระบบของแอปพนักงานด้วยอีเมลนี้เพื่อตั้งรหัสผ่านเอง
-              </p>
-            )}
+            <p className="mt-1">
+              รหัสผ่านเริ่มต้น: <span className="font-mono font-bold">{loginPassword}</span>
+            </p>
+            <p className="mt-2 text-status-success">แจ้งพนักงานให้เข้าสู่ระบบด้วยข้อมูลนี้ — ระบบจะบังคับให้เปลี่ยนรหัสผ่านเองในการเข้าสู่ระบบครั้งแรก</p>
           </div>
         )}
         <div className="mt-4 flex gap-3">
@@ -193,9 +189,28 @@ export function NewEmployeeForm({
           สร้างบัญชีเข้าสู่ระบบ (แอปพนักงาน) ให้พนักงานคนนี้
         </label>
         {createLogin && (
-          <div className="mt-3">
+          <div className="mt-3 space-y-3">
             <Field label="อีเมลสำหรับเข้าสู่ระบบ" name="loginEmail" type="email" required />
-            <p className="mt-1 text-xs text-on-surface-variant">ระบบจะสร้างรหัสผ่านชั่วคราวและบังคับให้เปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก</p>
+            <div className="space-y-1">
+              <label className="block text-sm font-semibold text-on-surface-variant" htmlFor="loginPassword">
+                รหัสผ่านเริ่มต้น <span className="text-primary">*</span>
+              </label>
+              <input
+                id="loginPassword"
+                name="loginPassword"
+                type="text"
+                autoComplete="off"
+                required
+                minLength={8}
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="อย่างน้อย 8 ตัวอักษร"
+                className="h-11 w-full rounded-lg border border-outline-variant bg-surface px-3 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              พี่เป็นคนตั้งรหัสผ่านเริ่มต้นให้เอง แล้วแจ้งพนักงานด้วยตัวเอง (ไลน์/ปากเปล่า) ระบบจะบังคับให้พนักงานเปลี่ยนรหัสผ่านเองตอนเข้าสู่ระบบครั้งแรก
+            </p>
           </div>
         )}
       </div>

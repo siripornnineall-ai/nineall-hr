@@ -11,7 +11,6 @@ export interface CreateEmployeeState {
   success?: boolean;
   employeeCode?: string;
   loginEmail?: string;
-  welcomeEmailSent?: boolean;
 }
 
 // Address sub-fields are read straight off the raw FormData rather than added to the
@@ -134,46 +133,43 @@ export async function syncLeaveBalancesAction(): Promise<{ error?: string; grant
 
 // Shared by createEmployeeAction (new employee + login in one step) and
 // createEmployeeLoginAccountAction (adding a login account to an already-existing
-// employee, e.g. after the first attempt failed or was skipped).
-async function createLoginAccountAndSendWelcomeEmail(
+// employee, e.g. after the first attempt failed or was skipped). HR types the initial
+// password directly and relays it to the employee themselves — this used to instead
+// email a "set your password" link via Supabase Auth, but that path depended on the
+// project's Auth Redirect URL allow-list and its shared/rate-limited built-in mailer,
+// both of which proved unreliable in practice (see migrations 0037-0039). The employee
+// still must change this password on first login (must_change_password stays true).
+async function createEmployeeLoginAccount(
   supabase: Awaited<ReturnType<typeof createClient>>,
   employeeId: string,
   email: string,
-  fullName: string
-): Promise<{ error?: string; welcomeEmailSent: boolean }> {
-  // Creates the auth user + profile via a security-definer SQL function instead of the
-  // Admin API (admin.auth.admin.createUser), which needs SUPABASE_SERVICE_ROLE_KEY — a
-  // key this project's owner has never had reliable access to (see migration 0037's
-  // comment). The function runs with the migration role's privileges and needs no
-  // service-role key at all, so this can't silently break the same way again.
+  fullName: string,
+  password: string
+): Promise<{ error?: string }> {
   const { error: createAccountError } = await supabase.rpc("create_employee_login_account", {
     p_employee_id: employeeId,
     p_email: email,
     p_full_name: fullName,
+    p_password: password,
   });
   if (createAccountError) {
-    return { error: `สร้างบัญชีพนักงานไม่สำเร็จ: ${createAccountError.message}`, welcomeEmailSent: false };
+    return { error: `สร้างบัญชีพนักงานไม่สำเร็จ: ${createAccountError.message}` };
   }
-
-  // Sends Supabase's own recovery email (same mechanism as the existing "forgot
-  // password" flow) pointing at the employee app's set-password page — this is what
-  // was missing: previously the account existed but nothing ever told the employee,
-  // so they had no way to learn the login existed or set a password for it.
-  const redirectTo = `${process.env.NEXT_PUBLIC_EMPLOYEE_APP_URL ?? "http://localhost:3011"}/reset-password`;
-  const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-  return { welcomeEmailSent: !resetError };
+  return {};
 }
 
 export async function createEmployeeLoginAccountAction(
   employeeId: string,
   fullName: string,
-  loginEmail: string
+  loginEmail: string,
+  loginPassword: string
 ): Promise<{ error?: string }> {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
+  if (loginPassword.length < 8) return { error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" };
   const supabase = await createClient();
 
-  const result = await createLoginAccountAndSendWelcomeEmail(supabase, employeeId, loginEmail, fullName);
+  const result = await createEmployeeLoginAccount(supabase, employeeId, loginEmail, fullName, loginPassword);
   if (result.error) return { error: result.error };
 
   revalidatePath(`/employees/${employeeId}`);
@@ -204,9 +200,13 @@ export async function createEmployeeAction(
   const input = parsed.data;
   const createLoginAccount = formData.get("createLoginAccount") === "on";
   const loginEmail = String(formData.get("loginEmail") ?? "").trim();
+  const loginPassword = String(formData.get("loginPassword") ?? "").trim();
 
   if (createLoginAccount && !loginEmail) {
     return { error: "กรุณากรอกอีเมลสำหรับสร้างบัญชีผู้ใช้" };
+  }
+  if (createLoginAccount && loginPassword.length < 8) {
+    return { error: "รหัสผ่านเริ่มต้นต้องมีอย่างน้อย 8 ตัวอักษร" };
   }
 
   const supabase = await createClient();
@@ -271,11 +271,9 @@ export async function createEmployeeAction(
 
   await grantLeaveBalancesForEmployee(supabase, employee.id, user.orgId, input.hireDate, new Date().getFullYear());
 
-  let welcomeEmailSent = false;
   if (createLoginAccount) {
-    const result = await createLoginAccountAndSendWelcomeEmail(supabase, employee.id, loginEmail, `${input.firstName} ${input.lastName}`);
+    const result = await createEmployeeLoginAccount(supabase, employee.id, loginEmail, `${input.firstName} ${input.lastName}`, loginPassword);
     if (result.error) return { error: result.error };
-    welcomeEmailSent = result.welcomeEmailSent;
   }
 
   revalidatePath("/employees");
@@ -283,7 +281,6 @@ export async function createEmployeeAction(
     success: true,
     employeeCode: employee.employee_code,
     loginEmail: createLoginAccount ? loginEmail : undefined,
-    welcomeEmailSent,
   };
 }
 
