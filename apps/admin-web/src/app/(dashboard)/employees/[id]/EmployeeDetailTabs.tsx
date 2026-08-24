@@ -228,7 +228,7 @@ function ContractsTab({
 
   const otRate =
     compensation && compensation.workDaysPerMonth > 0 && compensation.workHoursPerDay > 0
-      ? (compensation.baseAmount / compensation.workDaysPerMonth / compensation.workHoursPerDay) * 1.5
+      ? compensation.baseAmount / compensation.workDaysPerMonth / compensation.workHoursPerDay
       : null;
 
   async function save() {
@@ -279,7 +279,7 @@ function ContractsTab({
             <dl className="grid grid-cols-2 gap-4 text-sm">
               <Info label="ประเภทการจ้าง" value={employee.employmentType} />
               <Info label="เงินเดือน/อัตราค่าจ้าง" value={`${compensation.baseAmount.toLocaleString("th-TH")} บาท`} />
-              <Info label="อัตรา OT ต่อชั่วโมง (x1.5)" value={otRate ? `${otRate.toLocaleString("th-TH", { maximumFractionDigits: 2 })} บาท` : "-"} />
+              <Info label="อัตรา OT ต่อชั่วโมง (x1)" value={otRate ? `${otRate.toLocaleString("th-TH", { maximumFractionDigits: 2 })} บาท` : "-"} />
               <Info label="รอบจ่ายเงิน" value={PAYMENT_SCHEDULES.find((p) => p.value === compensation.paymentSchedule)?.label ?? compensation.paymentSchedule} />
               <Info label="วันทำงาน/เดือน" value={String(compensation.workDaysPerMonth)} />
               <Info label="ชั่วโมงทำงาน/วัน" value={String(compensation.workHoursPerDay)} />

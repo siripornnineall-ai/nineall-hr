@@ -119,7 +119,9 @@ export async function calculatePayrollRunAction(runId: string) {
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, departments(name), job_positions(title)")
+    .select(
+      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, departments(name), job_positions(title)"
+    )
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
     .in("employment_status", ["active", "probation", "resigned"]);
@@ -207,7 +209,11 @@ export async function calculatePayrollRunAction(runId: string) {
     };
 
     const result = calculatePayrollForEmployee(input);
-    const hasMissingData = days.length === 0;
+    // Some employees (e.g. owners/family management) never clock in/out at all and
+    // are paid their full monthly salary regardless — attendance_exempt suppresses
+    // the "missing attendance data" anomaly for them specifically, since zero
+    // attendance rows is expected, not a data-entry gap that needs review.
+    const hasMissingData = days.length === 0 && !emp.attendance_exempt;
 
     const { data: calc, error: calcError } = await supabase
       .from("payroll_employee_calculations")

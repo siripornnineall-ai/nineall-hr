@@ -39,6 +39,7 @@ interface EmployeeRow {
   social_security_id: string | null;
   id_card_address: AddressValue | null;
   current_address: AddressValue | null;
+  attendance_exempt: boolean;
 }
 
 const initialState: UpdateEmployeeState = {};
@@ -166,6 +167,11 @@ export function EditEmployeeForm({
           ]}
         />
       </fieldset>
+
+      <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
+        <input type="checkbox" name="attendanceExempt" defaultChecked={employee.attendance_exempt} className="h-4 w-4 accent-primary" />
+        ไม่ต้องลงเวลาเข้า-ออกงาน (คิดเงินเดือนเต็มตามปกติ โดยไม่แจ้งเตือนว่าข้อมูลเวลาขาดหาย)
+      </label>
 
       <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
         <label className="mb-1 block text-sm font-semibold text-on-surface-variant" htmlFor="newBaseAmountBaht">

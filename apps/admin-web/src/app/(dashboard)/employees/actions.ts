@@ -347,6 +347,7 @@ export async function updateEmployeeAction(
       social_security_id: String(raw.socialSecurityId ?? "").trim() || null,
       id_card_address: buildAddress(raw, "idCard"),
       current_address: buildAddress(raw, "current"),
+      attendance_exempt: formData.get("attendanceExempt") === "on",
       updated_by: user.profileId,
     })
     .eq("id", employeeId)
