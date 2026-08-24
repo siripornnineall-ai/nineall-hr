@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/StatCard";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
+import { AddBackdatedAttendanceForm } from "./AddBackdatedAttendanceForm";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "info" | "holiday" | "neutral"; label: string }> = {
   on_time: { tone: "success", label: "ตรงเวลา" },
@@ -80,6 +81,9 @@ export default async function EmployeeAttendanceDashboardPage({
     .lte("work_date", monthEnd)
     .order("work_date", { ascending: false });
 
+  const { data: shifts } = await supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId).order("name");
+  const { data: workLocations } = await supabase.from("work_locations").select("id, name").eq("org_id", user.orgId).order("name");
+
   const rows = records ?? [];
   const count = (statuses: string[]) => rows.filter((r) => statuses.includes(r.status)).length;
   const workedDays = count(["on_time", "late", "work_from_home", "off_site", "early_leave"]);
@@ -124,6 +128,8 @@ export default async function EmployeeAttendanceDashboardPage({
           <StatCard label="ขาดงาน" value={`${absentDays} วัน`} icon="person_off" accent="danger" />
           <StatCard label="OT" value={`${totalOtHours.toFixed(1)} ชม.`} icon="timer" accent="primary" hint={holidayDays > 0 ? `วันหยุด ${holidayDays} วัน` : undefined} />
         </div>
+
+        <AddBackdatedAttendanceForm employeeId={employee.id} shifts={shifts ?? []} workLocations={workLocations ?? []} />
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="overflow-x-auto">

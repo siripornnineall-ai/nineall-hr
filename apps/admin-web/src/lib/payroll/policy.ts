@@ -15,11 +15,11 @@ const FALLBACK_POLICY: PayrollPolicyConfig = {
     maxContributionSatang: bahtToSatang(875),
   },
   taxBrackets: [
-    { uptoSatang: bahtToSatang(150_000), rate: 0 },
-    { uptoSatang: bahtToSatang(300_000), rate: 0.05 },
-    { uptoSatang: bahtToSatang(500_000), rate: 0.1 },
-    { uptoSatang: bahtToSatang(750_000), rate: 0.15 },
-    { uptoSatang: bahtToSatang(1_000_000), rate: 0.2 },
+    { uptoSatang: bahtToSatang(312_000), rate: 0 }, // 0% until salary exceeds 26,000/month
+    { uptoSatang: bahtToSatang(462_000), rate: 0.05 },
+    { uptoSatang: bahtToSatang(662_000), rate: 0.1 },
+    { uptoSatang: bahtToSatang(912_000), rate: 0.15 },
+    { uptoSatang: bahtToSatang(1_162_000), rate: 0.2 },
     { uptoSatang: null, rate: 0.25 },
   ],
   otRateMultipliers: { normal: 1, holiday: 3 },

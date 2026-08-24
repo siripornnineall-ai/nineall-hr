@@ -100,3 +100,69 @@ export async function updateAttendanceTimeAction(
 
   revalidatePath("/attendance");
 }
+
+const STATUS_OPTIONS = new Set(["on_time", "late", "early_leave", "absent", "holiday", "leave", "work_from_home", "off_site"]);
+
+// Lets HR fill in a day that has no attendance_records row at all (the employee simply
+// never clocked in) — updateAttendanceTimeAction above only edits an existing row.
+// Upserts on (employee_id, work_date) so re-submitting the same date corrects it
+// instead of erroring.
+export async function createBackdatedAttendanceAction(
+  employeeId: string,
+  values: { workDate: string; clockIn?: string; clockOut?: string; status: string; shiftId?: string; workLocationId?: string }
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  if (!values.workDate) return { error: "กรุณาระบุวันที่" };
+  if (!STATUS_OPTIONS.has(values.status)) return { error: "กรุณาเลือกสถานะ" };
+
+  const { data: employee } = await supabase.from("employees").select("org_id").eq("id", employeeId).eq("org_id", user.orgId).single();
+  if (!employee) return { error: "ไม่พบพนักงาน" };
+
+  const clockInAt = values.clockIn ? new Date(`${values.workDate}T${values.clockIn}:00`) : null;
+  const clockOutAt = values.clockOut ? new Date(`${values.workDate}T${values.clockOut}:00`) : null;
+
+  let lateMinutes = 0;
+  let earlyLeaveMinutes = 0;
+  let workedMinutes = 0;
+  if (values.shiftId && clockInAt && !SPECIAL_STATUSES.has(values.status)) {
+    const { data: shift } = await supabase
+      .from("work_shifts")
+      .select("start_time, end_time, grace_minutes_late, grace_minutes_early_leave, unpaid_break_minutes")
+      .eq("id", values.shiftId)
+      .single();
+    if (shift) {
+      const [sh, sm] = shift.start_time.split(":").map(Number);
+      const [eh, em] = shift.end_time.split(":").map(Number);
+      lateMinutes = Math.max(0, toMinuteOfDay(clockInAt) - (sh * 60 + sm) - shift.grace_minutes_late);
+      if (clockOutAt) {
+        earlyLeaveMinutes = Math.max(0, eh * 60 + em - toMinuteOfDay(clockOutAt) - shift.grace_minutes_early_leave);
+        workedMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000) - (shift.unpaid_break_minutes ?? 0));
+      }
+    }
+  }
+
+  const { error } = await supabase.from("attendance_records").upsert(
+    {
+      org_id: employee.org_id,
+      employee_id: employeeId,
+      work_date: values.workDate,
+      shift_id: values.shiftId || null,
+      work_location_id: values.workLocationId || null,
+      clock_in_server_at: clockInAt ? clockInAt.toISOString() : null,
+      clock_out_server_at: clockOutAt ? clockOutAt.toISOString() : null,
+      status: values.status,
+      late_minutes: lateMinutes,
+      early_leave_minutes: earlyLeaveMinutes,
+      worked_minutes: workedMinutes,
+      needs_review: false,
+    },
+    { onConflict: "employee_id,work_date" }
+  );
+  if (error) return { error: error.message };
+
+  revalidatePath(`/attendance/${employeeId}`);
+  revalidatePath("/attendance");
+}
