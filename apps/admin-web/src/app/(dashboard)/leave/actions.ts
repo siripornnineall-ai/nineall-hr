@@ -65,8 +65,11 @@ export async function updateLeaveRequestAction(
 export async function createBackdatedLeaveAction(values: {
   employeeId: string;
   leaveTypeId: string;
+  unit?: "full_day" | "half_day" | "hourly";
   startDate: string;
   endDate: string;
+  startTime?: string;
+  endTime?: string;
   totalDays: string;
   reason?: string;
 }): Promise<{ error?: string } | void> {
@@ -74,9 +77,12 @@ export async function createBackdatedLeaveAction(values: {
   requireRole(user, ["super_admin", "hr"]);
   const supabase = await createClient();
 
+  const unit = values.unit ?? "full_day";
   if (!values.employeeId) return { error: "กรุณาเลือกพนักงาน" };
-  if (!values.leaveTypeId || !values.startDate || !values.endDate) return { error: "กรุณากรอกข้อมูลให้ครบถ้วน" };
-  if (values.endDate < values.startDate) return { error: "วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มลา" };
+  if (!values.leaveTypeId || !values.startDate) return { error: "กรุณากรอกข้อมูลให้ครบถ้วน" };
+  if (unit === "full_day" && (!values.endDate || values.endDate < values.startDate)) {
+    return { error: "วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มลา" };
+  }
   const totalDays = Number(values.totalDays);
   if (!Number.isFinite(totalDays) || totalDays <= 0) return { error: "จำนวนวันลาไม่ถูกต้อง" };
 
@@ -90,9 +96,11 @@ export async function createBackdatedLeaveAction(values: {
       employee_id: values.employeeId,
       leave_type_id: values.leaveTypeId,
       start_date: values.startDate,
-      end_date: values.endDate,
+      end_date: unit === "full_day" ? values.endDate : values.startDate,
+      start_time: unit === "full_day" ? null : (values.startTime ?? null),
+      end_time: unit === "full_day" ? null : (values.endTime ?? null),
       total_days: totalDays,
-      unit: "full_day",
+      unit,
       reason: values.reason || "บันทึกย้อนหลังโดยแอดมิน",
       status: "pending",
     })
