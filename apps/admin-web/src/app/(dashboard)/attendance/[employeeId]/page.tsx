@@ -84,6 +84,21 @@ export default async function EmployeeAttendanceDashboardPage({
   const { data: shifts } = await supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId).order("name");
   const { data: workLocations } = await supabase.from("work_locations").select("id, name").eq("org_id", user.orgId).order("name");
 
+  // The employee's normal fixed shift/location (see ShiftAssignment.tsx) is written as a
+  // 365-day-forward block of shift_assignments rows all pointing at the same shift/location —
+  // any single row tells us what "normal" is, used to pre-fill the backdated-entry form.
+  const { data: defaultAssignment } = await supabase
+    .from("shift_assignments")
+    .select("shift_id, work_location_id")
+    .eq("org_id", user.orgId)
+    .eq("employee_id", employeeId)
+    .order("work_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const headOfficeLocation = (workLocations ?? []).find((l) => l.name.includes("สำนักงานใหญ่") || l.name.toLowerCase().includes("head office"));
+  const defaultShiftId = defaultAssignment?.shift_id ?? "";
+  const defaultWorkLocationId = defaultAssignment?.work_location_id ?? headOfficeLocation?.id ?? "";
+
   const rows = records ?? [];
   const count = (statuses: string[]) => rows.filter((r) => statuses.includes(r.status)).length;
   const workedDays = count(["on_time", "late", "work_from_home", "off_site", "early_leave"]);
@@ -129,7 +144,13 @@ export default async function EmployeeAttendanceDashboardPage({
           <StatCard label="OT" value={`${totalOtHours.toFixed(1)} ชม.`} icon="timer" accent="primary" hint={holidayDays > 0 ? `วันหยุด ${holidayDays} วัน` : undefined} />
         </div>
 
-        <AddBackdatedAttendanceForm employeeId={employee.id} shifts={shifts ?? []} workLocations={workLocations ?? []} />
+        <AddBackdatedAttendanceForm
+          employeeId={employee.id}
+          shifts={shifts ?? []}
+          workLocations={workLocations ?? []}
+          defaultShiftId={defaultShiftId}
+          defaultWorkLocationId={defaultWorkLocationId}
+        />
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="overflow-x-auto">
