@@ -40,6 +40,7 @@ interface EmployeeRow {
   id_card_address: AddressValue | null;
   current_address: AddressValue | null;
   attendance_exempt: boolean;
+  tax_exempt: boolean;
 }
 
 const initialState: UpdateEmployeeState = {};
@@ -171,6 +172,11 @@ export function EditEmployeeForm({
       <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
         <input type="checkbox" name="attendanceExempt" defaultChecked={employee.attendance_exempt} className="h-4 w-4 accent-primary" />
         ไม่ต้องลงเวลาเข้า-ออกงาน (คิดเงินเดือนเต็มตามปกติ โดยไม่แจ้งเตือนว่าข้อมูลเวลาขาดหาย)
+      </label>
+
+      <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
+        <input type="checkbox" name="taxExempt" defaultChecked={employee.tax_exempt} className="h-4 w-4 accent-primary" />
+        ไม่ต้องหักภาษี ณ ที่จ่าย (พนักงานยื่นภาษีเอง ไม่ว่าเงินเดือนเท่าไหร่)
       </label>
 
       <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">

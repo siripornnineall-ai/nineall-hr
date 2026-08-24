@@ -120,7 +120,7 @@ export async function calculatePayrollRunAction(runId: string) {
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, departments(name), job_positions(title)"
+      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, departments(name), job_positions(title)"
     )
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
@@ -184,6 +184,12 @@ export async function calculatePayrollRunAction(runId: string) {
     const scheduledWorkDaysInPeriod = (shiftAssignments ?? []).filter((s) => !s.is_day_off).length || 22;
     const unpaidLeaveDays = (unpaidLeave ?? []).reduce((sum, l) => sum + Number(l.total_days), 0);
 
+    // Some employees (owners/family here) handle their own personal income tax outside
+    // payroll and must never have withholding tax deducted, regardless of salary — a
+    // flat 0% bracket achieves that without touching social security or anything else
+    // in the calculation.
+    const effectivePolicy = emp.tax_exempt ? { ...policy, taxBrackets: [{ uptoSatang: null, rate: 0 }] } : policy;
+
     const input: PayrollEmployeeInput = {
       employmentType: comp.employment_type,
       baseAmountSatang: bahtToSatang(Number(comp.base_amount)),
@@ -205,7 +211,7 @@ export async function calculatePayrollRunAction(runId: string) {
         comp.meal_allowance ? { label: "ค่าอาหาร", amountSatang: bahtToSatang(Number(comp.meal_allowance)) } : null,
         comp.diligence_allowance ? { label: "เบี้ยขยัน", amountSatang: bahtToSatang(Number(comp.diligence_allowance)) } : null,
       ].filter((x): x is NonNullable<typeof x> => Boolean(x)),
-      policy,
+      policy: effectivePolicy,
     };
 
     const result = calculatePayrollForEmployee(input);
