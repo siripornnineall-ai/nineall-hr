@@ -1,14 +1,8 @@
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
-import { Badge } from "@/components/Badge";
 import { AddAdminForm } from "./AddAdminForm";
-
-const ROLE_LABEL_TH: Record<string, string> = {
-  super_admin: "ผู้ดูแลระบบสูงสุด",
-  hr: "ฝ่ายบุคคล",
-  manager: "หัวหน้าทีม",
-};
+import { AdminRow } from "./AdminRow";
 
 export default async function AdminsPage() {
   const user = await requireUser();
@@ -45,12 +39,13 @@ export default async function AdminsPage() {
                     <th className="px-4 py-3 font-bold text-on-surface-variant">อีเมล</th>
                     <th className="px-4 py-3 font-bold text-on-surface-variant">บทบาท</th>
                     <th className="px-4 py-3 font-bold text-on-surface-variant">สถานะ</th>
+                    <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
                   {(admins ?? []).length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-10 text-center text-on-surface-variant">
+                      <td colSpan={5} className="px-4 py-10 text-center text-on-surface-variant">
                         ยังไม่มีบัญชีผู้ดูแลระบบ
                       </td>
                     </tr>
@@ -58,17 +53,17 @@ export default async function AdminsPage() {
                   {(admins ?? []).map((a) => {
                     const emp = a.employees as unknown as { employee_code: string; first_name: string; last_name: string } | null;
                     return (
-                      <tr key={a.id}>
-                        <td className="px-4 py-3 font-semibold">
-                          {a.full_name}
-                          {emp && <div className="text-xs font-normal text-on-surface-variant">พนักงาน {emp.employee_code}</div>}
-                        </td>
-                        <td className="px-4 py-3">{a.email ?? "-"}</td>
-                        <td className="px-4 py-3">{ROLE_LABEL_TH[a.role] ?? a.role}</td>
-                        <td className="px-4 py-3">
-                          <Badge tone={a.is_active ? "success" : "neutral"}>{a.is_active ? "ใช้งานอยู่" : "ปิดใช้งาน"}</Badge>
-                        </td>
-                      </tr>
+                      <AdminRow
+                        key={a.id}
+                        admin={{
+                          id: a.id,
+                          fullName: a.full_name,
+                          email: a.email,
+                          role: a.role,
+                          isActive: a.is_active,
+                          employeeCode: emp?.employee_code ?? null,
+                        }}
+                      />
                     );
                   })}
                 </tbody>

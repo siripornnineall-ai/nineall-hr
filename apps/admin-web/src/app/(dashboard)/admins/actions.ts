@@ -35,3 +35,30 @@ export async function createAdminAccountAction(
   revalidatePath("/admins");
   return {};
 }
+
+export async function updateAdminAccountAction(
+  profileId: string,
+  fullName: string,
+  email: string,
+  role: "super_admin" | "hr" | "manager",
+  newPassword: string
+): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin"]);
+
+  if (!fullName.trim()) return { error: "กรุณากรอกชื่อ-นามสกุล" };
+  if (!email.trim()) return { error: "กรุณากรอกอีเมล" };
+  if (newPassword && newPassword.length < 8) return { error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_admin_account", {
+    p_profile_id: profileId,
+    p_full_name: fullName.trim(),
+    p_email: email.trim(),
+    p_role: role,
+    p_new_password: newPassword || null,
+  });
+  if (error) return { error: `บันทึกไม่สำเร็จ: ${error.message}` };
+
+  revalidatePath("/admins");
+}
