@@ -1,12 +1,21 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { signAvatarUrls } from "@/lib/avatars";
 import { OtRow } from "./OtRow";
 
-export default async function OvertimePage() {
+function parseYear(year: string | undefined): number {
+  const n = Number(year);
+  return Number.isInteger(n) && n > 2000 ? n : new Date().getFullYear();
+}
+
+export default async function OvertimePage({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
   const user = await requireUser();
+  const { year: yearParam } = await searchParams;
   const supabase = await createClient();
+
+  const year = parseYear(yearParam);
 
   const { data } = await supabase
     .from("overtime_requests")
@@ -14,8 +23,9 @@ export default async function OvertimePage() {
       "id, work_date, start_time, end_time, requested_hours, rate_multiplier, status, reason, task_description, employees(employee_code, first_name, last_name, photo_url)"
     )
     .eq("org_id", user.orgId)
-    .order("work_date", { ascending: false })
-    .limit(50);
+    .gte("work_date", `${year}-01-01`)
+    .lte("work_date", `${year}-12-31`)
+    .order("work_date", { ascending: false });
 
   const signedByPath = await signAvatarUrls(
     supabase,
@@ -44,6 +54,15 @@ export default async function OvertimePage() {
     <>
       <Topbar title="ล่วงเวลา (OT)" subtitle="คำขอ OT ทั้งหมด" />
       <div className="space-y-4 p-4 md:p-8">
+        <div className="flex items-center justify-end gap-2">
+          <Link href={`?year=${year - 1}`} className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold hover:bg-surface-variant/20">
+            ← ปี {year - 1 + 543}
+          </Link>
+          <span className="min-w-[80px] text-center text-sm font-bold text-on-surface">ปี {year + 543}</span>
+          <Link href={`?year=${year + 1}`} className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold hover:bg-surface-variant/20">
+            ปี {year + 1 + 543} →
+          </Link>
+        </div>
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
@@ -62,7 +81,7 @@ export default async function OvertimePage() {
                 {rows.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-10 text-center text-on-surface-variant">
-                      ยังไม่มีคำขอ OT
+                      ไม่มีคำขอ OT ในปี {year + 543}
                     </td>
                   </tr>
                 )}
