@@ -22,7 +22,7 @@ const FALLBACK_POLICY: PayrollPolicyConfig = {
     { uptoSatang: bahtToSatang(1_162_000), rate: 0.2 },
     { uptoSatang: null, rate: 0.25 },
   ],
-  otRateMultipliers: { normal: 1, holiday: 3 },
+  otRateMultipliers: { normal: 1, holiday: 1 },
 };
 
 export async function loadPolicyConfig(orgId: string, asOfDate: string): Promise<PayrollPolicyConfig> {

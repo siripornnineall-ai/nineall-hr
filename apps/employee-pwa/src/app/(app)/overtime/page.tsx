@@ -19,7 +19,7 @@ interface OvertimeRow {
 // Mirrors the org's currently configured policy_settings.ot_rate (normal/holiday
 // multipliers). Regular employees can't read policy_settings directly (admin/HR
 // only via RLS), so this is a best-effort default rather than a live lookup.
-const OT_RATE = { normal: 1, holiday: 3 };
+const OT_RATE = { normal: 1, holiday: 1 };
 
 const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
 const STATUS_CLASS: Record<string, string> = {
@@ -35,6 +35,7 @@ export default function OvertimePage() {
   const [requests, setRequests] = useState<OvertimeRow[]>([]);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
+  const [historyYear, setHistoryYear] = useState(() => new Date().getFullYear());
 
   const [workDate, setWorkDate] = useState("");
   const [startTime, setStartTime] = useState("18:00");
@@ -52,14 +53,15 @@ export default function OvertimePage() {
         .from("overtime_requests")
         .select("id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status")
         .eq("employee_id", profile.employeeId)
-        .order("work_date", { ascending: false })
-        .limit(30),
+        .gte("work_date", `${historyYear}-01-01`)
+        .lte("work_date", `${historyYear}-12-31`)
+        .order("work_date", { ascending: false }),
       supabase.from("company_holidays").select("holiday_date").eq("org_id", profile.orgId),
     ]);
     setRequests(reqs ?? []);
     setHolidayDates(new Set((holidays ?? []).map((h) => h.holiday_date)));
     setLoaded(true);
-  }, [profile, supabase]);
+  }, [profile, supabase, historyYear]);
 
   useEffect(() => {
     load();
@@ -171,8 +173,23 @@ export default function OvertimePage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-base font-bold text-on-surface">ประวัติ OT</h2>
-        {loaded && requests.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีประวัติ OT</p>}
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold text-on-surface">ประวัติ OT</h2>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setHistoryYear((y) => y - 1)} className="rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface-variant">
+              ← {historyYear - 1 + 543}
+            </button>
+            <span className="text-sm font-bold text-on-surface">{historyYear + 543}</span>
+            <button
+              onClick={() => setHistoryYear((y) => y + 1)}
+              disabled={historyYear >= new Date().getFullYear()}
+              className="rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface-variant disabled:opacity-40"
+            >
+              {historyYear + 1 + 543} →
+            </button>
+          </div>
+        </div>
+        {loaded && requests.length === 0 && <p className="text-sm text-on-surface-variant">ไม่มีประวัติ OT ในปี {historyYear + 543}</p>}
         <div className="space-y-2">
           {requests.map((r) => (
             <div key={r.id} className="flex items-center justify-between rounded-2xl bg-white p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
