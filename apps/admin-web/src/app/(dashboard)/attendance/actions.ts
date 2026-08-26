@@ -8,8 +8,11 @@ import { createClient } from "@/lib/supabase/server";
 // that day (holiday/leave/absent aren't "worked late/early" in any meaningful sense).
 const SPECIAL_STATUSES = new Set(["holiday", "leave", "work_from_home", "off_site", "absent"]);
 
+// Rounds to the nearest minute (not floor) so a manually-entered time that carries real
+// seconds (e.g. falling back to an existing clock_in_server_at) resolves a late/grace
+// boundary the same way clock_in()/clock_out() do — see migration 0048.
 function toMinuteOfDay(d: Date): number {
-  return d.getHours() * 60 + d.getMinutes();
+  return Math.round((d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 60);
 }
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
