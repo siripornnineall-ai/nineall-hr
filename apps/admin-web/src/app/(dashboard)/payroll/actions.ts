@@ -8,6 +8,7 @@ import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { loadPolicyConfig } from "@/lib/payroll/policy";
 import { generatePayslipBuffer } from "@/lib/pdf/generatePayslipBuffer";
+import { getOtCutoffWindow } from "@/lib/otCutoff";
 
 export async function createPayrollRunAction(formData: FormData) {
   const user = await requireUser();
@@ -103,19 +104,6 @@ export async function updatePayrollRunAction(
 
 const WORKED_STATUSES = new Set<AttendanceStatus>(["on_time", "late", "early_leave", "work_from_home", "off_site", "holiday"]);
 
-// OT is tallied on a cutoff separate from the rest of the payroll period: the company
-// only pays out OT worked through the 25th of the period's month — anything worked the
-// 26th onward rolls into next month's payroll instead. Attendance/leave/base pay all
-// still use the period's real start/end; only the overtime_requests query below uses
-// this window. Derived from period_start's month rather than a fixed date so it keeps
-// working even if a period is ever created starting mid-month.
-function getOtCutoffWindow(periodStart: string): { start: string; end: string } {
-  const [y, m] = periodStart.split("-").map(Number);
-  const end = new Date(Date.UTC(y, m - 1, 25)).toISOString().slice(0, 10);
-  const start = new Date(Date.UTC(y, m - 2, 26)).toISOString().slice(0, 10);
-  return { start, end };
-}
-
 export async function calculatePayrollRunAction(runId: string) {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
@@ -159,7 +147,7 @@ export async function calculatePayrollRunAction(runId: string) {
       .maybeSingle();
     if (!comp) return null; // no compensation on file yet — surfaced in the UI as "missing data"
 
-    const otWindow = getOtCutoffWindow(period.period_start);
+    const otWindow = getOtCutoffWindow(period.period_start.slice(0, 7));
     const [{ data: attendance }, { data: shiftAssignments }, { data: overtime }, { data: unpaidLeave }] = await Promise.all([
       supabase
         .from("attendance_records")
