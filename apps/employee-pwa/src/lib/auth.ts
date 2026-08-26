@@ -50,12 +50,14 @@ export async function getCurrentEmployee(): Promise<CurrentEmployee | null> {
 }
 
 /**
- * This app is for the `employee` role only. Managers/HR/Admin should use admin-web —
- * they're redirected there rather than silently shown an empty employee view.
+ * This app is for self-service by a real tracked employee. A pure Manager/HR/Admin login
+ * with no employee record has nothing to see here and is redirected to admin-web — but an
+ * admin who is *also* a tracked employee (employeeId set) still needs this app's self-service
+ * features (clock-in, leave requests) that admin-web doesn't have, so they're let through.
  */
 export async function requireEmployee(): Promise<CurrentEmployee> {
   const user = await getCurrentEmployee();
   if (!user) redirect("/login");
-  if (user.role !== "employee") redirect("/login?error=use_admin_web");
+  if (user.role !== "employee" && !user.employeeId) redirect("/login?error=use_admin_web");
   return user;
 }

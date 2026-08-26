@@ -35,9 +35,13 @@ export async function loginAction(_prevState: LoginActionState, formData: FormDa
     return { error: "อีเมล/รหัสพนักงาน หรือรหัสผ่านไม่ถูกต้อง" };
   }
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", signInData.user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("role, employee_id").eq("id", signInData.user.id).single();
 
-  if (profile && profile.role !== "employee") {
+  // Admin/HR/manager accounts are usually pure logins with nothing to see here, so they're
+  // still sent to admin-web — but some (e.g. an owner who is also a tracked employee) have
+  // employee_id set and need self-service features (clock-in, leave) that only exist in this
+  // app, so let anyone with an employee record through regardless of their admin role.
+  if (profile && profile.role !== "employee" && !profile.employee_id) {
     await supabase.auth.signOut();
     return { error: "บัญชีนี้เป็นผู้ดูแล/หัวหน้าทีม กรุณาเข้าสู่ระบบผ่านเว็บสำหรับ Admin แทน" };
   }
