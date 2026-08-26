@@ -221,9 +221,14 @@ export default function LeavePage() {
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">ช่วงเวลาลา</label>
             <div className="flex flex-wrap gap-2">
-              <UnitChip label="เต็มวัน" active={unit === "full_day"} onClick={() => setUnit("full_day")} />
-              {selectedLeaveType?.allow_half_day && <UnitChip label="ครึ่งวัน" active={unit === "half_day"} onClick={() => setUnit("half_day")} />}
-              {selectedLeaveType?.allow_hourly && <UnitChip label="รายชั่วโมง" active={unit === "hourly"} onClick={() => setUnit("hourly")} />}
+              {/* No "เต็มวัน" button — choosing a date range already means full-day leave, nothing to press.
+                  Clicking an active chip here toggles back to full_day so switching back doesn't need one either. */}
+              {selectedLeaveType?.allow_half_day && (
+                <UnitChip label="ครึ่งวัน" active={unit === "half_day"} onClick={() => setUnit(unit === "half_day" ? "full_day" : "half_day")} />
+              )}
+              {selectedLeaveType?.allow_hourly && (
+                <UnitChip label="รายชั่วโมง" active={unit === "hourly"} onClick={() => setUnit(unit === "hourly" ? "full_day" : "hourly")} />
+              )}
             </div>
           </div>
         )}
