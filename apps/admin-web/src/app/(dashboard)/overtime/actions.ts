@@ -1,8 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth";
+import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+
+export async function deleteOvertimeRequestAction(requestId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("overtime_requests").delete().eq("id", requestId).eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+
+  await supabase.from("approval_steps").delete().eq("request_type", "overtime").eq("request_id", requestId);
+
+  revalidatePath("/overtime");
+}
 
 export async function decideOvertimeRequest(requestId: string, decision: "approved" | "rejected") {
   const user = await requireUser();

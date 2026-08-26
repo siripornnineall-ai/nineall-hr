@@ -128,7 +128,11 @@ export async function calculatePayrollRunAction(runId: string) {
   const { data: period } = await supabase.from("payroll_periods").select("*").eq("id", run.payroll_period_id).single();
   if (!period) throw new Error("ไม่พบข้อมูลรอบวันที่");
 
-  const policy = await loadPolicyConfig(user.orgId, period.period_start);
+  // period_end (not period_start) so a policy change effective mid-period — e.g. a social
+  // security rate update partway through the month — is picked up by the time this period's
+  // payroll is actually calculated, matching the employee_compensation lookup below which
+  // already uses period_end for the same reason.
+  const policy = await loadPolicyConfig(user.orgId, period.period_end);
 
   const { data: employees } = await supabase
     .from("employees")
