@@ -11,8 +11,28 @@ const SPECIAL_STATUSES = new Set(["holiday", "leave", "work_from_home", "off_sit
 // Rounds to the nearest minute (not floor) so a manually-entered time that carries real
 // seconds (e.g. falling back to an existing clock_in_server_at) resolves a late/grace
 // boundary the same way clock_in()/clock_out() do — see migration 0048.
+//
+// Reads Bangkok-local time explicitly rather than d.getHours()/getMinutes() (server-local,
+// i.e. UTC on Vercel) — shift start/end times are Bangkok wall-clock, so comparing against
+// the server's own UTC clock would silently be off by 7 hours.
 function toMinuteOfDay(d: Date): number {
-  return Math.round((d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 60);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Math.round((get("hour") * 3600 + get("minute") * 60 + get("second")) / 60);
+}
+
+// HR always types times as Thai local time — parsed here with an explicit +07:00 offset so
+// the stored instant is correct regardless of the server's own timezone (a bare
+// "YYYY-MM-DDTHH:MM:00" string is parsed as the *server's* local time, which is UTC on
+// Vercel, silently shifting every manually-entered time by 7 hours).
+function parseBangkokDateTime(workDate: string, hhmm: string): Date {
+  return new Date(`${workDate}T${hhmm}:00+07:00`);
 }
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -44,8 +64,8 @@ export async function updateAttendanceTimeAction(
     return { error: "กรุณาระบุข้อมูลอย่างน้อยหนึ่งช่อง" };
   }
 
-  const clockInAt = values.clockIn ? new Date(`${workDate}T${values.clockIn}:00`) : existing.clock_in_server_at ? new Date(existing.clock_in_server_at) : null;
-  const clockOutAt = values.clockOut ? new Date(`${workDate}T${values.clockOut}:00`) : existing.clock_out_server_at ? new Date(existing.clock_out_server_at) : null;
+  const clockInAt = values.clockIn ? parseBangkokDateTime(workDate, values.clockIn) : existing.clock_in_server_at ? new Date(existing.clock_in_server_at) : null;
+  const clockOutAt = values.clockOut ? parseBangkokDateTime(workDate, values.clockOut) : existing.clock_out_server_at ? new Date(existing.clock_out_server_at) : null;
 
   const update: Record<string, string | number | boolean | null> = {};
   if (values.clockIn) update.clock_in_server_at = clockInAt!.toISOString();
@@ -126,8 +146,8 @@ export async function createBackdatedAttendanceAction(
   const { data: employee } = await supabase.from("employees").select("org_id").eq("id", employeeId).eq("org_id", user.orgId).single();
   if (!employee) return { error: "ไม่พบพนักงาน" };
 
-  const clockInAt = values.clockIn ? new Date(`${values.workDate}T${values.clockIn}:00`) : null;
-  const clockOutAt = values.clockOut ? new Date(`${values.workDate}T${values.clockOut}:00`) : null;
+  const clockInAt = values.clockIn ? parseBangkokDateTime(values.workDate, values.clockIn) : null;
+  const clockOutAt = values.clockOut ? parseBangkokDateTime(values.workDate, values.clockOut) : null;
 
   let status = values.status;
   let lateMinutes = 0;
