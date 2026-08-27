@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { listAttendanceForDate } from "@/lib/queries/attendance";
+import { listAttendanceForDate, syncHolidayAttendance } from "@/lib/queries/attendance";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { AttendanceRow } from "./AttendanceRow";
@@ -9,6 +9,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const workDate = params.date ?? new Date().toISOString().slice(0, 10);
   const supabase = await createClient();
+  const holidayName = await syncHolidayAttendance(user.orgId, workDate);
   const [rows, { data: shifts }, { data: workLocations }] = await Promise.all([
     listAttendanceForDate(user.orgId, workDate),
     supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId),
@@ -19,6 +20,11 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
     <>
       <Topbar title="Attendance" subtitle="สรุปเวลาเข้าออกงานรายวัน" />
       <div className="space-y-4 p-4 md:p-8">
+        {holidayName && (
+          <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm font-bold text-purple-800">
+            🎉 วันนี้เป็นวันหยุดนักขัตฤกษ์: {holidayName}
+          </div>
+        )}
         <form method="get" className="flex items-center gap-3">
           <label className="text-sm font-semibold text-on-surface-variant" htmlFor="date">
             วันที่
