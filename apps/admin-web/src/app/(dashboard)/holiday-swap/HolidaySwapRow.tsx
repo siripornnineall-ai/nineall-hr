@@ -19,9 +19,13 @@ interface RowData {
   holidayDate: string;
   holidayName: string | null;
   substituteDate: string;
+  unit: string;
+  period: string | null;
   reason: string | null;
   status: string;
 }
+
+const PERIOD_TH: Record<string, string> = { morning: "เช้า", afternoon: "บ่าย" };
 
 export function HolidaySwapRow({ row }: { row: RowData }) {
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +56,15 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
       </td>
       <td className="px-4 py-3">
         {new Date(row.holidayDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
+        {row.unit === "half_day" && row.period && <div className="text-xs text-on-surface-variant">ครึ่งวัน ({PERIOD_TH[row.period]})</div>}
         {row.holidayName && <div className="text-xs text-on-surface-variant">{row.holidayName}</div>}
       </td>
-      <td className="px-4 py-3">{new Date(row.substituteDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}</td>
+      <td className="px-4 py-3">
+        {new Date(row.substituteDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
+        {row.unit === "half_day" && row.period && (
+          <div className="text-xs text-on-surface-variant">หยุดช่วง {PERIOD_TH[row.period]} (ยังต้องมาทำงานอีกครึ่งวันตามปกติ)</div>
+        )}
+      </td>
       <td className="px-4 py-3">{row.reason ?? "-"}</td>
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
