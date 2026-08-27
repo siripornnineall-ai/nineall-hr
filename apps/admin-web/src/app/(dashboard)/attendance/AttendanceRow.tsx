@@ -45,6 +45,7 @@ interface AttendanceRowData {
   clockIn: string | null;
   clockOut: string | null;
   status: string;
+  statusDetail: string | null;
   lateMinutes: number;
   otMinutes: number;
   withinGeofence: boolean | null;
@@ -154,6 +155,7 @@ export function AttendanceRow({
       </td>
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
+        {row.statusDetail && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
       </td>
       <td className="px-4 py-3 text-right">
         <button onClick={() => setEditing(true)} className="text-xs font-bold text-primary hover:underline">

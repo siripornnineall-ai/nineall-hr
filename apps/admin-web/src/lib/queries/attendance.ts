@@ -56,6 +56,7 @@ export interface AttendanceRow {
   clockIn: string | null;
   clockOut: string | null;
   status: string;
+  statusDetail: string | null;
   lateMinutes: number;
   otMinutes: number;
   withinGeofence: boolean | null;
@@ -76,8 +77,24 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     .eq("work_date", workDate)
     .order("clock_in_server_at", { ascending: true });
 
-  const { data, error } = await query;
+  const [{ data, error }, { data: holiday }, { data: leaveRows }] = await Promise.all([
+    query,
+    supabase.from("company_holidays").select("name").eq("org_id", orgId).eq("holiday_date", workDate).maybeSingle(),
+    // "ลา" alone doesn't say which kind — look up the approved leave covering this date per
+    // employee so the row can show "ลาป่วย"/"ลากิจ"/etc instead of just the bare status.
+    supabase
+      .from("leave_requests")
+      .select("employee_id, leave_types(name_th)")
+      .eq("org_id", orgId)
+      .eq("status", "approved")
+      .lte("start_date", workDate)
+      .gte("end_date", workDate),
+  ]);
   if (error) throw error;
+
+  const leaveTypeNameByEmployee = new Map(
+    (leaveRows ?? []).map((l) => [l.employee_id, (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null])
+  );
 
   const signedByPath = await signAvatarUrls(
     supabase,
@@ -92,6 +109,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       photo_url: string | null;
       manager_employee_id: string | null;
     };
+    const statusDetail = r.status === "leave" ? (leaveTypeNameByEmployee.get(r.employee_id) ?? null) : r.status === "holiday" ? (holiday?.name ?? null) : null;
     return {
       id: r.id,
       workDate: r.work_date,
@@ -102,6 +120,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       clockIn: r.clock_in_server_at,
       clockOut: r.clock_out_server_at,
       status: r.status,
+      statusDetail,
       lateMinutes: r.late_minutes,
       otMinutes: r.ot_minutes,
       withinGeofence: r.clock_in_within_geofence,
