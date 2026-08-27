@@ -4,26 +4,9 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/StatCard";
-import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
 import { AddBackdatedAttendanceForm } from "./AddBackdatedAttendanceForm";
-
-const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "info" | "holiday" | "neutral"; label: string }> = {
-  on_time: { tone: "success", label: "ตรงเวลา" },
-  late: { tone: "warning", label: "มาสาย" },
-  early_leave: { tone: "warning", label: "ออกก่อน" },
-  absent: { tone: "danger", label: "ขาดงาน" },
-  holiday: { tone: "holiday", label: "วันหยุด" },
-  leave: { tone: "info", label: "ลา" },
-  work_from_home: { tone: "info", label: "WFH" },
-  off_site: { tone: "info", label: "นอกสถานที่" },
-  pending_offline: { tone: "neutral", label: "รอซิงค์" },
-};
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "--:--";
-  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false });
-}
+import { EmployeeAttendanceRow } from "./EmployeeAttendanceRow";
 
 function parseMonth(month: string | undefined): { year: number; monthIndex: number } {
   if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -74,7 +57,7 @@ export default async function EmployeeAttendanceDashboardPage({
 
   const { data: records } = await supabase
     .from("attendance_records")
-    .select("work_date, status, clock_in_server_at, clock_out_server_at, late_minutes, ot_minutes")
+    .select("id, work_date, status, clock_in_server_at, clock_out_server_at, late_minutes, ot_minutes, shift_id, work_location_id")
     .eq("org_id", user.orgId)
     .eq("employee_id", employeeId)
     .gte("work_date", monthStart)
@@ -163,31 +146,36 @@ export default async function EmployeeAttendanceDashboardPage({
                   <th className="px-4 py-3 font-bold text-on-surface-variant">สาย (นาที)</th>
                   <th className="px-4 py-3 font-bold text-on-surface-variant">OT (นาที)</th>
                   <th className="px-4 py-3 font-bold text-on-surface-variant">สถานะ</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant">
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-on-surface-variant">
+                    <td colSpan={7} className="px-4 py-10 text-center text-on-surface-variant">
                       ไม่มีข้อมูลการลงเวลาในเดือนนี้
                     </td>
                   </tr>
                 )}
-                {rows.map((r) => {
-                  const badge = STATUS_BADGE[r.status] ?? { tone: "neutral" as const, label: r.status };
-                  return (
-                    <tr key={r.work_date}>
-                      <td className="px-4 py-3">{new Date(r.work_date).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}</td>
-                      <td className="px-4 py-3">{formatTime(r.clock_in_server_at)}</td>
-                      <td className="px-4 py-3">{formatTime(r.clock_out_server_at)}</td>
-                      <td className="px-4 py-3">{r.late_minutes || "-"}</td>
-                      <td className="px-4 py-3">{r.ot_minutes || "-"}</td>
-                      <td className="px-4 py-3">
-                        <Badge tone={badge.tone}>{badge.label}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {rows.map((r) => (
+                  <EmployeeAttendanceRow
+                    key={r.id}
+                    row={{
+                      id: r.id,
+                      workDate: r.work_date,
+                      workDateLabel: new Date(r.work_date).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }),
+                      clockIn: r.clock_in_server_at,
+                      clockOut: r.clock_out_server_at,
+                      lateMinutes: r.late_minutes ?? 0,
+                      otMinutes: r.ot_minutes ?? 0,
+                      status: r.status,
+                      shiftId: r.shift_id,
+                      workLocationId: r.work_location_id,
+                    }}
+                    shifts={shifts ?? []}
+                    workLocations={workLocations ?? []}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
