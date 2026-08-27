@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { parseBangkokDateTime } from "@/lib/bangkokTime";
 
 // Statuses where a shift-time calculation shouldn't override what actually happened
 // that day (holiday/leave/absent aren't "worked late/early" in any meaningful sense).
@@ -25,14 +26,6 @@ function toMinuteOfDay(d: Date): number {
   }).formatToParts(d);
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   return Math.round((get("hour") * 3600 + get("minute") * 60 + get("second")) / 60);
-}
-
-// HR always types times as Thai local time — parsed here with an explicit +07:00 offset so
-// the stored instant is correct regardless of the server's own timezone (a bare
-// "YYYY-MM-DDTHH:MM:00" string is parsed as the *server's* local time, which is UTC on
-// Vercel, silently shifting every manually-entered time by 7 hours).
-function parseBangkokDateTime(workDate: string, hhmm: string): Date {
-  return new Date(`${workDate}T${hhmm}:00+07:00`);
 }
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
