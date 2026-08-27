@@ -11,7 +11,9 @@ export default async function HolidaySwapPage() {
   const [{ data }, { data: holidays }] = await Promise.all([
     supabase
       .from("holiday_swap_requests")
-      .select("id, holiday_date, substitute_date, reason, status, employees(employee_code, first_name, last_name, photo_url)")
+      .select(
+        "id, holiday_date, substitute_date, reason, status, employees!holiday_swap_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url)"
+      )
       .eq("org_id", user.orgId)
       .order("created_at", { ascending: false })
       .limit(50),
