@@ -21,6 +21,18 @@ interface OvertimeRow {
 // only via RLS), so this is a best-effort default rather than a live lookup.
 const OT_RATE = { normal: 1, holiday: 1 };
 
+// HR caps how far back an OT request can be backdated — mirrored server-side by the
+// overtime_requests_insert RLS policy, which is the real enforcement (see migration
+// 0049); this is just so the employee gets an immediate, friendly message instead of a
+// raw "row-level security policy" error from the database.
+const MAX_BACKDATE_DAYS = 3;
+
+function earliestAllowedOtDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - MAX_BACKDATE_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
 const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
 const STATUS_CLASS: Record<string, string> = {
   pending: "text-status-warning",
@@ -90,6 +102,10 @@ export default function OvertimePage() {
       setError("กรุณาระบุวันที่และเวลาให้ถูกต้อง");
       return;
     }
+    if (workDate < earliestAllowedOtDate()) {
+      setError(`ขอ OT ย้อนหลังได้ไม่เกิน ${MAX_BACKDATE_DAYS} วัน`);
+      return;
+    }
     setSubmitting(true);
     const { error: insertError } = await supabase.from("overtime_requests").insert({
       org_id: profile!.orgId,
@@ -105,7 +121,7 @@ export default function OvertimePage() {
     });
     setSubmitting(false);
     if (insertError) {
-      setError(insertError.message);
+      setError(insertError.message.includes("row-level security") ? `ขอ OT ย้อนหลังได้ไม่เกิน ${MAX_BACKDATE_DAYS} วัน` : insertError.message);
       return;
     }
     setWorkDate("");
@@ -128,7 +144,13 @@ export default function OvertimePage() {
         <p className="text-sm font-semibold text-on-surface-variant">ขอทำงานล่วงเวลา</p>
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันที่</label>
-          <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
+          <input
+            type="date"
+            value={workDate}
+            min={earliestAllowedOtDate()}
+            onChange={(e) => setWorkDate(e.target.value)}
+            className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+          />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
