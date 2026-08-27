@@ -21,15 +21,18 @@ const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "i
 // Shows seconds: clock-in and clock-out within the same minute (e.g. someone testing
 // the flow by tapping both in quick succession) otherwise render as identical HH:MM
 // even though the underlying timestamps genuinely differ — looked like a bug, wasn't one.
+//
+// Explicit timeZone: this is a client component, so without it these would read the
+// viewer's own device/browser clock — right by coincidence for a Thailand-based admin,
+// silently wrong for anyone whose device is set to a different timezone.
 function formatTime(iso: string | null): string {
   if (!iso) return "--:--";
-  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
 }
 
 function toTimeInputValue(iso: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
 }
 
 interface AttendanceRowData {
