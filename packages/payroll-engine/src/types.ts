@@ -24,7 +24,8 @@ export type AttendanceStatus =
   | "leave"
   | "work_from_home"
   | "off_site"
-  | "pending_offline";
+  | "pending_offline"
+  | "day_off";
 
 export interface AttendanceInput {
   workDate: string; // "YYYY-MM-DD"

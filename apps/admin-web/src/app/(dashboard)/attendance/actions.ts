@@ -7,7 +7,7 @@ import { parseBangkokDateTime } from "@/lib/bangkokTime";
 
 // Statuses where a shift-time calculation shouldn't override what actually happened
 // that day (holiday/leave/absent aren't "worked late/early" in any meaningful sense).
-const SPECIAL_STATUSES = new Set(["holiday", "leave", "work_from_home", "off_site", "absent"]);
+const SPECIAL_STATUSES = new Set(["holiday", "leave", "work_from_home", "off_site", "absent", "day_off"]);
 
 // Rounds to the nearest minute (not floor) so a manually-entered time that carries real
 // seconds (e.g. falling back to an existing clock_in_server_at) resolves a late/grace
@@ -119,7 +119,7 @@ export async function updateAttendanceTimeAction(
 
 // Empty string means "compute on_time/late/early_leave from the entered times" (see below) —
 // the rest are day types with no clock time to derive a status from.
-const SPECIAL_STATUS_OPTIONS = new Set(["", "absent", "holiday", "leave", "work_from_home", "off_site"]);
+const SPECIAL_STATUS_OPTIONS = new Set(["", "absent", "holiday", "leave", "work_from_home", "off_site", "day_off"]);
 
 // Lets HR fill in a day that has no attendance_records row at all (the employee simply
 // never clocked in) — updateAttendanceTimeAction above only edits an existing row.

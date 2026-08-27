@@ -10,7 +10,8 @@ export type AttendanceStatus =
   | "leave"
   | "work_from_home"
   | "off_site"
-  | "pending_offline";
+  | "pending_offline"
+  | "day_off";
 export type ApprovalStatus = "draft" | "pending" | "approved" | "rejected" | "cancelled";
 export type LeaveUnit = "full_day" | "half_day" | "hourly";
 export type PayrollRunStatus = "draft" | "under_review" | "pending_approval" | "approved" | "paid" | "locked";

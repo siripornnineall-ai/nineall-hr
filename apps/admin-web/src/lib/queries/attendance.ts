@@ -46,6 +46,38 @@ export async function syncHolidayAttendance(orgId: string, workDate: string): Pr
   return holiday.name;
 }
 
+// Same gap as the holiday case above, but for an employee's regular scheduled day off
+// (e.g. a weekly Sunday off from the /schedule editor) on an otherwise ordinary date —
+// they correctly didn't clock in, so they just didn't appear on the page at all. Run
+// this after syncHolidayAttendance so a holiday date's employees (already given a
+// "holiday" row above) aren't re-marked here.
+export async function syncDayOffAttendance(orgId: string, workDate: string): Promise<void> {
+  const supabase = await createClient();
+
+  const [{ data: assignments }, { data: existingRecords }] = await Promise.all([
+    supabase.from("shift_assignments").select("employee_id").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true),
+    supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
+  ]);
+
+  const hasRecord = new Set((existingRecords ?? []).map((r) => r.employee_id));
+  const toMark = (assignments ?? []).filter((a) => !hasRecord.has(a.employee_id));
+  if (toMark.length > 0) {
+    await supabase.from("attendance_records").upsert(
+      toMark.map((a) => ({
+        org_id: orgId,
+        employee_id: a.employee_id,
+        work_date: workDate,
+        status: "day_off" as const,
+        late_minutes: 0,
+        early_leave_minutes: 0,
+        worked_minutes: 0,
+        needs_review: false,
+      })),
+      { onConflict: "employee_id,work_date", ignoreDuplicates: true }
+    );
+  }
+}
+
 export interface AttendanceRow {
   id: string;
   workDate: string;

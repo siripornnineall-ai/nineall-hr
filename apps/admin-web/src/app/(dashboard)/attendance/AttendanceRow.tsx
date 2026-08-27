@@ -16,6 +16,7 @@ const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "i
   work_from_home: { tone: "info", label: "WFH" },
   off_site: { tone: "info", label: "นอกสถานที่" },
   pending_offline: { tone: "neutral", label: "รอซิงค์" },
+  day_off: { tone: "neutral", label: "หยุดประจำ" },
 };
 
 // Shows seconds: clock-in and clock-out within the same minute (e.g. someone testing

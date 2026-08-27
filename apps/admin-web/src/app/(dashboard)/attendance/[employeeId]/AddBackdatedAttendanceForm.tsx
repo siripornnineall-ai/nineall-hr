@@ -20,6 +20,7 @@ const SPECIAL_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "leave", label: "ลา" },
   { value: "absent", label: "ขาดงาน" },
   { value: "holiday", label: "วันหยุด" },
+  { value: "day_off", label: "หยุดประจำ" },
   { value: "work_from_home", label: "WFH" },
   { value: "off_site", label: "นอกสถานที่" },
 ];

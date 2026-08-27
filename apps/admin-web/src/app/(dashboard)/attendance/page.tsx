@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { listAttendanceForDate, syncHolidayAttendance } from "@/lib/queries/attendance";
+import { listAttendanceForDate, syncHolidayAttendance, syncDayOffAttendance } from "@/lib/queries/attendance";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { AttendanceRow } from "./AttendanceRow";
@@ -10,6 +10,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const workDate = params.date ?? new Date().toISOString().slice(0, 10);
   const supabase = await createClient();
   const holidayName = await syncHolidayAttendance(user.orgId, workDate);
+  await syncDayOffAttendance(user.orgId, workDate);
   const [rows, { data: shifts }, { data: workLocations }] = await Promise.all([
     listAttendanceForDate(user.orgId, workDate),
     supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId),
