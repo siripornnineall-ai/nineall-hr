@@ -13,6 +13,69 @@ import { parseBangkokDateTime } from "@/lib/bangkokTime";
 // hand via the backdated-attendance form after every approval — this does it automatically.
 const OFFSITE_LEAVE_STATUS: Record<string, "work_from_home" | "off_site"> = { WFH: "work_from_home", OFFSITE: "off_site" };
 
+async function fillOffsiteAttendanceForDate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  employeeId: string,
+  workDate: string,
+  status: "work_from_home" | "off_site",
+  clockInTime: string,
+  clockOutTime: string
+) {
+  const { data: assignment } = await supabase
+    .from("shift_assignments")
+    .select("shift_id, work_location_id")
+    .eq("employee_id", employeeId)
+    .eq("work_date", workDate)
+    .maybeSingle();
+
+  const clockIn = parseBangkokDateTime(workDate, clockInTime);
+  const clockOut = parseBangkokDateTime(workDate, clockOutTime);
+
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("id, clock_in_server_at, clock_out_server_at")
+    .eq("employee_id", employeeId)
+    .eq("work_date", workDate)
+    .maybeSingle();
+
+  if (existing?.clock_in_server_at && existing?.clock_out_server_at) {
+    // Already has a complete real clock-in/out — a WFH/off-site approval shouldn't
+    // silently overwrite genuine attendance data.
+    return;
+  }
+
+  if (existing?.clock_in_server_at && !existing.clock_out_server_at) {
+    // The employee actually clocked in but never clocked out (e.g. they left for an
+    // off-site errand mid-day without formally clocking out) — keep their real clock-in,
+    // only fill in the missing clock-out.
+    const workedMinutes = Math.max(0, Math.round((clockOut.getTime() - new Date(existing.clock_in_server_at).getTime()) / 60000));
+    await supabase
+      .from("attendance_records")
+      .update({ clock_out_server_at: clockOut.toISOString(), status, worked_minutes: workedMinutes })
+      .eq("id", existing.id);
+    return;
+  }
+
+  await supabase.from("attendance_records").upsert(
+    {
+      org_id: orgId,
+      employee_id: employeeId,
+      work_date: workDate,
+      shift_id: assignment?.shift_id ?? null,
+      work_location_id: assignment?.work_location_id ?? null,
+      clock_in_server_at: clockIn.toISOString(),
+      clock_out_server_at: clockOut.toISOString(),
+      status,
+      late_minutes: 0,
+      early_leave_minutes: 0,
+      worked_minutes: Math.round((clockOut.getTime() - clockIn.getTime()) / 60000),
+      needs_review: false,
+    },
+    { onConflict: "employee_id,work_date" }
+  );
+}
+
 async function autoFillLeaveAttendance(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
@@ -20,7 +83,9 @@ async function autoFillLeaveAttendance(
   leaveTypeId: string,
   startDate: string,
   endDate: string,
-  unit: string
+  unit: string,
+  startTime: string | null,
+  endTime: string | null
 ) {
   const { data: leaveType } = await supabase.from("leave_types").select("code").eq("id", leaveTypeId).single();
   if (!leaveType) return;
@@ -36,37 +101,23 @@ async function autoFillLeaveAttendance(
 
   for (const workDate of workDates) {
     if (offsiteStatus) {
-      const { data: assignment } = await supabase
-        .from("shift_assignments")
-        .select("shift_id, work_location_id")
-        .eq("employee_id", employeeId)
-        .eq("work_date", workDate)
-        .maybeSingle();
-      if (!assignment?.shift_id) continue; // no shift on file for this date — nothing to derive times from
-
-      const { data: shift } = await supabase.from("work_shifts").select("start_time, end_time").eq("id", assignment.shift_id).single();
-      if (!shift) continue;
-
-      const clockIn = parseBangkokDateTime(workDate, shift.start_time.slice(0, 5));
-      const clockOut = parseBangkokDateTime(workDate, shift.end_time.slice(0, 5));
-
-      await supabase.from("attendance_records").upsert(
-        {
-          org_id: orgId,
-          employee_id: employeeId,
-          work_date: workDate,
-          shift_id: assignment.shift_id,
-          work_location_id: assignment.work_location_id ?? null,
-          clock_in_server_at: clockIn.toISOString(),
-          clock_out_server_at: clockOut.toISOString(),
-          status: offsiteStatus,
-          late_minutes: 0,
-          early_leave_minutes: 0,
-          worked_minutes: Math.round((clockOut.getTime() - clockIn.getTime()) / 60000),
-          needs_review: false,
-        },
-        { onConflict: "employee_id,work_date" }
-      );
+      if (unit === "full_day") {
+        // Full-day WFH/off-site uses the employee's actual assigned shift for that date.
+        const { data: assignment } = await supabase
+          .from("shift_assignments")
+          .select("shift_id")
+          .eq("employee_id", employeeId)
+          .eq("work_date", workDate)
+          .maybeSingle();
+        if (!assignment?.shift_id) continue; // no shift on file for this date — nothing to derive times from
+        const { data: shift } = await supabase.from("work_shifts").select("start_time, end_time").eq("id", assignment.shift_id).single();
+        if (!shift) continue;
+        await fillOffsiteAttendanceForDate(supabase, orgId, employeeId, workDate, offsiteStatus, shift.start_time.slice(0, 5), shift.end_time.slice(0, 5));
+      } else if (startTime && endTime) {
+        // Half-day/hourly WFH/off-site already has the exact times the employee picked
+        // on the leave request itself — use those directly instead of the full shift.
+        await fillOffsiteAttendanceForDate(supabase, orgId, employeeId, workDate, offsiteStatus, startTime.slice(0, 5), endTime.slice(0, 5));
+      }
     } else {
       // A genuine absence — no clock times to fill in, just mark the day as "ลา" so it's
       // distinguishable from a day the employee simply never clocked in at all.
@@ -99,7 +150,7 @@ export async function decideLeaveRequest(requestId: string, decision: "approved"
 
   const { data: request } = await supabase
     .from("leave_requests")
-    .select("employee_id, leave_type_id, start_date, end_date, unit")
+    .select("employee_id, leave_type_id, start_date, end_date, unit, start_time, end_time")
     .eq("id", requestId)
     .eq("org_id", user.orgId)
     .single();
@@ -120,7 +171,17 @@ export async function decideLeaveRequest(requestId: string, decision: "approved"
     .eq("status", "pending");
 
   if (decision === "approved" && request) {
-    await autoFillLeaveAttendance(supabase, user.orgId, request.employee_id, request.leave_type_id, request.start_date, request.end_date, request.unit);
+    await autoFillLeaveAttendance(
+      supabase,
+      user.orgId,
+      request.employee_id,
+      request.leave_type_id,
+      request.start_date,
+      request.end_date,
+      request.unit,
+      request.start_time,
+      request.end_time
+    );
   }
 
   revalidatePath("/leave");
@@ -219,7 +280,17 @@ export async function createBackdatedLeaveAction(values: {
     .eq("status", "pending");
 
   const requestEndDate = unit === "full_day" ? values.endDate : values.startDate;
-  await autoFillLeaveAttendance(supabase, employee.org_id, values.employeeId, values.leaveTypeId, values.startDate, requestEndDate, unit);
+  await autoFillLeaveAttendance(
+    supabase,
+    employee.org_id,
+    values.employeeId,
+    values.leaveTypeId,
+    values.startDate,
+    requestEndDate,
+    unit,
+    values.startTime ?? null,
+    values.endTime ?? null
+  );
 
   revalidatePath("/leave");
 }
