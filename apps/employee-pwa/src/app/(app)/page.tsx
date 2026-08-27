@@ -164,6 +164,7 @@ export default function HomePage() {
         <div className="grid grid-cols-3 gap-2">
           <QuickLink href="/reimbursement" icon="receipt_long" label="เบิกเงิน" />
           <QuickLink href="/shift-swap" icon="swap_horiz" label="สลับกะ" />
+          <QuickLink href="/holiday-swap" icon="event_repeat" label="สลับวันหยุด" />
           <QuickLink href="/calendar" icon="calendar_month" label="ปฏิทิน" />
           <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
           <QuickLink href="/reviews" icon="military_tech" label="ผลประเมิน" />

@@ -1,0 +1,78 @@
+import { requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { Topbar } from "@/components/Topbar";
+import { signAvatarUrls } from "@/lib/avatars";
+import { HolidaySwapRow } from "./HolidaySwapRow";
+
+export default async function HolidaySwapPage() {
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const [{ data }, { data: holidays }] = await Promise.all([
+    supabase
+      .from("holiday_swap_requests")
+      .select("id, holiday_date, substitute_date, reason, status, employees(employee_code, first_name, last_name, photo_url)")
+      .eq("org_id", user.orgId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase.from("company_holidays").select("holiday_date, name").eq("org_id", user.orgId),
+  ]);
+
+  const holidayNameByDate = new Map((holidays ?? []).map((h) => [h.holiday_date, h.name]));
+
+  const signedByPath = await signAvatarUrls(
+    supabase,
+    (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
+  );
+
+  const rows = (data ?? []).map((r) => {
+    const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
+    return {
+      id: r.id,
+      employeeCode: emp?.employee_code ?? "-",
+      employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
+      employeePhotoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
+      holidayDate: r.holiday_date,
+      holidayName: holidayNameByDate.get(r.holiday_date) ?? null,
+      substituteDate: r.substitute_date,
+      reason: r.reason,
+      status: r.status,
+    };
+  });
+
+  return (
+    <>
+      <Topbar title="สลับวันหยุดนักขัตฤกษ์" subtitle="คำขอสลับวันหยุดนักขัตฤกษ์ทั้งหมด" />
+      <div className="space-y-4 p-4 md:p-8">
+        <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-outline-variant bg-surface-container">
+                  <th className="px-4 py-3 font-bold text-on-surface-variant">พนักงาน</th>
+                  <th className="px-4 py-3 font-bold text-on-surface-variant">วันหยุดนักขัตฤกษ์ที่ทำงาน</th>
+                  <th className="px-4 py-3 font-bold text-on-surface-variant">วันหยุดชดเชย</th>
+                  <th className="px-4 py-3 font-bold text-on-surface-variant">เหตุผล</th>
+                  <th className="px-4 py-3 font-bold text-on-surface-variant">สถานะ</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant">
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-on-surface-variant">
+                      ยังไม่มีคำขอสลับวันหยุดนักขัตฤกษ์
+                    </td>
+                  </tr>
+                )}
+                {rows.map((r) => (
+                  <HolidaySwapRow key={r.id} row={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
