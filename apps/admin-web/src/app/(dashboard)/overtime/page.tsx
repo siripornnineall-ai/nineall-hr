@@ -5,6 +5,7 @@ import { Topbar } from "@/components/Topbar";
 import { signAvatarUrls } from "@/lib/avatars";
 import { getOtCutoffWindow, currentOtCutoffMonthKey, shiftOtCutoffMonthKey } from "@/lib/otCutoff";
 import { OtRow } from "./OtRow";
+import { AddBackdatedOvertimeForm } from "./AddBackdatedOvertimeForm";
 
 function parseMonthKey(month: string | undefined): string {
   return month && /^\d{4}-\d{2}$/.test(month) ? month : currentOtCutoffMonthKey();
@@ -25,6 +26,14 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
   const { start, end } = getOtCutoffWindow(monthKey);
   const prevMonthKey = shiftOtCutoffMonthKey(monthKey, -1);
   const nextMonthKey = shiftOtCutoffMonthKey(monthKey, 1);
+
+  const { data: employees } = await supabase
+    .from("employees")
+    .select("id, employee_code, first_name, last_name")
+    .eq("org_id", user.orgId)
+    .is("deleted_at", null)
+    .in("employment_status", ["active", "probation"])
+    .order("employee_code");
 
   const { data } = await supabase
     .from("overtime_requests")
@@ -89,6 +98,8 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
             </Link>
           </div>
         </div>
+
+        <AddBackdatedOvertimeForm employees={employees ?? []} />
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container px-4 py-3">
