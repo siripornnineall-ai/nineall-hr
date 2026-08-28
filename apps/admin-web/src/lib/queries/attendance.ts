@@ -11,39 +11,43 @@ function weekdayOf(workDate: string): number {
 
 // shift_assignments only ever has rows from around "today" forward — nothing backfills it
 // for past dates (see /schedule) — so a past date genuinely has no row even for an
-// employee's completely ordinary weekly day off (e.g. every Sat/Sun). Infer each employee's
-// regular off-weekdays from whatever rows they DO have (majority vote per weekday, so one
-// swapped exception doesn't undo an otherwise-consistent pattern), so a past date can still
-// be recognized as "their normal day off" instead of wrongly counting as absent.
+// employee's completely ordinary weekly day off. Infer each employee's regular off-weekdays
+// from whatever rows they DO have, using the occurrence of each weekday CLOSEST TO TODAY
+// (not a majority vote across the whole ~180-day window) — the /schedule page is what HR
+// actually edits, and a schedule genuinely changed partway through that window would
+// otherwise get diluted by stale rows from before the change instead of reflecting what's
+// actually set right now.
 async function inferRegularDayOffWeekdays(supabase: SupabaseClient, orgId: string): Promise<Map<string, Set<number>>> {
   const { data: rows } = await supabase.from("shift_assignments").select("employee_id, work_date, is_day_off").eq("org_id", orgId);
 
-  const tally = new Map<string, Map<number, { off: number; working: number }>>();
+  const todayMs = new Date(`${new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date())}T00:00:00Z`).getTime();
+  const closest = new Map<string, Map<number, { isDayOff: boolean; distanceMs: number }>>();
+  const hasWorkingRow = new Map<string, boolean>();
   for (const r of rows ?? []) {
+    if (!r.is_day_off) hasWorkingRow.set(r.employee_id, true);
+
     const weekday = weekdayOf(r.work_date);
-    let byWeekday = tally.get(r.employee_id);
+    const distanceMs = Math.abs(new Date(`${r.work_date}T00:00:00Z`).getTime() - todayMs);
+    let byWeekday = closest.get(r.employee_id);
     if (!byWeekday) {
       byWeekday = new Map();
-      tally.set(r.employee_id, byWeekday);
+      closest.set(r.employee_id, byWeekday);
     }
-    const counts = byWeekday.get(weekday) ?? { off: 0, working: 0 };
-    if (r.is_day_off) counts.off += 1;
-    else counts.working += 1;
-    byWeekday.set(weekday, counts);
+    const existing = byWeekday.get(weekday);
+    if (!existing || distanceMs < existing.distanceMs) byWeekday.set(weekday, { isDayOff: r.is_day_off, distanceMs });
   }
 
   const result = new Map<string, Set<number>>();
-  for (const [employeeId, byWeekday] of tally) {
-    // An employee with zero "working" rows across every weekday (e.g. someone who has
-    // never had a real shift on file, only ever WFH marked in by hand) gives no real
-    // signal here — every weekday would trivially "win" and every date would be inferred
-    // as their day off, which is wrong. Skip inference entirely for them.
-    const hasAnyWorkingRow = Array.from(byWeekday.values()).some((c) => c.working > 0);
-    if (!hasAnyWorkingRow) continue;
+  for (const [employeeId, byWeekday] of closest) {
+    // An employee with zero "working" rows anywhere (e.g. someone who has never had a real
+    // shift on file, only ever WFH marked in by hand) gives no real signal here — every
+    // weekday would trivially read as their day off, which is wrong. Skip inference
+    // entirely for them.
+    if (!hasWorkingRow.get(employeeId)) continue;
 
     const weekdays = new Set<number>();
-    for (const [weekday, counts] of byWeekday) {
-      if (counts.off > counts.working) weekdays.add(weekday);
+    for (const [weekday, entry] of byWeekday) {
+      if (entry.isDayOff) weekdays.add(weekday);
     }
     result.set(employeeId, weekdays);
   }
