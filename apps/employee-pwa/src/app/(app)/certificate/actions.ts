@@ -4,6 +4,11 @@ import { requireEmployee } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { generateCertificateBuffer } from "@/lib/pdf/generateCertificateBuffer";
 
+// Fixed, company-wide authorized signer for every certificate issued — not tied to
+// whoever happens to be generating the document.
+const CERTIFICATE_SIGNER_NAME = "จิรนันท์ ทรัพย์ศรีโสภา";
+const CERTIFICATE_SIGNER_TITLE = "ผู้จัดการ";
+
 export async function generateCertificateAction(
   showSalary: boolean,
   purpose: string
@@ -47,9 +52,8 @@ export async function generateCertificateAction(
       showSalary,
       purpose: purpose || null,
       issueDate: new Date().toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" }),
-      // No designated signer configured yet — falls back to the generic "ฝ่ายบุคคล" label.
-      signerName: null,
-      signerTitle: null,
+      signerName: CERTIFICATE_SIGNER_NAME,
+      signerTitle: CERTIFICATE_SIGNER_TITLE,
     });
     return { base64: pdfBuffer.toString("base64"), filename: `certificate-${employee.employee_code}-${Date.now()}.pdf` };
   } catch (err) {
