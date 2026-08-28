@@ -72,7 +72,11 @@ export default function DayOffSwapPage() {
         .eq("employee_id", profile.employeeId)
         .eq("is_day_off", true)
         .gte("work_date", sixtyDaysAgo)
-        .order("work_date", { ascending: false })
+        // Ascending, not descending: a recurring weekly day-off (e.g. every Sat/Sun) can
+        // easily have 100+ rows stretching a year forward (shift_assignments are generated
+        // that far out — see ShiftAssignment.tsx), so a descending order capped at 60 kept
+        // only the farthest-future dates and silently dropped every near-term one.
+        .order("work_date", { ascending: true })
         .limit(60),
       supabase
         .from("day_off_swap_requests")

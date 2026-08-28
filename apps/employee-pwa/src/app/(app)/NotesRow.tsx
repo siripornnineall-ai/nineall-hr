@@ -129,9 +129,12 @@ export function NotesRow() {
             </span>
           );
           return (
-            <div key={t.employeeId} className="relative flex w-16 shrink-0 flex-col items-center gap-1 pt-6 text-center">
+            // No fixed/absolute width here on purpose: a note bubble wider than the avatar
+            // must actually push this tile wider in normal flow, or neighboring tiles'
+            // bubbles overlap it in the horizontal scroll row — that's the bug being fixed.
+            <div key={t.employeeId} className="flex min-w-16 shrink-0 flex-col items-center gap-1 text-center">
               {t.text && (
-                <div className="absolute -top-1 left-1/2 z-10 w-max max-w-[140px] -translate-x-1/2 whitespace-normal break-words rounded-xl bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold leading-snug text-on-surface shadow-[0_2px_10px_rgba(0,0,0,0.12)]">
+                <div className="w-max max-w-[110px] whitespace-normal break-words rounded-xl bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold leading-snug text-on-surface shadow-[0_2px_10px_rgba(0,0,0,0.12)]">
                   {t.text}
                 </div>
               )}
