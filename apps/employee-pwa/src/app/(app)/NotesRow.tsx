@@ -131,9 +131,9 @@ export function NotesRow() {
           return (
             <div key={t.employeeId} className="relative flex w-16 shrink-0 flex-col items-center gap-1 pt-6 text-center">
               {t.text && (
-                <span className="absolute -top-1 left-1/2 max-w-[90px] -translate-x-1/2 rounded-xl bg-white px-2 py-1 text-[10px] font-semibold leading-tight text-on-surface shadow-[0_2px_10px_rgba(0,0,0,0.12)]">
+                <div className="absolute -top-1 left-1/2 z-10 w-max max-w-[140px] -translate-x-1/2 whitespace-normal break-words rounded-xl bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold leading-snug text-on-surface shadow-[0_2px_10px_rgba(0,0,0,0.12)]">
                   {t.text}
-                </span>
+                </div>
               )}
               {t.isSelf ? (
                 <button onClick={() => setComposing((c) => !c)} className="relative">
