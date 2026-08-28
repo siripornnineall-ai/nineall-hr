@@ -72,9 +72,9 @@ export async function getLateLeaderboard(): Promise<LateLeaderboardRow[]> {
   }));
 }
 
-export async function getCookieLeaderboard(): Promise<CookieLeaderboardRow[]> {
+export async function getCookieLeaderboard(limit = 3): Promise<CookieLeaderboardRow[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_cookie_leaderboard");
+  const { data, error } = await supabase.rpc("get_cookie_leaderboard", { p_limit: limit });
   if (error || !data) return [];
   const rows = data as RawCookieRow[];
 

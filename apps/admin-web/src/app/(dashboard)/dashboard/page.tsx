@@ -24,7 +24,7 @@ export default async function DashboardPage() {
       .order("holiday_date")
       .limit(5),
     getLateLeaderboard(),
-    getCookieLeaderboard(),
+    getCookieLeaderboard(50),
   ]);
 
   return (
