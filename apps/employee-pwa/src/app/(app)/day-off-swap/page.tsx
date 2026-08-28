@@ -13,6 +13,8 @@ interface SwapRow {
   id: string;
   original_date: string;
   substitute_date: string;
+  unit: string;
+  period: string | null;
   reason: string | null;
   status: string;
 }
@@ -25,15 +27,33 @@ const STATUS_CLASS: Record<string, string> = {
   cancelled: "text-on-surface-variant",
 };
 
+function UnitChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+        active ? "border-primary bg-primary text-white font-bold" : "border-outline-variant text-on-surface-variant"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function DayOffSwapPage() {
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [dayOffOptions, setDayOffOptions] = useState<DayOffOption[]>([]);
   const [requests, setRequests] = useState<SwapRow[]>([]);
+  const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
 
   const [originalDate, setOriginalDate] = useState("");
   const [substituteDate, setSubstituteDate] = useState("");
+  const [unit, setUnit] = useState<"full_day" | "half_day">("full_day");
+  const [period, setPeriod] = useState<"morning" | "afternoon">("morning");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +65,7 @@ export default function DayOffSwapPage() {
     // their normal day off sometimes only asks for the swap afterwards, same as the
     // holiday-swap request form.
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const [{ data: offDays }, { data: swaps }] = await Promise.all([
+    const [{ data: offDays }, { data: swaps }, { data: holidays }] = await Promise.all([
       supabase
         .from("shift_assignments")
         .select("work_date")
@@ -56,13 +76,15 @@ export default function DayOffSwapPage() {
         .limit(60),
       supabase
         .from("day_off_swap_requests")
-        .select("id, original_date, substitute_date, reason, status")
+        .select("id, original_date, substitute_date, unit, period, reason, status")
         .eq("employee_id", profile.employeeId)
         .order("created_at", { ascending: false })
         .limit(20),
+      supabase.from("company_holidays").select("holiday_date").eq("org_id", profile.orgId),
     ]);
     setDayOffOptions(offDays ?? []);
     setRequests(swaps ?? []);
+    setHolidayDates(new Set((holidays ?? []).map((h) => h.holiday_date)));
     setLoaded(true);
   }, [profile, supabase]);
 
@@ -85,12 +107,26 @@ export default function DayOffSwapPage() {
       setError("วันหยุดเดิมและวันหยุดใหม่ต้องไม่ใช่วันเดียวกัน");
       return;
     }
+    if (holidayDates.has(substituteDate)) {
+      setError("วันที่เลือกเป็นวันหยุดนักขัตฤกษ์ กรุณาเลือกวันอื่น หรือใช้หน้าสลับวันหยุดนักขัตฤกษ์แทน");
+      return;
+    }
+    const activeRequests = requests.filter((r) => r.status === "pending" || r.status === "approved");
+    const dateInUse = activeRequests.some(
+      (r) => r.original_date === originalDate || r.original_date === substituteDate || r.substitute_date === originalDate || r.substitute_date === substituteDate
+    );
+    if (dateInUse) {
+      setError("วันที่เลือกมีคำขอสลับวันหยุดอื่นที่รออนุมัติ/อนุมัติแล้วอยู่ กรุณาเลือกวันอื่น");
+      return;
+    }
     setSubmitting(true);
     const { error: insertError } = await supabase.from("day_off_swap_requests").insert({
       org_id: profile!.orgId,
       employee_id: profile!.employeeId,
       original_date: originalDate,
       substitute_date: substituteDate,
+      unit,
+      period: unit === "half_day" ? period : null,
       reason: reason || null,
       status: "pending",
     });
@@ -101,6 +137,7 @@ export default function DayOffSwapPage() {
     }
     setOriginalDate("");
     setSubstituteDate("");
+    setUnit("full_day");
     setReason("");
     setSuccess("ส่งคำขอสลับวันหยุดเรียบร้อยแล้ว รอ HR อนุมัติ");
     load();
@@ -128,6 +165,25 @@ export default function DayOffSwapPage() {
           </select>
           {dayOffOptions.length === 0 && loaded && <p className="mt-1 text-xs text-on-surface-variant">ไม่พบวันหยุดที่กำหนดไว้ล่วงหน้าในตารางกะของคุณ</p>}
         </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">จำนวนที่จะทำงาน</label>
+          <div className="flex flex-wrap gap-2">
+            <UnitChip label="เต็มวัน" active={unit === "full_day"} onClick={() => setUnit("full_day")} />
+            <UnitChip label="ครึ่งวัน" active={unit === "half_day"} onClick={() => setUnit("half_day")} />
+          </div>
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {unit === "full_day" ? "ทำงานเต็มวันหยุดเดิม แลกกับวันหยุดใหม่เต็มวัน" : "ทำงานครึ่งวันหยุดเดิม แลกกับหยุดช่วงเดียวกันในวันที่เลือก"}
+          </p>
+        </div>
+        {unit === "half_day" && (
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">ช่วงที่จะทำงาน (วันหยุดเดิม)</label>
+            <div className="flex gap-2">
+              <UnitChip label="เช้า" active={period === "morning"} onClick={() => setPeriod("morning")} />
+              <UnitChip label="บ่าย" active={period === "afternoon"} onClick={() => setPeriod("afternoon")} />
+            </div>
+          </div>
+        )}
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันที่ขอหยุดแทน</label>
           <input
@@ -161,7 +217,8 @@ export default function DayOffSwapPage() {
             <div key={r.id} className="flex items-center justify-between rounded-2xl bg-white p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
               <div>
                 <p className="font-semibold text-on-surface">
-                  ทำงาน {new Date(r.original_date).toLocaleDateString("th-TH")} → หยุด {new Date(r.substitute_date).toLocaleDateString("th-TH")}
+                  ทำงาน {new Date(r.original_date).toLocaleDateString("th-TH")}
+                  {r.unit === "half_day" && ` (${r.period === "morning" ? "เช้า" : "บ่าย"})`} → หยุด {new Date(r.substitute_date).toLocaleDateString("th-TH")}
                 </p>
                 {r.reason && <p className="text-xs text-on-surface-variant">{r.reason}</p>}
               </div>

@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { parseBangkokDateTime } from "@/lib/bangkokTime";
+
+// Matches the half-day convention already used for leave and holiday-swap: morning =
+// 08:00-12:00, afternoon = 13:00-17:00.
+const HALF_DAY_TIMES: Record<string, { start: string; end: string }> = {
+  morning: { start: "08:00", end: "12:00" },
+  afternoon: { start: "13:00", end: "17:00" },
+};
 
 export async function decideDayOffSwapRequest(requestId: string, decision: "approved" | "rejected") {
   const user = await requireUser();
@@ -11,7 +19,7 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
 
   const { data: request } = await supabase
     .from("day_off_swap_requests")
-    .select("org_id, employee_id, original_date, substitute_date")
+    .select("org_id, employee_id, original_date, substitute_date, unit, period")
     .eq("id", requestId)
     .eq("org_id", user.orgId)
     .single();
@@ -36,19 +44,6 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
       .limit(1)
       .maybeSingle();
 
-    await supabase.from("shift_assignments").upsert(
-      {
-        org_id: request.org_id,
-        employee_id: request.employee_id,
-        work_date: request.original_date,
-        shift_id: defaultAssignment?.shift_id ?? null,
-        work_location_id: defaultAssignment?.work_location_id ?? null,
-        is_day_off: false,
-        source: "day_off_swap",
-      },
-      { onConflict: "employee_id,work_date" }
-    );
-
     // For a retroactive swap (original_date already in the past), syncDayOffAttendance may
     // have already auto-filled a "day_off" placeholder for that date before the employee
     // asked for the swap — clear it so their real clock-in (if any) shows through instead,
@@ -60,18 +55,58 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
       .eq("work_date", request.original_date)
       .eq("status", "day_off");
 
-    await supabase.from("shift_assignments").upsert(
-      {
-        org_id: request.org_id,
-        employee_id: request.employee_id,
-        work_date: request.substitute_date,
-        shift_id: null,
-        work_location_id: null,
-        is_day_off: true,
-        source: "day_off_swap",
-      },
-      { onConflict: "employee_id,work_date" }
-    );
+    if (request.unit === "half_day" && request.period) {
+      // Only the worked half of the original day off is automated — there's no
+      // half-day-off flag on shift_assignments (same limitation as half-day leave), so the
+      // substitute date is deliberately left untouched; the employee's real clock-in on
+      // that date naturally reflects the shorter day HR agreed to.
+      const times = HALF_DAY_TIMES[request.period];
+      const clockIn = parseBangkokDateTime(request.original_date, times.start);
+      const clockOut = parseBangkokDateTime(request.original_date, times.end);
+      await supabase.from("attendance_records").upsert(
+        {
+          org_id: request.org_id,
+          employee_id: request.employee_id,
+          work_date: request.original_date,
+          shift_id: defaultAssignment?.shift_id ?? null,
+          work_location_id: defaultAssignment?.work_location_id ?? null,
+          clock_in_server_at: clockIn.toISOString(),
+          clock_out_server_at: clockOut.toISOString(),
+          status: "on_time",
+          late_minutes: 0,
+          early_leave_minutes: 0,
+          worked_minutes: Math.round((clockOut.getTime() - clockIn.getTime()) / 60000),
+          needs_review: false,
+        },
+        { onConflict: "employee_id,work_date" }
+      );
+    } else {
+      await supabase.from("shift_assignments").upsert(
+        {
+          org_id: request.org_id,
+          employee_id: request.employee_id,
+          work_date: request.original_date,
+          shift_id: defaultAssignment?.shift_id ?? null,
+          work_location_id: defaultAssignment?.work_location_id ?? null,
+          is_day_off: false,
+          source: "day_off_swap",
+        },
+        { onConflict: "employee_id,work_date" }
+      );
+
+      await supabase.from("shift_assignments").upsert(
+        {
+          org_id: request.org_id,
+          employee_id: request.employee_id,
+          work_date: request.substitute_date,
+          shift_id: null,
+          work_location_id: null,
+          is_day_off: true,
+          source: "day_off_swap",
+        },
+        { onConflict: "employee_id,work_date" }
+      );
+    }
   }
 
   revalidatePath("/day-off-swap");

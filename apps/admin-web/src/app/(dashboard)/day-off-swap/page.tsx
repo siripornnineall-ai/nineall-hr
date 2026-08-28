@@ -10,7 +10,9 @@ export default async function DayOffSwapPage() {
 
   const { data } = await supabase
     .from("day_off_swap_requests")
-    .select("id, original_date, substitute_date, reason, status, employees!day_off_swap_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url)")
+    .select(
+      "id, original_date, substitute_date, unit, period, reason, status, employees!day_off_swap_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url)"
+    )
     .eq("org_id", user.orgId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -29,6 +31,8 @@ export default async function DayOffSwapPage() {
       employeePhotoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
       originalDate: r.original_date,
       substituteDate: r.substitute_date,
+      unit: r.unit,
+      period: r.period,
       reason: r.reason,
       status: r.status,
     };
