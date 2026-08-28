@@ -79,13 +79,16 @@ function computeSocialSecurity(grossEarningsSatang: number, policy: PayrollPolic
 }
 
 /**
- * Simplified withholding-tax estimate: annualizes the monthly gross, applies the
- * configured progressive brackets, then divides by 12. This ignores personal
- * allowances/deductions and must be reviewed by an accountant before production use
- * — see docs/PAYROLL_RULES.md. Never treat this as authoritative Thai PIT law.
+ * Simplified withholding-tax estimate for section 40(1) income (regular employment
+ * salary/wages): annualizes the prorated BASE salary only — not OT, allowances, or other
+ * one-off earnings, which fall under section 40(2) and aren't predictable enough to
+ * annualize the same way — applies the configured progressive brackets, then divides by
+ * 12. This ignores personal allowances/deductions and must be reviewed by an accountant
+ * before production use — see docs/PAYROLL_RULES.md. Never treat this as authoritative
+ * Thai PIT law. Any 40(2) withholding on other benefits is entered by HR by hand.
  */
-function computeTax(grossEarningsSatang: number, brackets: PayrollPolicyConfig["taxBrackets"]): number {
-  const annualIncome = grossEarningsSatang * 12;
+function computeTax(baseSatang: number, brackets: PayrollPolicyConfig["taxBrackets"]): number {
+  const annualIncome = baseSatang * 12;
   let remaining = annualIncome;
   let lowerBound = 0;
   let annualTax = 0;
@@ -158,7 +161,7 @@ export function calculatePayrollForEmployee(input: PayrollEmployeeInput): Payrol
   // rules — OT pay and other earnings on top of it don't count toward the base, unlike
   // withholding tax below which is computed on the full gross.
   const socialSecuritySatang = computeSocialSecurity(proratedBaseSatang, input.policy.socialSecurity);
-  const taxSatang = computeTax(grossEarningsSatang, input.policy.taxBrackets);
+  const taxSatang = computeTax(proratedBaseSatang, input.policy.taxBrackets);
 
   const totalDeductionsSatang = addSatang(preStatutoryDeductionsSatang, socialSecuritySatang, taxSatang);
   const netPaySatang = subSatang(grossEarningsSatang, totalDeductionsSatang);

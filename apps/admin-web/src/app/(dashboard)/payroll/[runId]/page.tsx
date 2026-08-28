@@ -3,6 +3,8 @@ import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { signAvatarUrls } from "@/lib/avatars";
+import { loadPolicyConfig } from "@/lib/payroll/policy";
+import { satangToBaht } from "@nineall-hr/payroll-engine";
 import { RunActions } from "./RunActions";
 import { PayrollCalcRow } from "./PayrollCalcRow";
 
@@ -29,6 +31,14 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
     .eq("org_id", user.orgId)
     .maybeSingle();
   if (!run) notFound();
+
+  const runPeriod = run.payroll_periods as unknown as { period_end: string } | null;
+  const policy = await loadPolicyConfig(user.orgId, runPeriod?.period_end ?? new Date().toISOString().slice(0, 10));
+  const ssPolicy = {
+    employeeRate: policy.socialSecurity.employeeRate,
+    minBase: satangToBaht(policy.socialSecurity.minBaseSatang),
+    maxContribution: satangToBaht(policy.socialSecurity.maxContributionSatang),
+  };
 
   const { data: calculations } = await supabase
     .from("payroll_employee_calculations")
@@ -153,7 +163,10 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                       grossEarnings: Number(c.gross_earnings),
                       totalDeductions: Number(c.total_deductions),
                       socialSecurityAmount: Number(c.social_security_amount),
+                      socialSecurityAutoCalc: c.social_security_auto_calc,
                       taxAmount: Number(c.tax_amount),
+                      wht40_1Amount: Number(c.wht_40_1_amount),
+                      wht40_2Amount: Number(c.wht_40_2_amount),
                       netPay: Number(c.net_pay),
                       hasAnomaly: c.has_anomaly,
                       anomalyNotes: c.anomaly_notes,
@@ -161,6 +174,7 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                       deductionItems: deductionItemsByCalcId.get(c.id) ?? [],
                       payslipUrl: payslipUrlByCalcId.get(c.id) ?? null,
                     }}
+                    ssPolicy={ssPolicy}
                   />
                 ))}
               </tbody>

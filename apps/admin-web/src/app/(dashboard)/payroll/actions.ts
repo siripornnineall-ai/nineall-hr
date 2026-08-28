@@ -247,7 +247,10 @@ export async function calculatePayrollRunAction(runId: string) {
           gross_earnings: satangToBaht(result.grossEarningsSatang),
           total_deductions: satangToBaht(result.totalDeductionsSatang),
           social_security_amount: satangToBaht(result.socialSecuritySatang),
+          social_security_auto_calc: true,
           tax_amount: satangToBaht(result.taxSatang),
+          wht_40_1_amount: satangToBaht(result.taxSatang),
+          wht_40_2_amount: 0,
           net_pay: satangToBaht(result.netPaySatang),
           has_anomaly: result.hasAnomaly || hasMissingData,
           anomaly_notes: [...result.anomalyNotes, ...(hasMissingData ? ["ไม่พบข้อมูลเงินเดือน/เวลาเข้างานครบถ้วน"] : [])].join("; ") || null,
@@ -516,7 +519,9 @@ export async function updatePayrollCalcAction(
     baseAmount: string;
     otAmount: string;
     socialSecurityAmount: string;
-    taxAmount: string;
+    socialSecurityAutoCalc: boolean;
+    wht40_1Amount: string;
+    wht40_2Amount: string;
     earningItems: PayrollLineItem[];
     deductionItems: PayrollLineItem[];
   }
@@ -536,17 +541,23 @@ export async function updatePayrollCalcAction(
   const baseAmount = Number(values.baseAmount);
   const otAmount = Number(values.otAmount);
   const socialSecurityAmount = Number(values.socialSecurityAmount);
-  const taxAmount = Number(values.taxAmount);
-  if (![baseAmount, otAmount, socialSecurityAmount, taxAmount].every(Number.isFinite)) {
+  const wht40_1Amount = Number(values.wht40_1Amount);
+  const wht40_2Amount = Number(values.wht40_2Amount);
+  if (![baseAmount, otAmount, socialSecurityAmount, wht40_1Amount, wht40_2Amount].every(Number.isFinite)) {
     return { error: "จำนวนเงินไม่ถูกต้อง" };
   }
+  const taxAmount = wht40_1Amount + wht40_2Amount;
 
   const earningItems = values.earningItems.filter((i) => i.label.trim() && Number.isFinite(i.amount));
   const deductionItems = values.deductionItems.filter((i) => i.label.trim() && Number.isFinite(i.amount));
   const earningItemsTotal = earningItems.reduce((sum, i) => sum + i.amount, 0);
   const deductionItemsTotal = deductionItems.reduce((sum, i) => sum + i.amount, 0);
 
-  const grossEarnings = baseAmount + otAmount + earningItemsTotal;
+  // otAmount isn't added separately — calculatePayrollRunAction always includes OT as its
+  // own row inside earningItems ("ค่าล่วงเวลา (OT)"), so adding both here double-counts it.
+  // otAmount is kept purely as the figure shown in the run table's "OT" column and on the
+  // payslip PDF.
+  const grossEarnings = baseAmount + earningItemsTotal;
   const totalDeductions = socialSecurityAmount + taxAmount + deductionItemsTotal;
   const netPay = grossEarnings - totalDeductions;
 
@@ -556,7 +567,10 @@ export async function updatePayrollCalcAction(
       base_amount: baseAmount,
       ot_amount: otAmount,
       social_security_amount: socialSecurityAmount,
+      social_security_auto_calc: values.socialSecurityAutoCalc,
       tax_amount: taxAmount,
+      wht_40_1_amount: wht40_1Amount,
+      wht_40_2_amount: wht40_2Amount,
       gross_earnings: grossEarnings,
       total_deductions: totalDeductions,
       net_pay: netPay,

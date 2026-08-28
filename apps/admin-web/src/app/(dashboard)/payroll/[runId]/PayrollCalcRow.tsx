@@ -20,7 +20,10 @@ export interface PayrollCalcRowData {
   grossEarnings: number;
   totalDeductions: number;
   socialSecurityAmount: number;
+  socialSecurityAutoCalc: boolean;
   taxAmount: number;
+  wht40_1Amount: number;
+  wht40_2Amount: number;
   netPay: number;
   hasAnomaly: boolean;
   anomalyNotes: string | null;
@@ -29,32 +32,85 @@ export interface PayrollCalcRowData {
   payslipUrl: string | null;
 }
 
+export interface SsPolicy {
+  employeeRate: number;
+  minBase: number;
+  maxContribution: number;
+}
+
+// Always shown on the "รายการปรับลด" side, in this order, even at zero — matches the
+// deduction types HR actually tracks every run. Anything beyond these four is a genuine
+// one-off, added via "+ เพิ่มรายการปรับลด".
+const DEDUCTION_PRESETS = ["หักขาด/ลา/มาสาย", "เงินหักอื่นๆ", "หักลาไม่รับค่าจ้าง", "เงินเบิกล่วงหน้า"];
+
+function seedDeductionItems(items: LineItem[]): LineItem[] {
+  const byLabel = new Map(items.map((i) => [i.label, i.amount]));
+  const presetRows = DEDUCTION_PRESETS.map((label) => ({ label, amount: byLabel.get(label) ?? 0 }));
+  const extraRows = items.filter((i) => !DEDUCTION_PRESETS.includes(i.label));
+  return [...presetRows, ...extraRows];
+}
+
+function computeAutoSocialSecurity(baseAmount: number, policy: SsPolicy): number {
+  if (!Number.isFinite(baseAmount) || baseAmount <= 0) return 0;
+  const cappedBase = Math.max(policy.minBase, Math.min(baseAmount, policy.employeeRate > 0 ? policy.maxContribution / policy.employeeRate : baseAmount));
+  return Math.round(Math.min(cappedBase * policy.employeeRate, policy.maxContribution) * 100) / 100;
+}
+
 function fmt(n: number): string {
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function PayrollCalcRow({ row }: { row: PayrollCalcRowData }) {
+export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssPolicy: SsPolicy }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [baseAmount, setBaseAmount] = useState(String(row.baseAmount));
   const [otAmount, setOtAmount] = useState(String(row.otAmount));
   const [socialSecurityAmount, setSocialSecurityAmount] = useState(String(row.socialSecurityAmount));
-  const [taxAmount, setTaxAmount] = useState(String(row.taxAmount));
+  const [socialSecurityAutoCalc, setSocialSecurityAutoCalc] = useState(row.socialSecurityAutoCalc);
+  const [wht40_1Amount, setWht40_1Amount] = useState(String(row.wht40_1Amount));
+  const [wht40_2Amount, setWht40_2Amount] = useState(String(row.wht40_2Amount));
   const [earningItems, setEarningItems] = useState<LineItem[]>(row.earningItems);
-  const [deductionItems, setDeductionItems] = useState<LineItem[]>(row.deductionItems);
+  const [deductionItems, setDeductionItems] = useState<LineItem[]>(() => seedDeductionItems(row.deductionItems));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  function updateBaseAmount(value: string) {
+    setBaseAmount(value);
+    if (socialSecurityAutoCalc) {
+      setSocialSecurityAmount(String(computeAutoSocialSecurity(Number(value) || 0, ssPolicy)));
+    }
+  }
+
+  function toggleSocialSecurityAutoCalc(checked: boolean) {
+    setSocialSecurityAutoCalc(checked);
+    if (checked) {
+      setSocialSecurityAmount(String(computeAutoSocialSecurity(Number(baseAmount) || 0, ssPolicy)));
+    }
+  }
+
   const earningItemsTotal = earningItems.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
   const deductionItemsTotal = deductionItems.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-  const previewGross = (Number(baseAmount) || 0) + (Number(otAmount) || 0) + earningItemsTotal;
-  const previewDeductions = (Number(socialSecurityAmount) || 0) + (Number(taxAmount) || 0) + deductionItemsTotal;
+  // otAmount isn't added separately — the engine always includes OT as its own row inside
+  // earningItems ("ค่าล่วงเวลา (OT)"), so summing both here would double it. otAmount is kept
+  // only as the figure shown in the outer table's "OT" column / used on the payslip.
+  const previewGross = (Number(baseAmount) || 0) + earningItemsTotal;
+  const previewTax = (Number(wht40_1Amount) || 0) + (Number(wht40_2Amount) || 0);
+  const previewDeductions = (Number(socialSecurityAmount) || 0) + previewTax + deductionItemsTotal;
   const previewNet = previewGross - previewDeductions;
 
   function save() {
     setError(null);
     startTransition(async () => {
-      const result = await updatePayrollCalcAction(row.id, { baseAmount, otAmount, socialSecurityAmount, taxAmount, earningItems, deductionItems });
+      const result = await updatePayrollCalcAction(row.id, {
+        baseAmount,
+        otAmount,
+        socialSecurityAmount,
+        socialSecurityAutoCalc,
+        wht40_1Amount,
+        wht40_2Amount,
+        earningItems,
+        deductionItems,
+      });
       if (result?.error) setError(result.error);
       else setEditing(false);
     });
@@ -72,22 +128,65 @@ export function PayrollCalcRow({ row }: { row: PayrollCalcRowData }) {
     return (
       <tr>
         <td className="px-3 py-4" colSpan={11}>
-          <div className="space-y-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
-            <p className="font-bold">
-              {row.employeeName} ({row.employeeCode})
-            </p>
-
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <NumberField label="เงินเดือนพื้นฐาน" value={baseAmount} onChange={setBaseAmount} />
-              <NumberField label="OT" value={otAmount} onChange={setOtAmount} />
-              <NumberField label="ประกันสังคม" value={socialSecurityAmount} onChange={setSocialSecurityAmount} />
-              <NumberField label="ภาษี" value={taxAmount} onChange={setTaxAmount} />
+          <div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-outline-variant bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-base font-bold">ข้อมูลเงินเดือน/ค่าจ้าง</p>
+                <p className="text-xs text-on-surface-variant">
+                  {row.employeeName} ({row.employeeCode})
+                </p>
+              </div>
+              <button onClick={() => setEditing(false)} disabled={isPending} className="text-on-surface-variant hover:text-on-surface">
+                <span className="material-symbols-outlined">close</span>
+              </button>
             </div>
 
-            <LineItemEditor title="รายการปรับเพิ่ม" items={earningItems} onChange={setEarningItems} tone="text-status-success" />
-            <LineItemEditor title="รายการปรับลด" items={deductionItems} onChange={setDeductionItems} tone="text-status-danger" />
+            <div className="space-y-3">
+              <FieldRow label="เงินเดือน:" value={baseAmount} onChange={updateBaseAmount} />
+              <FieldRow label="ค่าล่วงเวลารวม (OT):" value={otAmount} onChange={setOtAmount} />
 
-            <div className="grid grid-cols-2 gap-2 rounded-lg bg-white p-3 text-sm md:grid-cols-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1 text-sm text-on-surface-variant">
+                    ประกันสังคม:
+                    <span className="material-symbols-outlined text-[16px] text-on-surface-variant" title="คำนวณตามอัตราและเพดานที่ตั้งไว้ในระบบ">
+                      info
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={socialSecurityAmount}
+                    onChange={(e) => setSocialSecurityAmount(e.target.value)}
+                    disabled={socialSecurityAutoCalc}
+                    className="h-9 w-36 rounded-lg border border-outline-variant bg-surface-container-low px-3 text-right text-sm disabled:bg-surface-container disabled:text-on-surface-variant"
+                  />
+                </div>
+                <label className="mt-1.5 flex items-center justify-end gap-1.5 text-xs text-on-surface-variant">
+                  <input type="checkbox" checked={socialSecurityAutoCalc} onChange={(e) => toggleSocialSecurityAutoCalc(e.target.checked)} />
+                  คำนวณประกันสังคมอัตโนมัติ
+                </label>
+              </div>
+
+              <FieldRow label="หัก ณ ที่จ่าย 40(1):" value={wht40_1Amount} onChange={setWht40_1Amount} />
+              <FieldRow label="หัก ณ ที่จ่าย 40(2):" value={wht40_2Amount} onChange={setWht40_2Amount} />
+              <p className="rounded-lg bg-surface-container-low p-3 text-xs leading-relaxed text-on-surface-variant">
+                <span className="material-symbols-outlined mr-1 align-text-bottom text-[14px]">info</span>
+                ยอดหัก ณ ที่จ่าย 40(1) ระบบคำนวณให้อัตโนมัติจากฐานเงินเดือนของพนักงานเท่านั้น หากจ่ายผลประโยชน์อื่น สามารถคำนวณเองและกรอกที่ช่องหัก ณ ที่จ่าย 40(1) และ (2)
+              </p>
+            </div>
+
+            <LineItemEditor title="รายการปรับเพิ่ม" items={earningItems} onChange={setEarningItems} tone="text-status-success" addLabel="+ เพิ่มรายการปรับเพิ่ม" />
+            <LineItemEditor
+              title="รายการปรับลด"
+              items={deductionItems}
+              onChange={setDeductionItems}
+              tone="text-status-danger"
+              addLabel="+ เพิ่มรายการปรับลด"
+              lockedLabels={DEDUCTION_PRESETS}
+            />
+
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-surface-container-low p-3 text-sm">
               <div>
                 <span className="text-on-surface-variant">รายได้รวม: </span>
                 <span className="font-bold">{fmt(previewGross)}</span>
@@ -171,16 +270,16 @@ export function PayrollCalcRow({ row }: { row: PayrollCalcRowData }) {
   );
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function FieldRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <div>
-      <label className="mb-1 block text-xs font-semibold text-on-surface-variant">{label}</label>
+    <div className="flex items-center justify-between">
+      <label className="text-sm text-on-surface-variant">{label}</label>
       <input
         type="number"
         step="0.01"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full rounded-lg border border-outline-variant bg-white px-3 text-sm"
+        className="h-9 w-36 rounded-lg border border-outline-variant bg-surface-container-low px-3 text-right text-sm"
       />
     </div>
   );
@@ -191,11 +290,15 @@ function LineItemEditor({
   items,
   onChange,
   tone,
+  addLabel,
+  lockedLabels,
 }: {
   title: string;
   items: LineItem[];
   onChange: (items: LineItem[]) => void;
   tone: string;
+  addLabel: string;
+  lockedLabels?: string[];
 }) {
   function updateItem(idx: number, field: keyof LineItem, value: string) {
     const next = [...items];
@@ -213,28 +316,37 @@ function LineItemEditor({
     <div>
       <p className={`mb-2 text-sm font-bold ${tone}`}>{title}</p>
       <div className="space-y-2">
-        {items.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-2">
-            <input
-              value={item.label}
-              onChange={(e) => updateItem(idx, "label", e.target.value)}
-              placeholder="รายการ"
-              className="h-9 flex-1 rounded-lg border border-outline-variant bg-white px-3 text-sm"
-            />
-            <input
-              type="number"
-              step="0.01"
-              value={item.amount}
-              onChange={(e) => updateItem(idx, "amount", e.target.value)}
-              className="h-9 w-32 rounded-lg border border-outline-variant bg-white px-3 text-sm"
-            />
-            <button onClick={() => removeItem(idx)} className="text-xs font-bold text-status-danger">
-              ลบ
-            </button>
-          </div>
-        ))}
+        {items.map((item, idx) => {
+          const locked = lockedLabels?.includes(item.label);
+          return (
+            <div key={idx} className="flex items-center gap-2">
+              {locked ? (
+                <span className="flex-1 text-sm text-on-surface-variant">{item.label}</span>
+              ) : (
+                <input
+                  value={item.label}
+                  onChange={(e) => updateItem(idx, "label", e.target.value)}
+                  placeholder="รายการ"
+                  className="h-9 flex-1 rounded-lg border border-outline-variant bg-white px-3 text-sm"
+                />
+              )}
+              <input
+                type="number"
+                step="0.01"
+                value={item.amount}
+                onChange={(e) => updateItem(idx, "amount", e.target.value)}
+                className="h-9 w-32 rounded-lg border border-outline-variant bg-surface-container-low px-3 text-right text-sm"
+              />
+              {!locked && (
+                <button onClick={() => removeItem(idx)} className="text-xs font-bold text-status-danger">
+                  ลบ
+                </button>
+              )}
+            </div>
+          );
+        })}
         <button onClick={addItem} className="text-xs font-bold text-primary hover:underline">
-          + เพิ่มรายการ
+          {addLabel}
         </button>
       </div>
     </div>
