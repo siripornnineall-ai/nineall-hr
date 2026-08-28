@@ -1,5 +1,54 @@
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { signAvatarUrls } from "@/lib/avatars";
+
+// work_date is a plain YYYY-MM-DD with no time component, so parsing it as UTC midnight and
+// reading getUTCDay() back out is just calendar arithmetic — never affected by server/client
+// timezone the way a real instant would be.
+function weekdayOf(workDate: string): number {
+  return new Date(`${workDate}T00:00:00Z`).getUTCDay();
+}
+
+// shift_assignments only ever has rows from around "today" forward — nothing backfills it
+// for past dates (see /schedule) — so a past date genuinely has no row even for an
+// employee's completely ordinary weekly day off (e.g. every Sat/Sun). Infer each employee's
+// regular off-weekdays from whatever rows they DO have (majority vote per weekday, so one
+// swapped exception doesn't undo an otherwise-consistent pattern), so a past date can still
+// be recognized as "their normal day off" instead of wrongly counting as absent.
+async function inferRegularDayOffWeekdays(supabase: SupabaseClient, orgId: string): Promise<Map<string, Set<number>>> {
+  const { data: rows } = await supabase.from("shift_assignments").select("employee_id, work_date, is_day_off").eq("org_id", orgId);
+
+  const tally = new Map<string, Map<number, { off: number; working: number }>>();
+  for (const r of rows ?? []) {
+    const weekday = weekdayOf(r.work_date);
+    let byWeekday = tally.get(r.employee_id);
+    if (!byWeekday) {
+      byWeekday = new Map();
+      tally.set(r.employee_id, byWeekday);
+    }
+    const counts = byWeekday.get(weekday) ?? { off: 0, working: 0 };
+    if (r.is_day_off) counts.off += 1;
+    else counts.working += 1;
+    byWeekday.set(weekday, counts);
+  }
+
+  const result = new Map<string, Set<number>>();
+  for (const [employeeId, byWeekday] of tally) {
+    // An employee with zero "working" rows across every weekday (e.g. someone who has
+    // never had a real shift on file, only ever WFH marked in by hand) gives no real
+    // signal here — every weekday would trivially "win" and every date would be inferred
+    // as their day off, which is wrong. Skip inference entirely for them.
+    const hasAnyWorkingRow = Array.from(byWeekday.values()).some((c) => c.working > 0);
+    if (!hasAnyWorkingRow) continue;
+
+    const weekdays = new Set<number>();
+    for (const [weekday, counts] of byWeekday) {
+      if (counts.off > counts.working) weekdays.add(weekday);
+    }
+    result.set(employeeId, weekdays);
+  }
+  return result;
+}
 
 // Public holidays never had any presence on the Attendance page — employees who correctly
 // stayed home simply didn't show up in the list at all, indistinguishable from any other
@@ -54,18 +103,31 @@ export async function syncHolidayAttendance(orgId: string, workDate: string): Pr
 export async function syncDayOffAttendance(orgId: string, workDate: string): Promise<void> {
   const supabase = await createClient();
 
-  const [{ data: assignments }, { data: existingRecords }] = await Promise.all([
+  const [{ data: assignments }, { data: existingRecords }, { data: employees }, inferredWeekdays] = await Promise.all([
     supabase.from("shift_assignments").select("employee_id").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
+    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]),
+    inferRegularDayOffWeekdays(supabase, orgId),
   ]);
 
   const hasRecord = new Set((existingRecords ?? []).map((r) => r.employee_id));
-  const toMark = (assignments ?? []).filter((a) => !hasRecord.has(a.employee_id));
+  const explicitDayOff = new Set((assignments ?? []).map((a) => a.employee_id));
+  const weekday = weekdayOf(workDate);
+
+  // Explicit shift_assignments row wins when there is one; otherwise fall back to the
+  // employee's inferred regular pattern — this is what actually catches a past date with
+  // no row at all (shift_assignments is never backfilled for past dates).
+  const toMarkIds = new Set(explicitDayOff);
+  for (const e of employees ?? []) {
+    if (!explicitDayOff.has(e.id) && (inferredWeekdays.get(e.id)?.has(weekday) ?? false)) toMarkIds.add(e.id);
+  }
+
+  const toMark = Array.from(toMarkIds).filter((id) => !hasRecord.has(id));
   if (toMark.length > 0) {
     await supabase.from("attendance_records").upsert(
-      toMark.map((a) => ({
+      toMark.map((employeeId) => ({
         org_id: orgId,
-        employee_id: a.employee_id,
+        employee_id: employeeId,
         work_date: workDate,
         status: "day_off" as const,
         late_minutes: 0,
