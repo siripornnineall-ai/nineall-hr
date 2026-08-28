@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { LateLeaderboardCard, CookieLeaderboardCard } from "./LeaderboardCards";
+import { MyNoteWidget } from "./MyNoteWidget";
+import { NotesRow } from "./NotesRow";
 
 interface HomeStats {
   leaveDaysRemaining: number;
@@ -127,6 +129,9 @@ export default function HomePage() {
       </header>
 
       <div className="-mt-4 space-y-4 px-4">
+        <MyNoteWidget />
+        <NotesRow />
+
         <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
           <span
             className="material-symbols-outlined text-[24px]"
