@@ -49,6 +49,17 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
       { onConflict: "employee_id,work_date" }
     );
 
+    // For a retroactive swap (original_date already in the past), syncDayOffAttendance may
+    // have already auto-filled a "day_off" placeholder for that date before the employee
+    // asked for the swap — clear it so their real clock-in (if any) shows through instead,
+    // same as the holiday-swap flow does for a stale "holiday" marker.
+    await supabase
+      .from("attendance_records")
+      .delete()
+      .eq("employee_id", request.employee_id)
+      .eq("work_date", request.original_date)
+      .eq("status", "day_off");
+
     await supabase.from("shift_assignments").upsert(
       {
         org_id: request.org_id,

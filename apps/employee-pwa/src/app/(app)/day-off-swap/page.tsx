@@ -41,16 +41,19 @@ export default function DayOffSwapPage() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const today = new Date().toISOString().slice(0, 10);
+    // Includes past days off too, not just upcoming — an employee who worked through
+    // their normal day off sometimes only asks for the swap afterwards, same as the
+    // holiday-swap request form.
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const [{ data: offDays }, { data: swaps }] = await Promise.all([
       supabase
         .from("shift_assignments")
         .select("work_date")
         .eq("employee_id", profile.employeeId)
         .eq("is_day_off", true)
-        .gte("work_date", today)
-        .order("work_date")
-        .limit(30),
+        .gte("work_date", sixtyDaysAgo)
+        .order("work_date", { ascending: false })
+        .limit(60),
       supabase
         .from("day_off_swap_requests")
         .select("id, original_date, substitute_date, reason, status")
