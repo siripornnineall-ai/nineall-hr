@@ -8,6 +8,12 @@ import type {
 } from "./types";
 
 const STANDARD_HOURS_PER_DAY = 8;
+// The conventional "30 days a month" Thai payroll uses for pro-rata monthly salary on a
+// mid-cycle join/exit (salary ÷ 30 × days employed) — independent of the actual number of
+// days in that calendar month (28-31) and of the employee's configured work_days_per_month
+// (which is a different concept: the working-day count used to derive an hourly/daily
+// rate equivalent, not the denominator for date-range proration).
+const STANDARD_DAYS_PER_MONTH = 30;
 
 function daysBetweenInclusive(start: string, end: string): number {
   const s = new Date(`${start}T00:00:00`);
@@ -40,7 +46,7 @@ function computeProratedBase(input: PayrollEmployeeInput): {
   isMidCycleExit: boolean;
 } {
   const { employmentType, baseAmountSatang, periodStart, periodEnd, hireDate, resignationDate } = input;
-  const totalCalendarDays = daysBetweenInclusive(periodStart, periodEnd);
+  const totalCalendarDays = STANDARD_DAYS_PER_MONTH;
 
   const isMidCycleJoin = Boolean(hireDate && hireDate > periodStart);
   const isMidCycleExit = Boolean(resignationDate && resignationDate < periodEnd);
@@ -75,7 +81,9 @@ function computeProratedBase(input: PayrollEmployeeInput): {
 
 function computeSocialSecurity(grossEarningsSatang: number, policy: PayrollPolicyConfig["socialSecurity"]): number {
   const base = Math.max(policy.minBaseSatang, Math.min(grossEarningsSatang, policy.maxContributionSatang / policy.employeeRate));
-  return Math.min(mulSatang(base, policy.employeeRate), policy.maxContributionSatang);
+  const rawContributionSatang = Math.min(mulSatang(base, policy.employeeRate), policy.maxContributionSatang);
+  // Thai SSO contributions are remitted in whole baht, not satang — round to the nearest 100 satang.
+  return Math.round(rawContributionSatang / 100) * 100;
 }
 
 /**

@@ -46,8 +46,10 @@ describe("calculatePayrollForEmployee", () => {
       baseInput({ hireDate: "2026-08-16", periodStart: "2026-08-01", periodEnd: "2026-08-31" })
     );
     expect(result.isMidCycleJoin).toBe(true);
-    // 16 days employed out of 31 calendar days
-    expect(satangToBaht(result.proratedBaseSatang)).toBeCloseTo((30_000 * 16) / 31, 0);
+    // 16 days employed out of the standard 30-day month convention — not the calendar's
+    // actual day count, so the same half-month doesn't pay differently in a 30- vs 31-day
+    // month.
+    expect(satangToBaht(result.proratedBaseSatang)).toBeCloseTo((30_000 * 16) / 30, 0);
   });
 
   it("deducts unpaid leave days at the prorated daily rate", () => {
