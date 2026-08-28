@@ -148,16 +148,10 @@ export async function calculatePayrollRunAction(runId: string) {
     if (!comp) return null; // no compensation on file yet — surfaced in the UI as "missing data"
 
     const otWindow = getOtCutoffWindow(period.period_start.slice(0, 7));
-    const [{ data: attendance }, { data: shiftAssignments }, { data: overtime }, { data: unpaidLeave }] = await Promise.all([
+    const [{ data: attendance }, { data: overtime }, { data: unpaidLeave }] = await Promise.all([
       supabase
         .from("attendance_records")
         .select("work_date, status, late_minutes, early_leave_minutes, worked_minutes")
-        .eq("employee_id", emp.id)
-        .gte("work_date", period.period_start)
-        .lte("work_date", period.period_end),
-      supabase
-        .from("shift_assignments")
-        .select("work_date, is_day_off")
         .eq("employee_id", emp.id)
         .gte("work_date", period.period_start)
         .lte("work_date", period.period_end),
@@ -187,7 +181,13 @@ export async function calculatePayrollRunAction(runId: string) {
       isScheduledWorkday: true,
     }));
 
-    const scheduledWorkDaysInPeriod = (shiftAssignments ?? []).filter((s) => !s.is_day_off).length || 22;
+    // Deriving this from live shift_assignments rows undercounts historical periods —
+    // shift_assignments is only ever materialized forward from "today", so past dates in
+    // this period can be missing rows entirely (see e.g. the 90033/90037 OT-amount bug,
+    // where a nearly-empty August's worth of shift_assignments made their hourly rate —
+    // and therefore OT pay — many times too high). The admin-configured work days/month on
+    // the compensation record is the correct source of truth for this.
+    const scheduledWorkDaysInPeriod = Number(comp.work_days_per_month) || 22;
     const unpaidLeaveDays = (unpaidLeave ?? []).reduce((sum, l) => sum + Number(l.total_days), 0);
 
     // Some employees (owners/family here) handle their own personal income tax outside
