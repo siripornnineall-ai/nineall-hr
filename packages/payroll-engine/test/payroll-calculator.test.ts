@@ -103,6 +103,19 @@ describe("calculatePayrollForEmployee", () => {
     expect(result.proratedBaseSatang).toBe(bahtToSatang(1_000));
   });
 
+  it("projects pay for a daily-wage employee's remaining scheduled workdays when run early", () => {
+    const result = calculatePayrollForEmployee(
+      baseInput({
+        employmentType: "daily",
+        baseAmountSatang: bahtToSatang(500),
+        remainingScheduledWorkDays: 3,
+        days: [{ workDate: "2026-08-01", status: "on_time", lateMinutes: 0, earlyLeaveMinutes: 0, workedMinutes: 480, isScheduledWorkday: true }],
+      })
+    );
+    // 1 actual day worked + 3 projected scheduled days ahead
+    expect(result.proratedBaseSatang).toBe(bahtToSatang(2_000));
+  });
+
   it("flags absenteeism above the sanity threshold for HR review", () => {
     const days = Array.from({ length: 5 }, (_, i) => ({
       workDate: `2026-08-0${i + 1}`,

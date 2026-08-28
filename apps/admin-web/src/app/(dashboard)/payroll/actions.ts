@@ -122,6 +122,11 @@ export async function calculatePayrollRunAction(runId: string) {
   // already uses period_end for the same reason.
   const policy = await loadPolicyConfig(user.orgId, period.period_end);
 
+  // For daily-wage employees, running payroll before the period has actually finished
+  // (e.g. 3 days before month-end) should still pay for those remaining days if they're
+  // normal scheduled workdays — see the remainingScheduledWorkDays query below.
+  const todayBangkok = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+
   const { data: employees } = await supabase
     .from("employees")
     .select(
@@ -148,7 +153,12 @@ export async function calculatePayrollRunAction(runId: string) {
     if (!comp) return null; // no compensation on file yet — surfaced in the UI as "missing data"
 
     const otWindow = getOtCutoffWindow(period.period_start.slice(0, 7));
-    const [{ data: attendance }, { data: overtime }, { data: unpaidLeave }] = await Promise.all([
+    // Only daily-wage employees get a forward projection — monthly/contract already get
+    // full pay regardless of remaining days, and hourly/part-time have no reliable
+    // schedule-based hours to project. Only queried when the period genuinely still has
+    // days left to run (period_end > today).
+    const needsProjection = comp.employment_type === "daily" && period.period_end > todayBangkok;
+    const [{ data: attendance }, { data: overtime }, { data: unpaidLeave }, { data: remainingShifts }] = await Promise.all([
       supabase
         .from("attendance_records")
         .select("work_date, status, late_minutes, early_leave_minutes, worked_minutes")
@@ -170,7 +180,17 @@ export async function calculatePayrollRunAction(runId: string) {
         .eq("leave_types.is_paid", false)
         .gte("start_date", period.period_start)
         .lte("end_date", period.period_end),
+      needsProjection
+        ? supabase
+            .from("shift_assignments")
+            .select("work_date")
+            .eq("employee_id", emp.id)
+            .eq("is_day_off", false)
+            .gt("work_date", todayBangkok)
+            .lte("work_date", period.period_end)
+        : Promise.resolve({ data: null }),
     ]);
+    const remainingScheduledWorkDays = (remainingShifts ?? []).length;
 
     const days: PayrollInputDay[] = (attendance ?? []).map((a) => ({
       workDate: a.work_date,
@@ -202,6 +222,7 @@ export async function calculatePayrollRunAction(runId: string) {
       periodStart: period.period_start,
       periodEnd: period.period_end,
       scheduledWorkDaysInPeriod,
+      remainingScheduledWorkDays: needsProjection ? remainingScheduledWorkDays : undefined,
       hireDate: emp.hire_date,
       resignationDate: emp.resignation_date ?? undefined,
       days,
@@ -239,7 +260,10 @@ export async function calculatePayrollRunAction(runId: string) {
           position_snapshot: (emp.job_positions as unknown as { title: string } | null)?.title ?? null,
           employment_type_snapshot: emp.employment_type,
           base_amount: satangToBaht(result.baseAmountSatang),
-          worked_days: days.filter((d) => WORKED_STATUSES.has(d.status)).length,
+          // Includes projected remaining scheduled workdays for daily-wage employees
+          // (see remainingScheduledWorkDays above) so this matches what gross_earnings
+          // actually paid for, instead of only counting days with real attendance so far.
+          worked_days: days.filter((d) => WORKED_STATUSES.has(d.status)).length + (needsProjection ? remainingScheduledWorkDays : 0),
           absent_days: days.filter((d) => d.status === "absent").length,
           unpaid_leave_days: unpaidLeaveDays,
           ot_hours: result.otHours,

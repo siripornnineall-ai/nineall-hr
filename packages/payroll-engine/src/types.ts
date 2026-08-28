@@ -113,6 +113,14 @@ export interface PayrollEmployeeInput {
   periodStart: string;
   periodEnd: string;
   scheduledWorkDaysInPeriod: number;
+  /**
+   * For daily-wage employees only: count of dates still ahead in the period (after
+   * "today") where they're scheduled to work (not a day off), used to project pay when
+   * payroll is run before the period has actually finished — e.g. running it 3 days
+   * before month-end still pays for those 3 days if they're normal scheduled workdays.
+   * Days off in that remaining stretch are correctly excluded, not assumed worked.
+   */
+  remainingScheduledWorkDays?: number;
   hireDate?: string;
   resignationDate?: string;
   days: PayrollInputDay[];

@@ -53,11 +53,16 @@ function computeProratedBase(input: PayrollEmployeeInput): {
 
   if (employmentType === "daily" || employmentType === "hourly" || employmentType === "part_time") {
     const dailyRate = computeDailyRateSatang(input);
-    const workedDays = input.days.filter((d) => WORKED_STATUSES.has(d.status)).length;
+    const actualWorkedDays = input.days.filter((d) => WORKED_STATUSES.has(d.status)).length;
     if (employmentType === "hourly") {
       const totalHours = input.days.reduce((sum, d) => sum + d.workedMinutes / 60, 0);
       return { proratedBaseSatang: Math.round(baseAmountSatang * totalHours), isMidCycleJoin, isMidCycleExit };
     }
+    // Daily-wage: if payroll is being run before the period has actually finished,
+    // project pay for the still-ahead scheduled workdays too (days off in that stretch
+    // are excluded already, since remainingScheduledWorkDays only counts non-day-off
+    // dates) rather than only paying for days that already have attendance records.
+    const workedDays = actualWorkedDays + (input.remainingScheduledWorkDays ?? 0);
     return { proratedBaseSatang: dailyRate * workedDays, isMidCycleJoin, isMidCycleExit };
   }
 
