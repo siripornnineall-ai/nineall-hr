@@ -39,7 +39,7 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 export async function updateAttendanceTimeAction(
   recordId: string,
   workDate: string,
-  values: { clockIn?: string; clockOut?: string; shiftId?: string; workLocationId?: string }
+  values: { clockIn?: string; clockOut?: string; shiftId?: string; workLocationId?: string; status?: string }
 ): Promise<{ error?: string } | void> {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
@@ -53,7 +53,7 @@ export async function updateAttendanceTimeAction(
     .single();
   if (!existing) return { error: "ไม่พบข้อมูลการลงเวลานี้" };
 
-  if (!values.clockIn && !values.clockOut && !values.shiftId && !values.workLocationId) {
+  if (!values.clockIn && !values.clockOut && !values.shiftId && !values.workLocationId && !values.status) {
     return { error: "กรุณาระบุข้อมูลอย่างน้อยหนึ่งช่อง" };
   }
 
@@ -65,6 +65,21 @@ export async function updateAttendanceTimeAction(
   if (values.clockOut) update.clock_out_server_at = clockOutAt!.toISOString();
   if (values.shiftId) update.shift_id = values.shiftId;
   if (values.workLocationId) update.work_location_id = values.workLocationId;
+
+  // An admin-chosen status (e.g. correcting "มาสาย" to "ลา" for a half-day-leave morning
+  // where the employee's real afternoon clock-in should stay visible) always wins over
+  // whatever the shift-based calculation below would derive. late/early/OT aren't
+  // meaningful for these statuses, but worked_minutes still reflects real clocked hours.
+  const effectiveStatus = values.status || existing.status;
+  if (values.status) {
+    update.status = values.status;
+    if (SPECIAL_STATUSES.has(values.status)) {
+      update.late_minutes = 0;
+      update.early_leave_minutes = 0;
+      update.ot_minutes = 0;
+      if (clockInAt && clockOutAt) update.worked_minutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
+    }
+  }
 
   // Mirror the clock-in/clock-out edge functions' late/OT/early-leave math so a manually
   // entered time — or a shift assigned after the fact (e.g. the employee clocked in
@@ -79,7 +94,7 @@ export async function updateAttendanceTimeAction(
         .single()
     : { data: null };
 
-  if (shift && clockInAt && !SPECIAL_STATUSES.has(existing.status)) {
+  if (shift && clockInAt && !SPECIAL_STATUSES.has(effectiveStatus)) {
     const [sh, sm] = shift.start_time.split(":").map(Number);
     const [eh, em] = shift.end_time.split(":").map(Number);
     const shiftStartMinute = sh * 60 + sm;

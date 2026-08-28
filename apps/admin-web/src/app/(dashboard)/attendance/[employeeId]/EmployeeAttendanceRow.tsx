@@ -17,6 +17,22 @@ const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "i
   day_off: { tone: "neutral", label: "หยุดประจำ" },
 };
 
+// Empty string = "leave as-is / recompute from times" — the rest let HR correct a
+// wrongly-derived status (e.g. "มาสาย" when the morning was actually approved leave)
+// without touching the real clock-in/out times still shown alongside it.
+const STATUS_EDIT_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "-- ไม่เปลี่ยนสถานะ --" },
+  { value: "on_time", label: "ตรงเวลา" },
+  { value: "late", label: "มาสาย" },
+  { value: "early_leave", label: "ออกก่อน" },
+  { value: "leave", label: "ลา" },
+  { value: "absent", label: "ขาดงาน" },
+  { value: "holiday", label: "วันหยุด" },
+  { value: "day_off", label: "หยุดประจำ" },
+  { value: "work_from_home", label: "WFH" },
+  { value: "off_site", label: "นอกสถานที่" },
+];
+
 // Server-rendered (not "use client"), so must convert explicitly — toLocaleTimeString with
 // no timeZone would otherwise use the server's own clock (UTC on Vercel), not Bangkok time.
 function formatTime(iso: string | null): string {
@@ -57,6 +73,7 @@ export function EmployeeAttendanceRow({
   const [clockOut, setClockOut] = useState(toTimeInputValue(row.clockOut));
   const [shiftId, setShiftId] = useState(row.shiftId ?? "");
   const [workLocationId, setWorkLocationId] = useState(row.workLocationId ?? "");
+  const [statusOverride, setStatusOverride] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
@@ -64,9 +81,12 @@ export function EmployeeAttendanceRow({
   function save() {
     setError(null);
     startTransition(async () => {
-      const result = await updateAttendanceTimeAction(row.id, row.workDate, { clockIn, clockOut, shiftId, workLocationId });
+      const result = await updateAttendanceTimeAction(row.id, row.workDate, { clockIn, clockOut, shiftId, workLocationId, status: statusOverride || undefined });
       if (result?.error) setError(result.error);
-      else setEditing(false);
+      else {
+        setStatusOverride("");
+        setEditing(false);
+      }
     });
   }
 
@@ -102,6 +122,16 @@ export function EmployeeAttendanceRow({
                 {workLocations.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">สถานะ</label>
+              <select value={statusOverride} onChange={(e) => setStatusOverride(e.target.value)} className="h-9 rounded-lg border border-outline-variant px-2 text-sm">
+                {STATUS_EDIT_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
                   </option>
                 ))}
               </select>
