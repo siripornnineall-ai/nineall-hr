@@ -106,6 +106,33 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
         },
         { onConflict: "employee_id,work_date" }
       );
+
+      // Writing shift_assignments alone left the Attendance page showing this date as
+      // blank until someone happened to view that exact date (syncDayOffAttendance only
+      // runs then) — the per-employee monthly page never runs it at all. Leave approval
+      // writes attendance_records directly at decision time; do the same here instead of
+      // relying on that lazy sync.
+      const { data: existingSubstitute } = await supabase
+        .from("attendance_records")
+        .select("clock_in_server_at")
+        .eq("employee_id", request.employee_id)
+        .eq("work_date", request.substitute_date)
+        .maybeSingle();
+      if (!existingSubstitute?.clock_in_server_at) {
+        await supabase.from("attendance_records").upsert(
+          {
+            org_id: request.org_id,
+            employee_id: request.employee_id,
+            work_date: request.substitute_date,
+            status: "day_off",
+            late_minutes: 0,
+            early_leave_minutes: 0,
+            worked_minutes: 0,
+            needs_review: false,
+          },
+          { onConflict: "employee_id,work_date" }
+        );
+      }
     }
   }
 
