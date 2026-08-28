@@ -66,7 +66,9 @@ export async function syncHolidayAttendance(orgId: string, workDate: string): Pr
   if (!holiday) return null;
 
   const [{ data: employees }, { data: existingRecords }, { data: assignments }] = await Promise.all([
-    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]),
+    // lte hire_date: an employee hired after this date wasn't on payroll yet — they never
+    // "should have" a holiday record for it.
+    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]).lte("hire_date", workDate),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("shift_assignments").select("employee_id, is_day_off").eq("org_id", orgId).eq("work_date", workDate),
   ]);
@@ -110,7 +112,7 @@ export async function syncDayOffAttendance(orgId: string, workDate: string): Pro
   const [{ data: assignments }, { data: existingRecords }, { data: employees }, inferredWeekdays] = await Promise.all([
     supabase.from("shift_assignments").select("employee_id").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
-    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]),
+    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]).lte("hire_date", workDate),
     inferRegularDayOffWeekdays(supabase, orgId),
   ]);
 
@@ -152,7 +154,9 @@ export async function syncAbsentAttendance(orgId: string, workDate: string): Pro
   const supabase = await createClient();
 
   const [{ data: employees }, { data: existingRecords }, { data: dateAssignments }, { data: recentAssignments }] = await Promise.all([
-    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]),
+    // lte hire_date: someone hired after this date wasn't employed yet, so they can't have
+    // been absent from a job they didn't have.
+    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]).lte("hire_date", workDate),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("shift_assignments").select("employee_id, shift_id, work_location_id, is_day_off").eq("org_id", orgId).eq("work_date", workDate),
     // Fallback for an employee with no shift_assignments row on workDate at all (the exact
