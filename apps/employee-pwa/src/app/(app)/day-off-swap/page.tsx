@@ -5,10 +5,6 @@ import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 
-interface DayOffOption {
-  work_date: string;
-}
-
 interface SwapRow {
   id: string;
   original_date: string;
@@ -45,7 +41,6 @@ function UnitChip({ label, active, onClick }: { label: string; active: boolean; 
 export default function DayOffSwapPage() {
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
-  const [dayOffOptions, setDayOffOptions] = useState<DayOffOption[]>([]);
   const [requests, setRequests] = useState<SwapRow[]>([]);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
@@ -61,23 +56,7 @@ export default function DayOffSwapPage() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    // Includes past days off too, not just upcoming — an employee who worked through
-    // their normal day off sometimes only asks for the swap afterwards, same as the
-    // holiday-swap request form.
-    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const [{ data: offDays }, { data: swaps }, { data: holidays }] = await Promise.all([
-      supabase
-        .from("shift_assignments")
-        .select("work_date")
-        .eq("employee_id", profile.employeeId)
-        .eq("is_day_off", true)
-        .gte("work_date", sixtyDaysAgo)
-        // Ascending, not descending: a recurring weekly day-off (e.g. every Sat/Sun) can
-        // easily have 100+ rows stretching a year forward (shift_assignments are generated
-        // that far out — see ShiftAssignment.tsx), so a descending order capped at 60 kept
-        // only the farthest-future dates and silently dropped every near-term one.
-        .order("work_date", { ascending: true })
-        .limit(60),
+    const [{ data: swaps }, { data: holidays }] = await Promise.all([
       supabase
         .from("day_off_swap_requests")
         .select("id, original_date, substitute_date, unit, period, reason, status")
@@ -86,7 +65,6 @@ export default function DayOffSwapPage() {
         .limit(20),
       supabase.from("company_holidays").select("holiday_date").eq("org_id", profile.orgId),
     ]);
-    setDayOffOptions(offDays ?? []);
     setRequests(swaps ?? []);
     setHolidayDates(new Set((holidays ?? []).map((h) => h.holiday_date)));
     setLoaded(true);
@@ -155,19 +133,13 @@ export default function DayOffSwapPage() {
         <p className="text-sm font-semibold text-on-surface-variant">สำหรับสลับวันหยุดปกติของคุณ เช่น ปกติหยุดเสาร์-อาทิตย์ อยากสลับไปหยุดวันอื่นแทน</p>
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันหยุดเดิมที่จะสลับ (ทำงานแทน)</label>
-          <select
+          <input
+            type="date"
             value={originalDate}
             onChange={(e) => setOriginalDate(e.target.value)}
             className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-          >
-            <option value="">-- เลือกวันหยุด --</option>
-            {dayOffOptions.map((d) => (
-              <option key={d.work_date} value={d.work_date}>
-                {new Date(d.work_date).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}
-              </option>
-            ))}
-          </select>
-          {dayOffOptions.length === 0 && loaded && <p className="mt-1 text-xs text-on-surface-variant">ไม่พบวันหยุดที่กำหนดไว้ล่วงหน้าในตารางกะของคุณ</p>}
+          />
+          <p className="mt-1 text-xs text-on-surface-variant">เลือกวันที่ที่ปกติเป็นวันหยุดของคุณ (เช่น เสาร์-อาทิตย์) — HR จะตรวจสอบและอนุมัติอีกครั้ง</p>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">จำนวนที่จะทำงาน</label>
