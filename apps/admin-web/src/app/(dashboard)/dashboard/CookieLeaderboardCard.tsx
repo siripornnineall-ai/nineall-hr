@@ -5,16 +5,18 @@ import { Avatar } from "@/components/Avatar";
 import type { CookieLeaderboardRow } from "@/lib/queries/engagement";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-const TOP_COUNT = 3;
+// Medals only go to the top 3, but the headline count HR wants shown by default is 10 —
+// the rest (11th onward) stay behind "ดูเพิ่มเติม".
+const DEFAULT_VISIBLE_COUNT = 10;
 
 export function CookieLeaderboardCard({ rows }: { rows: CookieLeaderboardRow[] }) {
   const [expanded, setExpanded] = useState(false);
-  const topRows = rows.slice(0, TOP_COUNT);
-  const restRows = rows.slice(TOP_COUNT);
+  const topRows = rows.slice(0, DEFAULT_VISIBLE_COUNT);
+  const restRows = rows.slice(DEFAULT_VISIBLE_COUNT);
 
   return (
     <div className="rounded-xl border border-outline-variant bg-white p-6 shadow-sm">
-      <h3 className="mb-4 text-lg font-bold">ท็อป 3 รางวัลคนมีน้ำใจ 🍪</h3>
+      <h3 className="mb-4 text-lg font-bold">ท็อป 10 รางวัลคนมีน้ำใจ 🍪</h3>
       {rows.length === 0 ? (
         <p className="text-sm text-on-surface-variant">ยังไม่มีใครได้รับคุกกี้</p>
       ) : (
@@ -30,7 +32,7 @@ export function CookieLeaderboardCard({ rows }: { rows: CookieLeaderboardRow[] }
               {expanded && (
                 <ul className="mt-3 space-y-3 border-t border-outline-variant pt-3">
                   {restRows.map((row, i) => (
-                    <LeaderboardRow key={row.employeeId} row={row} rank={i + TOP_COUNT + 1} />
+                    <LeaderboardRow key={row.employeeId} row={row} rank={i + DEFAULT_VISIBLE_COUNT + 1} />
                   ))}
                 </ul>
               )}
