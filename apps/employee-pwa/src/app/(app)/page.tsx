@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { LateLeaderboardCard, CookieLeaderboardCard } from "./LeaderboardCards";
 
 interface HomeStats {
   leaveDaysRemaining: number;
@@ -164,13 +165,14 @@ export default function HomePage() {
         <div className="grid grid-cols-3 gap-2">
           <QuickLink href="/reimbursement" icon="receipt_long" label="เบิกเงิน" />
           <QuickLink href="/shift-swap" icon="swap_horiz" label="สลับกะ" />
-          <QuickLink href="/holiday-swap" icon="event_repeat" label="สลับวันหยุด" />
+          <QuickLink href="/holiday-swap" icon="event_repeat" label="สลับวันหยุด นขต." />
+          <QuickLink href="/day-off-swap" icon="published_with_changes" label="สลับวันหยุดประจำ" />
           <QuickLink href="/calendar" icon="calendar_month" label="ปฏิทิน" />
           <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
-          <QuickLink href="/reviews" icon="military_tech" label="ผลประเมิน" />
-          <QuickLink href="/training" icon="school" label="การอบรม" />
-          <QuickLink href="/announcements" icon="campaign" label="ประกาศ" />
         </div>
+
+        <LateLeaderboardCard />
+        <CookieLeaderboardCard />
 
         {holidays.length > 0 && (
           <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">

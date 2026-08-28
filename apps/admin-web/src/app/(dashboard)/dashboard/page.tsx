@@ -1,8 +1,11 @@
 import { requireUser } from "@/lib/auth";
 import { getDashboardStats } from "@/lib/queries/dashboard";
+import { getLateLeaderboard, getCookieLeaderboard } from "@/lib/queries/engagement";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/StatCard";
+import { LateLeaderboardCard } from "./LateLeaderboardCard";
+import { CookieLeaderboardCard } from "./CookieLeaderboardCard";
 
 function formatThaiDate(date: Date): string {
   return date.toLocaleDateString("th-TH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -11,7 +14,7 @@ function formatThaiDate(date: Date): string {
 export default async function DashboardPage() {
   const user = await requireUser();
   const supabase = await createClient();
-  const [stats, { data: holidays }] = await Promise.all([
+  const [stats, { data: holidays }, lateLeaderboard, cookieLeaderboard] = await Promise.all([
     getDashboardStats(user.orgId),
     supabase
       .from("company_holidays")
@@ -20,6 +23,8 @@ export default async function DashboardPage() {
       .gte("holiday_date", new Date().toISOString().slice(0, 10))
       .order("holiday_date")
       .limit(5),
+    getLateLeaderboard(),
+    getCookieLeaderboard(),
   ]);
 
   return (
@@ -83,6 +88,11 @@ export default async function DashboardPage() {
               </ul>
             )}
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <LateLeaderboardCard rows={lateLeaderboard} />
+          <CookieLeaderboardCard rows={cookieLeaderboard} />
         </div>
       </div>
     </>
