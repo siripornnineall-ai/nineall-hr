@@ -15,6 +15,7 @@ const NAV_ITEMS: { href: string; label: string; icon: string; roles?: UserRole[]
   { href: "/reimbursement", label: "เบิกค่าใช้จ่าย", icon: "receipt_long" },
   { href: "/shift-swap", label: "สลับกะ", icon: "swap_horiz" },
   { href: "/holiday-swap", label: "สลับวันหยุดนักขัตฤกษ์", icon: "event_repeat" },
+  { href: "/day-off-swap", label: "สลับวันหยุดประจำ", icon: "published_with_changes" },
   { href: "/schedule", label: "ตารางกะประจำ", icon: "calendar_view_week", roles: ["super_admin", "hr"] },
   { href: "/org-chart", label: "ผังองค์กร", icon: "account_tree" },
   { href: "/recruitment", label: "รับสมัครงาน", icon: "work" },
