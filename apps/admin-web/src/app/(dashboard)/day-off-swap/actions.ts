@@ -12,6 +12,34 @@ const HALF_DAY_TIMES: Record<string, { start: string; end: string }> = {
   afternoon: { start: "13:00", end: "17:00" },
 };
 
+// Marks workDate as a day off for employeeId — both in shift_assignments (so future syncs
+// and the day-off-swap picker see it) and directly in attendance_records (so it shows up
+// immediately everywhere instead of waiting on the lazy syncDayOffAttendance), unless the
+// date already has a real clock-in on file.
+async function grantDayOff(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string, employeeId: string, workDate: string) {
+  await supabase.from("shift_assignments").upsert(
+    { org_id: orgId, employee_id: employeeId, work_date: workDate, shift_id: null, work_location_id: null, is_day_off: true, source: "day_off_swap" },
+    { onConflict: "employee_id,work_date" }
+  );
+
+  const { data: existing } = await supabase.from("attendance_records").select("clock_in_server_at").eq("employee_id", employeeId).eq("work_date", workDate).maybeSingle();
+  if (!existing?.clock_in_server_at) {
+    await supabase.from("attendance_records").upsert(
+      {
+        org_id: orgId,
+        employee_id: employeeId,
+        work_date: workDate,
+        status: "day_off",
+        late_minutes: 0,
+        early_leave_minutes: 0,
+        worked_minutes: 0,
+        needs_review: false,
+      },
+      { onConflict: "employee_id,work_date" }
+    );
+  }
+}
+
 export async function decideDayOffSwapRequest(requestId: string, decision: "approved" | "rejected") {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
@@ -43,6 +71,17 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
       .order("work_date", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // No original_date at all: this employee has no regular day off to trade away in the
+    // first place (works every day per their schedule) — she confirmed no make-up day is
+    // required, so it's a plain grant of the substitute_date as a day off, nothing else
+    // to flip back to working.
+    if (!request.original_date) {
+      await grantDayOff(supabase, request.org_id, request.employee_id, request.substitute_date);
+      revalidatePath("/day-off-swap");
+      revalidatePath("/attendance");
+      return;
+    }
 
     // For a retroactive swap (original_date already in the past), syncDayOffAttendance may
     // have already auto-filled a "day_off" placeholder for that date before the employee
@@ -94,45 +133,7 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
         { onConflict: "employee_id,work_date" }
       );
 
-      await supabase.from("shift_assignments").upsert(
-        {
-          org_id: request.org_id,
-          employee_id: request.employee_id,
-          work_date: request.substitute_date,
-          shift_id: null,
-          work_location_id: null,
-          is_day_off: true,
-          source: "day_off_swap",
-        },
-        { onConflict: "employee_id,work_date" }
-      );
-
-      // Writing shift_assignments alone left the Attendance page showing this date as
-      // blank until someone happened to view that exact date (syncDayOffAttendance only
-      // runs then) — the per-employee monthly page never runs it at all. Leave approval
-      // writes attendance_records directly at decision time; do the same here instead of
-      // relying on that lazy sync.
-      const { data: existingSubstitute } = await supabase
-        .from("attendance_records")
-        .select("clock_in_server_at")
-        .eq("employee_id", request.employee_id)
-        .eq("work_date", request.substitute_date)
-        .maybeSingle();
-      if (!existingSubstitute?.clock_in_server_at) {
-        await supabase.from("attendance_records").upsert(
-          {
-            org_id: request.org_id,
-            employee_id: request.employee_id,
-            work_date: request.substitute_date,
-            status: "day_off",
-            late_minutes: 0,
-            early_leave_minutes: 0,
-            worked_minutes: 0,
-            needs_review: false,
-          },
-          { onConflict: "employee_id,work_date" }
-        );
-      }
+      await grantDayOff(supabase, request.org_id, request.employee_id, request.substitute_date);
     }
   }
 

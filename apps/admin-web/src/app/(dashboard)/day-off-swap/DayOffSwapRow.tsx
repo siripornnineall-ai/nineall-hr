@@ -16,7 +16,7 @@ interface RowData {
   employeeCode: string;
   employeeName: string;
   employeePhotoUrl: string | null;
-  originalDate: string;
+  originalDate: string | null;
   substituteDate: string;
   unit: string;
   period: string | null;
@@ -54,8 +54,14 @@ export function DayOffSwapRow({ row }: { row: RowData }) {
         </div>
       </td>
       <td className="px-4 py-3">
-        {new Date(row.originalDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
-        {row.unit === "half_day" && row.period && <div className="text-xs text-on-surface-variant">ครึ่งวัน ({PERIOD_TH[row.period]})</div>}
+        {row.originalDate ? (
+          <>
+            {new Date(row.originalDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
+            {row.unit === "half_day" && row.period && <div className="text-xs text-on-surface-variant">ครึ่งวัน ({PERIOD_TH[row.period]})</div>}
+          </>
+        ) : (
+          <span className="text-on-surface-variant">ไม่มี (ขอวันหยุดตรง)</span>
+        )}
       </td>
       <td className="px-4 py-3">
         {new Date(row.substituteDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
