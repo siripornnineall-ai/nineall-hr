@@ -1,8 +1,13 @@
-import { notoSansThaiBase64 } from "./fonts/notoSansThaiBase64";
+import { sarabunRegularBase64 } from "./fonts/sarabunRegularBase64";
+import { sarabunBoldBase64 } from "./fonts/sarabunBoldBase64";
 
 // Same headless-Chromium approach as admin-web's payslip generator (see that file's
 // comment) — printing real HTML avoids the CID-font-subsetting bug that garbles Thai
 // text on iOS Safari/Preview when using a JS PDF-construction library instead.
+//
+// Font: TH Sarabun New itself isn't available to embed here (no verified freely-licensed
+// source on hand) — Google's Sarabun is the closest safe equivalent: same type family,
+// SIL Open Font License, and visually near-identical for a document like this.
 export interface CertificateDocumentProps {
   orgName: string;
   orgLegalName: string | null;
@@ -19,6 +24,9 @@ export interface CertificateDocumentProps {
   issueDate: string;
   signerName: string | null;
   signerTitle: string | null;
+  // Data URI (e.g. "data:image/png;base64,...") of the signer's actual signature image,
+  // if one has been provided — otherwise a blank line is left for signing on paper.
+  signatureImageDataUri: string | null;
 }
 
 function escapeHtml(s: string): string {
@@ -47,27 +55,36 @@ export function renderCertificateHtml(p: CertificateDocumentProps): string {
 <meta charset="utf-8" />
 <style>
   @font-face {
-    font-family: "NotoSansThai";
-    src: url(data:font/ttf;base64,${notoSansThaiBase64}) format("truetype");
-    font-weight: normal;
+    font-family: "Sarabun";
+    src: url(data:font/ttf;base64,${sarabunRegularBase64}) format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: "Sarabun";
+    src: url(data:font/ttf;base64,${sarabunBoldBase64}) format("truetype");
+    font-weight: 700;
     font-style: normal;
   }
   * { box-sizing: border-box; }
   body {
-    font-family: "NotoSansThai", sans-serif;
-    font-size: 13pt;
+    font-family: "Sarabun", sans-serif;
+    font-weight: 400;
+    font-size: 16pt;
     color: #1a1a1a;
-    padding: 64px 72px;
+    padding: 72px 80px;
     margin: 0;
-    line-height: 2;
+    line-height: 1.9;
   }
-  .title { font-size: 17pt; font-weight: 700; text-align: center; margin: 0 0 36px; }
-  .body-text { text-indent: 48px; text-align: justify; }
-  .body-text + .body-text { margin-top: 18px; }
-  .issue-line { margin-top: 40px; text-align: right; }
-  .signature-block { margin-top: 64px; text-align: right; padding-right: 48px; }
-  .signature-line { margin-bottom: 6px; }
-  .signature-name { font-weight: 700; }
+  .title { font-size: 18pt; font-weight: 700; text-align: center; margin: 0 0 40px; }
+  .body-text { text-indent: 56px; text-align: justify; }
+  .body-text + .body-text { margin-top: 20px; }
+  strong { font-weight: 700; }
+  .issue-line { margin-top: 48px; text-align: right; }
+  .signature-block { margin-top: 16px; text-align: right; padding-right: 56px; }
+  .signature-image { height: 70px; margin-bottom: -18px; }
+  .signature-line { margin-bottom: 8px; letter-spacing: 2px; }
+  .signature-name { font-weight: 700; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -91,6 +108,7 @@ export function renderCertificateHtml(p: CertificateDocumentProps): string {
   <div class="issue-line">ออกให้ ณ วันที่ ${escapeHtml(p.issueDate)}</div>
 
   <div class="signature-block">
+    ${p.signatureImageDataUri ? `<img class="signature-image" src="${p.signatureImageDataUri}" alt="" /><br/>` : ""}
     <div class="signature-line">ลงชื่อ...........................................</div>
     ${p.signerName ? `<div class="signature-name">(${escapeHtml(p.signerName)})</div>` : ""}
     <div>${escapeHtml(p.signerTitle ?? "ผู้มีอำนาจลงนาม / ฝ่ายบุคคล")}</div>

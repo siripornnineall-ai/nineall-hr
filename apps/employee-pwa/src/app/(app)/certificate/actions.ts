@@ -54,6 +54,8 @@ export async function generateCertificateAction(
       issueDate: new Date().toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" }),
       signerName: CERTIFICATE_SIGNER_NAME,
       signerTitle: CERTIFICATE_SIGNER_TITLE,
+      // No signature image on file yet — leaves a blank line for signing on paper.
+      signatureImageDataUri: null,
     });
     return { base64: pdfBuffer.toString("base64"), filename: `certificate-${employee.employee_code}-${Date.now()}.pdf` };
   } catch (err) {
