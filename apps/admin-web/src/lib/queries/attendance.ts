@@ -85,27 +85,51 @@ export async function syncDayOffAttendance(orgId: string, workDate: string): Pro
 export async function syncAbsentAttendance(orgId: string, workDate: string): Promise<void> {
   const supabase = await createClient();
 
-  const [{ data: employees }, { data: existingRecords }, { data: dayOffAssignments }] = await Promise.all([
+  const [{ data: employees }, { data: existingRecords }, { data: dateAssignments }, { data: recentAssignments }] = await Promise.all([
     supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
-    supabase.from("shift_assignments").select("employee_id").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true),
+    supabase.from("shift_assignments").select("employee_id, shift_id, work_location_id, is_day_off").eq("org_id", orgId).eq("work_date", workDate),
+    // Fallback for an employee with no shift_assignments row on workDate at all (the exact
+    // gap this function exists for) — their most recent row that actually has a shift is
+    // "what they'd normally be working", attached to the absent record instead of leaving
+    // it shift-less.
+    supabase
+      .from("shift_assignments")
+      .select("employee_id, shift_id, work_location_id, work_date")
+      .eq("org_id", orgId)
+      .not("shift_id", "is", null)
+      .order("work_date", { ascending: false })
+      .limit(2000),
   ]);
 
   const hasRecord = new Set((existingRecords ?? []).map((r) => r.employee_id));
-  const isDayOff = new Set((dayOffAssignments ?? []).map((a) => a.employee_id));
+  const dateAssignmentByEmployee = new Map((dateAssignments ?? []).map((a) => [a.employee_id, a]));
+  const isDayOff = new Set((dateAssignments ?? []).filter((a) => a.is_day_off).map((a) => a.employee_id));
+
+  const mostRecentShiftByEmployee = new Map<string, { shift_id: string; work_location_id: string | null }>();
+  for (const a of recentAssignments ?? []) {
+    if (!mostRecentShiftByEmployee.has(a.employee_id)) mostRecentShiftByEmployee.set(a.employee_id, { shift_id: a.shift_id!, work_location_id: a.work_location_id });
+  }
+
   const toMark = (employees ?? []).filter((e) => !hasRecord.has(e.id) && !isDayOff.has(e.id));
   if (toMark.length > 0) {
     await supabase.from("attendance_records").upsert(
-      toMark.map((e) => ({
-        org_id: orgId,
-        employee_id: e.id,
-        work_date: workDate,
-        status: "absent" as const,
-        late_minutes: 0,
-        early_leave_minutes: 0,
-        worked_minutes: 0,
-        needs_review: false,
-      })),
+      toMark.map((e) => {
+        const dateAssignment = dateAssignmentByEmployee.get(e.id);
+        const fallback = mostRecentShiftByEmployee.get(e.id);
+        return {
+          org_id: orgId,
+          employee_id: e.id,
+          work_date: workDate,
+          status: "absent" as const,
+          shift_id: dateAssignment?.shift_id ?? fallback?.shift_id ?? null,
+          work_location_id: dateAssignment?.work_location_id ?? fallback?.work_location_id ?? null,
+          late_minutes: 0,
+          early_leave_minutes: 0,
+          worked_minutes: 0,
+          needs_review: false,
+        };
+      }),
       { onConflict: "employee_id,work_date", ignoreDuplicates: true }
     );
   }
