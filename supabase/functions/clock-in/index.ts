@@ -93,6 +93,31 @@ Deno.serve(async (req) => {
       .eq("holiday_date", workDate)
       .maybeSingle();
 
+    // An approved half-day swap covering the morning (day-off swap or holiday swap)
+    // means this employee is only scheduled to work the afternoon today — clocking in
+    // around midday is the approved plan, not arriving late.
+    const [{ data: halfDaySwap }, { data: halfDayHolidaySwap }] = await Promise.all([
+      supabase
+        .from("day_off_swap_requests")
+        .select("id")
+        .eq("employee_id", profile.employee_id)
+        .eq("substitute_date", workDate)
+        .eq("status", "approved")
+        .eq("unit", "half_day")
+        .eq("period", "morning")
+        .maybeSingle(),
+      supabase
+        .from("holiday_swap_requests")
+        .select("id")
+        .eq("employee_id", profile.employee_id)
+        .eq("substitute_date", workDate)
+        .eq("status", "approved")
+        .eq("unit", "half_day")
+        .eq("period", "morning")
+        .maybeSingle(),
+    ]);
+    const onApprovedHalfDayOff = Boolean(halfDaySwap || halfDayHolidaySwap);
+
     let status = "on_time";
     let lateMinutes = 0;
     let needsReview = Boolean(body.isOfflineSubmission);
@@ -104,7 +129,7 @@ Deno.serve(async (req) => {
       status = "work_from_home";
     } else if (assignment?.is_off_site) {
       status = "off_site";
-    } else if (shift) {
+    } else if (shift && !onApprovedHalfDayOff) {
       const shiftStartMinute = toMinuteOfDay(shift.start_time);
       lateMinutes = Math.max(0, nowMinuteOfDay - shiftStartMinute - shift.grace_minutes_late);
       status = lateMinutes > 0 ? "late" : "on_time";

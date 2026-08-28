@@ -91,10 +91,36 @@ Deno.serve(async (req) => {
     const unpaidBreak = shift?.unpaid_break_minutes ?? 60;
     const rawWorkedMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000) - unpaidBreak);
 
+    // An approved half-day swap covering the afternoon (day-off swap or holiday swap)
+    // means this employee is only scheduled to work the morning today — clocking out
+    // around midday is the approved plan, not leaving early, so the shift's full end
+    // time must not be used to penalize it.
+    const [{ data: halfDaySwap }, { data: halfDayHolidaySwap }] = await Promise.all([
+      supabase
+        .from("day_off_swap_requests")
+        .select("id")
+        .eq("employee_id", profile.employee_id)
+        .eq("substitute_date", workDate)
+        .eq("status", "approved")
+        .eq("unit", "half_day")
+        .eq("period", "afternoon")
+        .maybeSingle(),
+      supabase
+        .from("holiday_swap_requests")
+        .select("id")
+        .eq("employee_id", profile.employee_id)
+        .eq("substitute_date", workDate)
+        .eq("status", "approved")
+        .eq("unit", "half_day")
+        .eq("period", "afternoon")
+        .maybeSingle(),
+    ]);
+    const onApprovedHalfDayOff = Boolean(halfDaySwap || halfDayHolidaySwap);
+
     let earlyLeaveMinutes = 0;
     let otMinutes = 0;
     const nowMinuteOfDay = clockOutAt.getHours() * 60 + clockOutAt.getMinutes();
-    if (shift) {
+    if (shift && !onApprovedHalfDayOff) {
       const shiftEndMinute = toMinuteOfDay(shift.end_time);
       earlyLeaveMinutes = Math.max(0, shiftEndMinute - nowMinuteOfDay - shift.grace_minutes_early_leave);
       if (shift.ot_after_shift_allowed) {
