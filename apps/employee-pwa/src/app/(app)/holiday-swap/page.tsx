@@ -61,9 +61,10 @@ export default function HolidaySwapPage() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const today = new Date().toISOString().slice(0, 10);
     const [{ data: holidayRows }, { data: swaps }] = await Promise.all([
-      supabase.from("company_holidays").select("holiday_date, name").eq("org_id", profile.orgId).gte("holiday_date", today).order("holiday_date"),
+      // Includes past holiday dates too — an employee who worked through a holiday
+      // sometimes only realizes/asks for the swap afterwards, not just in advance.
+      supabase.from("company_holidays").select("holiday_date, name").eq("org_id", profile.orgId).order("holiday_date", { ascending: false }),
       supabase
         .from("holiday_swap_requests")
         .select("id, holiday_date, substitute_date, unit, period, reason, status")

@@ -20,6 +20,8 @@ interface AttendanceDay {
   work_date: string;
   status: string;
   late_minutes: number;
+  clock_in_server_at: string | null;
+  clock_out_server_at: string | null;
 }
 
 const ATTENDANCE_DOT_CLASS: Record<string, string> = {
@@ -30,6 +32,24 @@ const ATTENDANCE_DOT_CLASS: Record<string, string> = {
   work_from_home: "bg-secondary",
   off_site: "bg-secondary",
 };
+
+const STATUS_TH: Record<string, string> = {
+  on_time: "ตรงเวลา",
+  late: "มาสาย",
+  early_leave: "ออกก่อนเวลา",
+  absent: "ขาดงาน",
+  leave: "ลา",
+  holiday: "วันหยุด",
+  day_off: "หยุดประจำ",
+  work_from_home: "Work From Home",
+  off_site: "นอกสถานที่",
+  pending_offline: "รอซิงค์ข้อมูล",
+};
+
+function formatTime(iso: string | null): string {
+  if (!iso) return "--:--";
+  return new Date(iso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
+}
 
 const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const THAI_MONTHS = [
@@ -48,6 +68,7 @@ export default function CalendarPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [leaveRanges, setLeaveRanges] = useState<LeaveRange[]>([]);
   const [attendanceDays, setAttendanceDays] = useState<AttendanceDay[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -69,7 +90,7 @@ export default function CalendarPage() {
         .gte("end_date", toIso(monthStart)),
       supabase
         .from("attendance_records")
-        .select("work_date, status, late_minutes")
+        .select("work_date, status, late_minutes, clock_in_server_at, clock_out_server_at")
         .eq("employee_id", profile.employeeId)
         .gte("work_date", toIso(monthStart))
         .lte("work_date", toIso(monthEnd)),
@@ -134,23 +155,75 @@ export default function CalendarPage() {
             const leaveName = leaveOnDate(iso);
             const attendance = attendanceByDate.get(iso);
             const isToday = iso === todayIso;
+            const isSelected = iso === selectedDate;
             const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status] : undefined;
             return (
-              <div
+              <button
                 key={idx}
+                type="button"
+                onClick={() => setSelectedDate(iso)}
                 className={clsx(
-                  "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg text-xs",
+                  "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg text-xs transition-colors",
                   isToday && "ring-2 ring-primary",
+                  isSelected && "ring-2 ring-secondary",
                   holidayName ? "bg-status-danger/10 text-status-danger" : leaveName ? "bg-secondary/10 text-secondary" : "text-on-surface"
                 )}
               >
                 <span className="font-semibold">{day}</span>
-                {dotClass && <span className={clsx("h-1.5 w-1.5 rounded-full", dotClass)} />}
-              </div>
+                <span className="flex h-1.5 items-center gap-0.5">
+                  {/* Holiday dot is always purple, distinct from the attendance-status dot below it,
+                      so a working holiday-swap day and a genuine holiday read differently at a glance. */}
+                  {holidayName && <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />}
+                  {dotClass && <span className={clsx("h-1.5 w-1.5 rounded-full", dotClass)} />}
+                </span>
+              </button>
             );
           })}
         </div>
       </div>
+
+      {selectedDate &&
+        (() => {
+          const attendance = attendanceByDate.get(selectedDate);
+          const holidayName = holidayByDate.get(selectedDate);
+          const leaveName = leaveOnDate(selectedDate);
+          return (
+            <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-bold text-on-surface">
+                  {new Date(selectedDate).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                </p>
+                <button onClick={() => setSelectedDate(null)} className="text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+              {holidayName && <p className="text-sm font-semibold text-status-danger">🎉 วันหยุดนักขัตฤกษ์: {holidayName}</p>}
+              {leaveName && <p className="text-sm font-semibold text-secondary">ลา: {leaveName}</p>}
+              {attendance ? (
+                <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-on-surface-variant">เข้างาน</p>
+                    <p className="font-semibold text-on-surface">{formatTime(attendance.clock_in_server_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">ออกงาน</p>
+                    <p className="font-semibold text-on-surface">{formatTime(attendance.clock_out_server_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">สถานะ</p>
+                    <p className="font-semibold text-on-surface">{STATUS_TH[attendance.status] ?? attendance.status}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">มาสาย</p>
+                    <p className="font-semibold text-on-surface">{attendance.late_minutes > 0 ? `${attendance.late_minutes} นาที` : "-"}</p>
+                  </div>
+                </div>
+              ) : (
+                !holidayName && !leaveName && <p className="mt-2 text-sm text-on-surface-variant">ไม่มีข้อมูลการลงเวลาวันนี้</p>
+              )}
+            </div>
+          );
+        })()}
 
       <div className="space-y-2">
         {holidays.map((h) => (
