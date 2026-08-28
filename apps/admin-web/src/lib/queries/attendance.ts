@@ -78,6 +78,39 @@ export async function syncDayOffAttendance(orgId: string, workDate: string): Pro
   }
 }
 
+// For a date that's already over, anyone still left with no attendance_records row after
+// the holiday/day-off syncs above genuinely didn't show up — mark them "ขาดงาน" instead of
+// leaving the day blank. Never called for today: the day may still be in progress, and
+// someone who simply hasn't clocked in yet isn't necessarily absent.
+export async function syncAbsentAttendance(orgId: string, workDate: string): Promise<void> {
+  const supabase = await createClient();
+
+  const [{ data: employees }, { data: existingRecords }, { data: dayOffAssignments }] = await Promise.all([
+    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]),
+    supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
+    supabase.from("shift_assignments").select("employee_id").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true),
+  ]);
+
+  const hasRecord = new Set((existingRecords ?? []).map((r) => r.employee_id));
+  const isDayOff = new Set((dayOffAssignments ?? []).map((a) => a.employee_id));
+  const toMark = (employees ?? []).filter((e) => !hasRecord.has(e.id) && !isDayOff.has(e.id));
+  if (toMark.length > 0) {
+    await supabase.from("attendance_records").upsert(
+      toMark.map((e) => ({
+        org_id: orgId,
+        employee_id: e.id,
+        work_date: workDate,
+        status: "absent" as const,
+        late_minutes: 0,
+        early_leave_minutes: 0,
+        worked_minutes: 0,
+        needs_review: false,
+      })),
+      { onConflict: "employee_id,work_date", ignoreDuplicates: true }
+    );
+  }
+}
+
 export interface AttendanceRow {
   id: string;
   workDate: string;

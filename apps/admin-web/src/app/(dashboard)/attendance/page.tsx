@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { listAttendanceForDate, syncHolidayAttendance, syncDayOffAttendance } from "@/lib/queries/attendance";
+import { listAttendanceForDate, syncHolidayAttendance, syncDayOffAttendance, syncAbsentAttendance } from "@/lib/queries/attendance";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { Avatar } from "@/components/Avatar";
@@ -14,6 +14,10 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const supabase = await createClient();
   const holidayName = await syncHolidayAttendance(user.orgId, workDate);
   await syncDayOffAttendance(user.orgId, workDate);
+  // "Absent" only ever applies to a day that's already over — never today, since the
+  // employee may still clock in later.
+  const todayBangkok = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+  if (workDate < todayBangkok) await syncAbsentAttendance(user.orgId, workDate);
   const [rows, { data: shifts }, { data: workLocations }, { data: allEmployees }] = await Promise.all([
     listAttendanceForDate(user.orgId, workDate),
     supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId),

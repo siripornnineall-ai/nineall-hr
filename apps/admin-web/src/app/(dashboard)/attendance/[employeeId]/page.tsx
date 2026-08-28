@@ -55,14 +55,35 @@ export default async function EmployeeAttendanceDashboardPage({
   const position = (employee.job_positions as unknown as { title: string } | null)?.title ?? null;
   const department = (employee.departments as unknown as { name: string } | null)?.name ?? null;
 
-  const { data: records } = await supabase
-    .from("attendance_records")
-    .select("id, work_date, status, clock_in_server_at, clock_out_server_at, late_minutes, ot_minutes, shift_id, work_location_id")
-    .eq("org_id", user.orgId)
-    .eq("employee_id", employeeId)
-    .gte("work_date", monthStart)
-    .lte("work_date", monthEnd)
-    .order("work_date", { ascending: false });
+  const [{ data: records }, { data: leaveRows }, { data: holidayRows }] = await Promise.all([
+    supabase
+      .from("attendance_records")
+      .select("id, work_date, status, clock_in_server_at, clock_out_server_at, late_minutes, ot_minutes, shift_id, work_location_id")
+      .eq("org_id", user.orgId)
+      .eq("employee_id", employeeId)
+      .gte("work_date", monthStart)
+      .lte("work_date", monthEnd)
+      .order("work_date", { ascending: false }),
+    // "ลา" alone doesn't say which kind — same per-date leave-type lookup used on the main
+    // Attendance list (listAttendanceForDate), but this page never had it wired in at all.
+    supabase
+      .from("leave_requests")
+      .select("start_date, end_date, leave_types(name_th)")
+      .eq("org_id", user.orgId)
+      .eq("employee_id", employeeId)
+      .eq("status", "approved")
+      .lte("start_date", monthEnd)
+      .gte("end_date", monthStart),
+    supabase.from("company_holidays").select("holiday_date, name").eq("org_id", user.orgId).gte("holiday_date", monthStart).lte("holiday_date", monthEnd),
+  ]);
+
+  const holidayNameByDate = new Map((holidayRows ?? []).map((h) => [h.holiday_date, h.name]));
+  function leaveTypeForDate(workDate: string): string | null {
+    for (const l of leaveRows ?? []) {
+      if (l.start_date <= workDate && l.end_date >= workDate) return (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null;
+    }
+    return null;
+  }
 
   const { data: shifts } = await supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId).order("name");
   const { data: workLocations } = await supabase.from("work_locations").select("id, name").eq("org_id", user.orgId).order("name");
@@ -169,6 +190,7 @@ export default async function EmployeeAttendanceDashboardPage({
                       lateMinutes: r.late_minutes ?? 0,
                       otMinutes: r.ot_minutes ?? 0,
                       status: r.status,
+                      statusDetail: r.status === "leave" ? leaveTypeForDate(r.work_date) : r.status === "holiday" ? (holidayNameByDate.get(r.work_date) ?? null) : null,
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,
                     }}
