@@ -15,6 +15,8 @@ export interface PayrollCalcRowData {
   employeeCode: string;
   employeeName: string;
   employeePhotoUrl: string | null;
+  employmentType: string;
+  workedDays: number;
   baseAmount: number;
   otAmount: number;
   grossEarnings: number;
@@ -61,9 +63,16 @@ function fmt(n: number): string {
 }
 
 export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssPolicy: SsPolicy }) {
+  const isDailyWage = row.employmentType === "daily";
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [baseAmount, setBaseAmount] = useState(String(row.baseAmount));
+  // Daily-wage pay is worked days × the per-day rate — editing either one recomputes the
+  // total, rather than typing one lump base-pay figure that doesn't show how it was
+  // derived (a raw per-day rate shown alone next to a much larger OT figure looked like a
+  // calculation error).
+  const [workedDays, setWorkedDays] = useState(String(row.workedDays));
+  const [dailyRate, setDailyRate] = useState(String(row.workedDays > 0 ? Math.round((row.baseAmount / row.workedDays) * 100) / 100 : row.baseAmount));
   const [otAmount, setOtAmount] = useState(String(row.otAmount));
   const [socialSecurityAmount, setSocialSecurityAmount] = useState(String(row.socialSecurityAmount));
   const [socialSecurityAutoCalc, setSocialSecurityAutoCalc] = useState(row.socialSecurityAutoCalc);
@@ -74,6 +83,8 @@ export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssP
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const effectiveBaseAmount = isDailyWage ? (Number(workedDays) || 0) * (Number(dailyRate) || 0) : Number(baseAmount) || 0;
+
   function updateBaseAmount(value: string) {
     setBaseAmount(value);
     if (socialSecurityAutoCalc) {
@@ -81,10 +92,19 @@ export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssP
     }
   }
 
+  function updateDailyWageInput(nextWorkedDays: string, nextDailyRate: string) {
+    setWorkedDays(nextWorkedDays);
+    setDailyRate(nextDailyRate);
+    if (socialSecurityAutoCalc) {
+      const total = (Number(nextWorkedDays) || 0) * (Number(nextDailyRate) || 0);
+      setSocialSecurityAmount(String(computeAutoSocialSecurity(total, ssPolicy)));
+    }
+  }
+
   function toggleSocialSecurityAutoCalc(checked: boolean) {
     setSocialSecurityAutoCalc(checked);
     if (checked) {
-      setSocialSecurityAmount(String(computeAutoSocialSecurity(Number(baseAmount) || 0, ssPolicy)));
+      setSocialSecurityAmount(String(computeAutoSocialSecurity(effectiveBaseAmount, ssPolicy)));
     }
   }
 
@@ -93,7 +113,7 @@ export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssP
   // otAmount isn't added separately — the engine always includes OT as its own row inside
   // earningItems ("ค่าล่วงเวลา (OT)"), so summing both here would double it. otAmount is kept
   // only as the figure shown in the outer table's "OT" column / used on the payslip.
-  const previewGross = (Number(baseAmount) || 0) + earningItemsTotal;
+  const previewGross = effectiveBaseAmount + earningItemsTotal;
   const previewTax = (Number(wht40_1Amount) || 0) + (Number(wht40_2Amount) || 0);
   const previewDeductions = (Number(socialSecurityAmount) || 0) + previewTax + deductionItemsTotal;
   const previewNet = previewGross - previewDeductions;
@@ -102,7 +122,7 @@ export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssP
     setError(null);
     startTransition(async () => {
       const result = await updatePayrollCalcAction(row.id, {
-        baseAmount,
+        baseAmount: String(effectiveBaseAmount),
         otAmount,
         socialSecurityAmount,
         socialSecurityAutoCalc,
@@ -142,7 +162,20 @@ export function PayrollCalcRow({ row, ssPolicy }: { row: PayrollCalcRowData; ssP
             </div>
 
             <div className="space-y-3">
-              <FieldRow label="เงินเดือน:" value={baseAmount} onChange={updateBaseAmount} />
+              {isDailyWage ? (
+                <>
+                  <FieldRow label="จำนวนวันทำงาน:" value={workedDays} onChange={(v) => updateDailyWageInput(v, dailyRate)} />
+                  <FieldRow label="ค่าจ้าง:" value={dailyRate} onChange={(v) => updateDailyWageInput(workedDays, v)} />
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-on-surface-variant">ค่าจ้างรวม:</label>
+                    <span className="flex h-9 w-36 items-center justify-end rounded-lg bg-surface-container px-3 text-sm font-semibold">
+                      {fmt(effectiveBaseAmount)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <FieldRow label="เงินเดือน:" value={baseAmount} onChange={updateBaseAmount} />
+              )}
               <FieldRow label="ค่าล่วงเวลารวม (OT):" value={otAmount} onChange={setOtAmount} />
 
               <div>

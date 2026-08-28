@@ -158,6 +158,8 @@ export default async function PayrollRunDetailPage({ params }: { params: Promise
                         const path = (c.employees as unknown as { photo_url: string | null } | null)?.photo_url;
                         return path ? (signedByPath.get(path) ?? null) : null;
                       })(),
+                      employmentType: c.employment_type_snapshot,
+                      workedDays: Number(c.worked_days),
                       baseAmount: Number(c.base_amount),
                       otAmount: Number(c.ot_amount),
                       grossEarnings: Number(c.gross_earnings),
