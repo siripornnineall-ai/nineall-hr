@@ -259,7 +259,13 @@ export async function calculatePayrollRunAction(runId: string) {
           department_snapshot: (emp.departments as unknown as { name: string } | null)?.name ?? null,
           position_snapshot: (emp.job_positions as unknown as { title: string } | null)?.title ?? null,
           employment_type_snapshot: emp.employment_type,
-          base_amount: satangToBaht(result.baseAmountSatang),
+          // proratedBaseSatang (what was actually earned this period), not the raw
+          // configured rate — for a daily-wage employee that rate (e.g. 450/day) is far
+          // smaller than a month's OT and looked like a calculation error next to it; for
+          // a mid-cycle joiner the raw monthly rate similarly doesn't match what they were
+          // actually paid. This is also what the edit panel's "เงินเดือน" field already
+          // assumes it holds (its gross-earnings formula adds it directly, unprorated).
+          base_amount: satangToBaht(result.proratedBaseSatang),
           // Includes projected remaining scheduled workdays for daily-wage employees
           // (see remainingScheduledWorkDays above) so this matches what gross_earnings
           // actually paid for, instead of only counting days with real attendance so far.
