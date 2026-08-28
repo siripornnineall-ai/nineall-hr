@@ -47,6 +47,9 @@ export async function generateCertificateAction(
       showSalary,
       purpose: purpose || null,
       issueDate: new Date().toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" }),
+      // No designated signer configured yet — falls back to the generic "ฝ่ายบุคคล" label.
+      signerName: null,
+      signerTitle: null,
     });
     return { base64: pdfBuffer.toString("base64"), filename: `certificate-${employee.employee_code}-${Date.now()}.pdf` };
   } catch (err) {

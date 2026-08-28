@@ -17,6 +17,8 @@ export interface CertificateDocumentProps {
   showSalary: boolean;
   purpose: string | null;
   issueDate: string;
+  signerName: string | null;
+  signerTitle: string | null;
 }
 
 function escapeHtml(s: string): string {
@@ -33,9 +35,11 @@ const EMPLOYMENT_TYPE_TH: Record<string, string> = {
 
 export function renderCertificateHtml(p: CertificateDocumentProps): string {
   const salarySentence = p.showSalary && p.baseAmountBaht
-    ? `ได้รับเงินเดือน/ค่าจ้างอัตรา ${p.baseAmountBaht.toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาทต่อเดือน `
+    ? ` มีอัตราเงินเดือนประจำเดือนละ ${p.baseAmountBaht.toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท ซึ่งอัตรานี้ยังไม่รวมค่าตอบแทนและเงินพิเศษอื่นๆ`
     : "";
-  const purposeSentence = p.purpose ? `ทั้งนี้เพื่อใช้ประกอบ${escapeHtml(p.purpose)}` : "ทั้งนี้เพื่อใช้ตามความประสงค์ของผู้ร้องขอ";
+  const purposeSentence = p.purpose
+    ? `หนังสือรับรองฉบับนี้ใช้เพื่อประกอบ${escapeHtml(p.purpose)}เท่านั้น`
+    : "หนังสือรับรองฉบับนี้ใช้ตามความประสงค์ของผู้ร้องขอเท่านั้น";
 
   return `<!doctype html>
 <html lang="th">
@@ -51,48 +55,46 @@ export function renderCertificateHtml(p: CertificateDocumentProps): string {
   * { box-sizing: border-box; }
   body {
     font-family: "NotoSansThai", sans-serif;
-    font-size: 12pt;
+    font-size: 13pt;
     color: #1a1a1a;
-    padding: 48px 56px;
+    padding: 64px 72px;
     margin: 0;
-    line-height: 1.9;
+    line-height: 2;
   }
-  .header { text-align: center; margin-bottom: 28px; border-bottom: 2px solid #C54B38; padding-bottom: 16px; }
-  .company-name { font-size: 18pt; font-weight: 700; }
-  .company-sub { font-size: 10pt; color: #555; margin-top: 2px; }
-  .title { font-size: 16pt; font-weight: 700; text-align: center; margin: 24px 0 8px; letter-spacing: 2px; }
-  .doc-no { text-align: right; font-size: 10pt; color: #555; }
-  .body-text { margin-top: 20px; text-align: justify; }
-  .signature-block { margin-top: 64px; text-align: center; }
-  .signature-line { margin-top: 56px; border-top: 1px solid #333; width: 240px; margin-left: auto; margin-right: auto; padding-top: 6px; }
-  .footer { margin-top: 40px; font-size: 8pt; color: #888; text-align: center; }
+  .title { font-size: 17pt; font-weight: 700; text-align: center; margin: 0 0 36px; }
+  .body-text { text-indent: 48px; text-align: justify; }
+  .body-text + .body-text { margin-top: 18px; }
+  .issue-line { margin-top: 40px; text-align: right; }
+  .signature-block { margin-top: 64px; text-align: right; padding-right: 48px; }
+  .signature-line { margin-bottom: 6px; }
+  .signature-name { font-weight: 700; }
 </style>
 </head>
 <body>
-  <div class="header">
-    <div class="company-name">${escapeHtml(p.orgName)}</div>
-    ${p.orgLegalName ? `<div class="company-sub">${escapeHtml(p.orgLegalName)}</div>` : ""}
-    ${p.orgTaxId ? `<div class="company-sub">เลขประจำตัวผู้เสียภาษีอากร ${escapeHtml(p.orgTaxId)}</div>` : ""}
-  </div>
-
-  <div class="doc-no">วันที่ออกเอกสาร: ${escapeHtml(p.issueDate)}</div>
   <div class="title">หนังสือรับรองการทำงาน</div>
 
   <div class="body-text">
-    หนังสือฉบับนี้ออกให้เพื่อรับรองว่า <strong>${escapeHtml(p.employeeName)}</strong> รหัสพนักงาน ${escapeHtml(p.employeeCode)}
-    เป็น${p.department ? `พนักงานสังกัดแผนก${escapeHtml(p.department)} ` : "พนักงาน "}
-    ตำแหน่ง <strong>${escapeHtml(p.position ?? "-")}</strong>
+    หนังสือฉบับนี้ออกเพื่อรับรองว่า <strong>${escapeHtml(p.employeeName)}</strong> รหัสพนักงาน ${escapeHtml(p.employeeCode)}
+    เป็นพนักงานของ${escapeHtml(p.orgLegalName ?? p.orgName)}
+    ปฏิบัติงานในตำแหน่ง <strong>${escapeHtml(p.position ?? "-")}</strong>${p.department ? ` ฝ่าย${escapeHtml(p.department)}` : ""}
     ประเภทการจ้างงานแบบ${escapeHtml(EMPLOYMENT_TYPE_TH[p.employmentType] ?? p.employmentType)}
-    ของ${escapeHtml(p.orgName)} ตั้งแต่วันที่ ${escapeHtml(p.hireDate)} จนถึงปัจจุบัน
-    ${salarySentence}
+  </div>
+
+  <div class="body-text">
+    โดยเริ่มทำงานตั้งแต่วันที่ ${escapeHtml(p.hireDate)} จนถึงปัจจุบัน${salarySentence}
+  </div>
+
+  <div class="body-text">
     ${purposeSentence}
   </div>
 
-  <div class="signature-block">
-    <div class="signature-line">ผู้มีอำนาจลงนาม / ฝ่ายบุคคล</div>
-  </div>
+  <div class="issue-line">ออกให้ ณ วันที่ ${escapeHtml(p.issueDate)}</div>
 
-  <div class="footer">เอกสารนี้ออกโดยระบบอัตโนมัติของ ${escapeHtml(p.orgName)} — Nineall HR</div>
+  <div class="signature-block">
+    <div class="signature-line">ลงชื่อ...........................................</div>
+    ${p.signerName ? `<div class="signature-name">(${escapeHtml(p.signerName)})</div>` : ""}
+    <div>${escapeHtml(p.signerTitle ?? "ผู้มีอำนาจลงนาม / ฝ่ายบุคคล")}</div>
+  </div>
 </body>
 </html>`;
 }
