@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { listAttendanceForDate, syncHolidayAttendance, syncDayOffAttendance } from "@/lib/queries/attendance";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
+import { Avatar } from "@/components/Avatar";
+import { signAvatarUrls } from "@/lib/avatars";
 import { AttendanceRow } from "./AttendanceRow";
 
 export default async function AttendancePage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
@@ -11,11 +14,25 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const supabase = await createClient();
   const holidayName = await syncHolidayAttendance(user.orgId, workDate);
   await syncDayOffAttendance(user.orgId, workDate);
-  const [rows, { data: shifts }, { data: workLocations }] = await Promise.all([
+  const [rows, { data: shifts }, { data: workLocations }, { data: allEmployees }] = await Promise.all([
     listAttendanceForDate(user.orgId, workDate),
     supabase.from("work_shifts").select("id, name").eq("org_id", user.orgId),
     supabase.from("work_locations").select("id, name").eq("org_id", user.orgId),
+    supabase
+      .from("employees")
+      .select("id, employee_code, first_name, last_name, photo_url")
+      .eq("org_id", user.orgId)
+      .is("deleted_at", null)
+      .in("employment_status", ["active", "probation"]),
   ]);
+
+  // syncHolidayAttendance/syncDayOffAttendance only cover employees with an explicit
+  // shift_assignments row for this date — someone whose schedule was never set up at all
+  // (no row either way) falls through both and simply never appears here, indistinguishable
+  // from the page just not loading them. Surface that gap explicitly instead of hiding it.
+  const presentIds = new Set(rows.map((r) => r.employeeId));
+  const missingEmployees = (allEmployees ?? []).filter((e) => !presentIds.has(e.id));
+  const missingPhotoMap = await signAvatarUrls(supabase, missingEmployees.map((e) => e.photo_url));
 
   return (
     <>
@@ -73,6 +90,33 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
             </table>
           </div>
         </div>
+
+        {missingEmployees.length > 0 && (
+          <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
+            <div className="border-b border-amber-200 px-4 py-3">
+              <p className="text-sm font-bold text-amber-900">ยังไม่มีข้อมูลวันนี้ ({missingEmployees.length} คน)</p>
+              <p className="text-xs text-amber-800">
+                ยังไม่ได้ลงเวลา และไม่มีตารางกะ/วันหยุดกำหนดไว้ล่วงหน้าสำหรับวันนี้ — อาจต้องตั้งตารางกะให้ที่หน้า{" "}
+                <Link href="/schedule" className="underline">
+                  ตารางกะ
+                </Link>
+              </p>
+            </div>
+            <ul className="divide-y divide-amber-100">
+              {missingEmployees.map((e) => (
+                <li key={e.id} className="flex items-center justify-between px-4 py-2.5">
+                  <Link href={`/attendance/${e.id}`} className="flex items-center gap-2 hover:text-primary hover:underline">
+                    <Avatar url={e.photo_url ? (missingPhotoMap.get(e.photo_url) ?? null) : null} size={28} />
+                    <span className="text-sm font-semibold">
+                      {e.first_name} {e.last_name}
+                      <span className="ml-2 text-xs font-normal text-on-surface-variant">{e.employee_code}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </>
   );

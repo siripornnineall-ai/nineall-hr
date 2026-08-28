@@ -90,9 +90,6 @@ async function autoFillLeaveAttendance(
   const { data: leaveType } = await supabase.from("leave_types").select("code").eq("id", leaveTypeId).single();
   if (!leaveType) return;
   const offsiteStatus = OFFSITE_LEAVE_STATUS[leaveType.code];
-  // A half-day/hourly absence still has the employee clocking in for the rest of the day —
-  // only a full-day absence is safe to blanket-mark "ลา" without risking a real clock-in.
-  if (!offsiteStatus && unit !== "full_day") return;
 
   const workDates: string[] = [];
   for (let d = new Date(`${startDate}T00:00:00Z`); d <= new Date(`${endDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
@@ -118,9 +115,9 @@ async function autoFillLeaveAttendance(
         // on the leave request itself — use those directly instead of the full shift.
         await fillOffsiteAttendanceForDate(supabase, orgId, employeeId, workDate, offsiteStatus, startTime.slice(0, 5), endTime.slice(0, 5));
       }
-    } else {
-      // A genuine absence — no clock times to fill in, just mark the day as "ลา" so it's
-      // distinguishable from a day the employee simply never clocked in at all.
+    } else if (unit === "full_day") {
+      // A genuine full-day absence — no clock times to fill in, just mark the day as "ลา"
+      // so it's distinguishable from a day the employee simply never clocked in at all.
       await supabase.from("attendance_records").upsert(
         {
           org_id: orgId,
@@ -138,6 +135,29 @@ async function autoFillLeaveAttendance(
         },
         { onConflict: "employee_id,work_date" }
       );
+    } else {
+      // Half-day/hourly absence of an ordinary leave type (sick, personal, etc.) — the
+      // employee is expected to clock in for the rest of the day, so this must never
+      // overwrite a real clock-in the way the full-day branch above safely can. Only fill
+      // in a "ลา" placeholder when nothing is recorded for the date yet, so the day at
+      // least shows the leave instead of being blank; a real clock-in later takes over.
+      const { data: existing } = await supabase.from("attendance_records").select("id").eq("employee_id", employeeId).eq("work_date", workDate).maybeSingle();
+      if (!existing) {
+        await supabase.from("attendance_records").insert({
+          org_id: orgId,
+          employee_id: employeeId,
+          work_date: workDate,
+          shift_id: null,
+          work_location_id: null,
+          clock_in_server_at: null,
+          clock_out_server_at: null,
+          status: "leave",
+          late_minutes: 0,
+          early_leave_minutes: 0,
+          worked_minutes: 0,
+          needs_review: false,
+        });
+      }
     }
   }
   revalidatePath(`/attendance/${employeeId}`);

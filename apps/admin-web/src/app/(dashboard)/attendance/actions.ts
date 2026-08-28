@@ -139,13 +139,40 @@ export async function createBackdatedAttendanceAction(
   const { data: employee } = await supabase.from("employees").select("org_id").eq("id", employeeId).eq("org_id", user.orgId).single();
   if (!employee) return { error: "ไม่พบพนักงาน" };
 
-  const clockInAt = values.clockIn ? parseBangkokDateTime(values.workDate, values.clockIn) : null;
-  const clockOutAt = values.clockOut ? parseBangkokDateTime(values.workDate, values.clockOut) : null;
+  let clockInAt = values.clockIn ? parseBangkokDateTime(values.workDate, values.clockIn) : null;
+  let clockOutAt = values.clockOut ? parseBangkokDateTime(values.workDate, values.clockOut) : null;
 
   let status = values.status;
   let lateMinutes = 0;
   let earlyLeaveMinutes = 0;
   let workedMinutes = 0;
+  let resolvedShiftId = values.shiftId || null;
+
+  // WFH/off-site backdated by admin with no times typed in: fill them from the employee's
+  // shift, same as an employee's own approved WFH/off-site leave request does (see
+  // autoFillLeaveAttendance in leave/actions.ts) — previously this path left clock times
+  // blank, forcing admin to type them in by hand.
+  if ((status === "work_from_home" || status === "off_site") && !clockInAt && !clockOutAt) {
+    if (!resolvedShiftId) {
+      const { data: assignment } = await supabase
+        .from("shift_assignments")
+        .select("shift_id")
+        .eq("employee_id", employeeId)
+        .not("shift_id", "is", null)
+        .order("work_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      resolvedShiftId = assignment?.shift_id ?? null;
+    }
+    if (resolvedShiftId) {
+      const { data: shift } = await supabase.from("work_shifts").select("start_time, end_time").eq("id", resolvedShiftId).single();
+      if (shift) {
+        clockInAt = parseBangkokDateTime(values.workDate, shift.start_time.slice(0, 5));
+        clockOutAt = parseBangkokDateTime(values.workDate, shift.end_time.slice(0, 5));
+        workedMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
+      }
+    }
+  }
 
   if (status === "") {
     if (!clockInAt) return { error: "กรุณาระบุเวลาเข้างาน เพื่อให้ระบบคำนวณสถานะให้อัตโนมัติ" };
@@ -175,7 +202,7 @@ export async function createBackdatedAttendanceAction(
       org_id: employee.org_id,
       employee_id: employeeId,
       work_date: values.workDate,
-      shift_id: values.shiftId || null,
+      shift_id: resolvedShiftId,
       work_location_id: values.workLocationId || null,
       clock_in_server_at: clockInAt ? clockInAt.toISOString() : null,
       clock_out_server_at: clockOutAt ? clockOutAt.toISOString() : null,
