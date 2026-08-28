@@ -27,16 +27,25 @@ export default function LeaveBalancesPage() {
   const load = useCallback(async () => {
     if (!profile) return;
     const year = new Date().getFullYear();
-    const [{ data: types }, { data: bal }] = await Promise.all([
+    const [{ data: types }, { data: bal }, { data: history }] = await Promise.all([
       supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
       supabase
         .from("leave_balances")
         .select("leave_type_id, entitled_days, carried_over_days, used_days, pending_days")
         .eq("employee_id", profile.employeeId)
         .eq("year", year),
+      // How often this employee has actually taken each leave type — used purely to order
+      // the list below (most-used first), not for the balance numbers themselves.
+      supabase.from("leave_requests").select("leave_type_id").eq("employee_id", profile.employeeId).in("status", ["approved", "pending"]),
     ]);
+
+    const usageCount = new Map<string, number>();
+    for (const r of history ?? []) usageCount.set(r.leave_type_id, (usageCount.get(r.leave_type_id) ?? 0) + 1);
+
+    const sortedBalances = [...(bal ?? [])].sort((a, b) => (usageCount.get(b.leave_type_id) ?? 0) - (usageCount.get(a.leave_type_id) ?? 0));
+
     setLeaveTypes(types ?? []);
-    setBalances(bal ?? []);
+    setBalances(sortedBalances);
     setLoaded(true);
   }, [profile, supabase]);
 
