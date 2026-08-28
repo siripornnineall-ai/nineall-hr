@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { currentOtCutoffMonthKey, getOtCutoffWindow } from "@/lib/otCutoff";
 
 interface OvertimeRow {
   id: string;
@@ -89,9 +90,12 @@ export default function OvertimePage() {
 
   const isHoliday = holidayDates.has(workDate);
   const rateMultiplier = isHoliday ? OT_RATE.holiday : OT_RATE.normal;
-  const monthKey = new Date().toISOString().slice(0, 7);
+  // "This month" here means the same OT cutoff window payroll actually pays out on (26th
+  // of the prior month through the 25th), not the calendar month — otherwise this figure
+  // wouldn't match what shows up on the payslip.
+  const otWindow = getOtCutoffWindow(currentOtCutoffMonthKey());
   const approvedHoursThisMonth = requests
-    .filter((r) => r.status === "approved" && r.work_date.slice(0, 7) === monthKey)
+    .filter((r) => r.status === "approved" && r.work_date >= otWindow.start && r.work_date <= otWindow.end)
     .reduce((sum, r) => sum + Number(r.approved_hours ?? 0), 0);
 
   async function handleSubmit() {
