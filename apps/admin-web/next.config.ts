@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
   // regular JS. Keeping them external makes the serverless function just `require()`
   // them at runtime instead, which is what @sparticuz/chromium's own docs call for.
   serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
+  // @sparticuz/chromium's actual binary payload (bin/*.br) is resolved at runtime via
+  // dynamic path construction, not a static require(), so Next's file tracer never sees
+  // it and the deployed function is missing "node_modules/@sparticuz/chromium/bin"
+  // entirely. Must be included explicitly for every route that generates a payslip PDF.
+  outputFileTracingIncludes: {
+    "/payroll/**": ["../../node_modules/@sparticuz/chromium/bin/**"],
+  },
 };
 
 export default nextConfig;
