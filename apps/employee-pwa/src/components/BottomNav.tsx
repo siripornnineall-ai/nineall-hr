@@ -8,7 +8,6 @@ const ITEMS = [
   { href: "/", label: "หน้าแรก", icon: "home" },
   { href: "/attendance", label: "ลงเวลา", icon: "fingerprint" },
   { href: "/leave", label: "ลางาน", icon: "event_note" },
-  { href: "/payslip", label: "สลิปเงินเดือน", icon: "payments" },
   { href: "/profile", label: "โปรไฟล์", icon: "person" },
 ];
 
