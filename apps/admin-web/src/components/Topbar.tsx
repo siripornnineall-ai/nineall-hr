@@ -1,4 +1,5 @@
 import { LogoutButton } from "./LogoutButton";
+import { NotificationBell } from "./NotificationBell";
 
 export function Topbar({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -8,9 +9,7 @@ export function Topbar({ title, subtitle }: { title: string; subtitle?: string }
         {subtitle && <p className="text-sm text-on-surface-variant">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-4">
-        <button className="relative text-on-surface-variant transition-colors hover:text-primary" aria-label="การแจ้งเตือน">
-          <span className="material-symbols-outlined">notifications</span>
-        </button>
+        <NotificationBell />
         <LogoutButton />
       </div>
     </header>
