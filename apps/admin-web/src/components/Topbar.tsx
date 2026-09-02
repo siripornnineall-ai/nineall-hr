@@ -9,8 +9,8 @@ export function Topbar({ title, subtitle }: { title: string; subtitle?: string }
         {subtitle && <p className="text-sm text-on-surface-variant">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-4">
-        <NotificationBell />
         <LogoutButton />
+        <NotificationBell />
       </div>
     </header>
   );

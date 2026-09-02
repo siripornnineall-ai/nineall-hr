@@ -122,11 +122,11 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <NotificationBell />
             <div className="text-right">
               <p className="text-2xl font-bold text-white">{now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false })}</p>
               <p className="text-xs text-white/80">{now.toLocaleDateString("th-TH")}</p>
             </div>
+            <NotificationBell />
           </div>
         </div>
       </header>
