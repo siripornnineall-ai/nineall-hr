@@ -5,8 +5,7 @@ import Image from "next/image";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
-import { THAI_BANKS } from "@/lib/thaiBanks";
-import { formatThaiId13, formatThaiBankAccount } from "@nineall-hr/shared-validation";
+import { formatThaiId13 } from "@nineall-hr/shared-validation";
 
 interface AddressValue {
   houseNo?: string;
@@ -33,13 +32,6 @@ interface EditableProfile {
   currentAddress: AddressValue;
 }
 
-interface BankAccount {
-  id: string | null;
-  bankName: string;
-  accountName: string;
-  accountNumber: string;
-}
-
 // Free-text sub-fields only — province/district/subDistrict/postalCode are handled by
 // the cascading selects in ThaiAddressCascadeFields instead.
 const ADDRESS_TEXT_FIELDS: { key: keyof AddressValue; label: string }[] = [
@@ -63,9 +55,6 @@ export default function ProfilePage() {
   const [profileMessage, setProfileMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   const [sameAsIdCard, setSameAsIdCard] = useState(false);
-  const [bank, setBank] = useState<BankAccount | null>(null);
-  const [savingBank, setSavingBank] = useState(false);
-  const [bankMessage, setBankMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   const [newPassword, setNewPassword] = useState("");
   const [changing, setChanging] = useState(false);
@@ -100,21 +89,6 @@ export default function ProfilePage() {
           const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(data.photo_url, 3600);
           if (signed) setPhotoPreview(signed.signedUrl);
         }
-      });
-    supabase
-      .from("bank_accounts")
-      .select("id, bank_name, account_name, account_number")
-      .eq("employee_id", profile.employeeId)
-      .order("is_primary", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        setBank({
-          id: data?.id ?? null,
-          bankName: data?.bank_name ?? "",
-          accountName: data?.account_name ?? "",
-          accountNumber: data?.account_number ?? "",
-        });
       });
   }, [profile, supabase]);
 
@@ -186,33 +160,6 @@ export default function ProfilePage() {
   function toggleSameAsIdCard(checked: boolean) {
     setSameAsIdCard(checked);
     if (checked && edit) setEdit({ ...edit, currentAddress: edit.idCardAddress });
-  }
-
-  async function handleSaveBank() {
-    if (!profile || !bank) return;
-    setBankMessage(null);
-    if (!bank.bankName.trim() || !bank.accountName.trim() || !bank.accountNumber.trim()) {
-      setBankMessage({ type: "error", text: "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบถ้วน" });
-      return;
-    }
-    setSavingBank(true);
-    const payload = {
-      employee_id: profile.employeeId,
-      bank_name: bank.bankName.trim(),
-      account_name: bank.accountName.trim(),
-      account_number: formatThaiBankAccount(bank.accountNumber.trim()),
-      is_primary: true,
-    };
-    const { data, error } = bank.id
-      ? await supabase.from("bank_accounts").update(payload).eq("id", bank.id).select("id").single()
-      : await supabase.from("bank_accounts").insert(payload).select("id").single();
-    setSavingBank(false);
-    if (error) {
-      setBankMessage({ type: "error", text: error.message });
-      return;
-    }
-    setBank({ ...bank, id: data.id });
-    setBankMessage({ type: "success", text: "บันทึกข้อมูลบัญชีธนาคารแล้ว" });
   }
 
   async function handleChangePassword() {
@@ -409,50 +356,6 @@ export default function ProfilePage() {
             className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60"
           >
             {savingProfile ? "กำลังบันทึก..." : "บันทึกข้อมูลส่วนตัว"}
-          </button>
-        </div>
-      )}
-
-      {bank && (
-        <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-          <h2 className="font-bold text-on-surface">บัญชีธนาคาร</h2>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ธนาคาร</label>
-            <select
-              value={bank.bankName}
-              onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
-              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            >
-              <option value="">-- เลือกธนาคาร --</option>
-              {THAI_BANKS.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อบัญชี</label>
-            <input
-              value={bank.accountName}
-              onChange={(e) => setBank({ ...bank, accountName: e.target.value })}
-              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขที่บัญชี</label>
-            <input
-              value={bank.accountNumber}
-              onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })}
-              onBlur={(e) => setBank({ ...bank, accountNumber: formatThaiBankAccount(e.target.value) })}
-              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            />
-          </div>
-          {bankMessage && (
-            <p className={`text-sm font-semibold ${bankMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>{bankMessage.text}</p>
-          )}
-          <button onClick={handleSaveBank} disabled={savingBank} className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60">
-            {savingBank ? "กำลังบันทึก..." : "บันทึกบัญชีธนาคาร"}
           </button>
         </div>
       )}
