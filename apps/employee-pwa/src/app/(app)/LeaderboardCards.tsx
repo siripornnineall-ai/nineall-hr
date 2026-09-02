@@ -126,13 +126,17 @@ export function LateLeaderboardCard() {
   );
 }
 
+const COOKIE_VISIBLE_COUNT = 10;
+
 export function CookieLeaderboardCard() {
   const [rows, setRows] = useState<CookieRow[] | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
+    const { start } = currentBangkokMonthRange();
     supabase
-      .rpc("get_cookie_leaderboard")
+      .rpc("get_cookie_leaderboard", { p_limit: 50, p_month: start })
       .then(async ({ data, error }) => {
         if (error || !data) return setRows([]);
         const rawRows = data as RawCookieRow[];
@@ -151,32 +155,61 @@ export function CookieLeaderboardCard() {
 
   if (rows === null) return null;
 
+  const topRows = rows.slice(0, COOKIE_VISIBLE_COUNT);
+  const restRows = rows.slice(COOKIE_VISIBLE_COUNT);
+
   return (
     <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-      <p className="mb-3 text-sm font-bold text-on-surface">ท็อป 3 รางวัลคนมีน้ำใจ 🍪</p>
+      <p className="mb-3 text-sm font-bold text-on-surface">ท็อป 10 รางวัลคนมีน้ำใจ 🍪</p>
       {rows.length === 0 ? (
         <p className="text-xs text-on-surface-variant">ยังไม่มีใครได้รับคุกกี้</p>
       ) : (
-        <ul className="space-y-3">
-          {rows.map((row, i) => (
-            <li key={row.employeeId} className="flex items-center gap-3">
-              <span className="w-5 text-center">{MEDALS[i]}</span>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container">
-                {row.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.photoUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="material-symbols-outlined text-on-surface-variant">person</span>
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-on-surface">{row.nickname || row.name}</p>
-                <p className="text-xs text-on-surface-variant">ได้รับ {row.totalCookies} คุกกี้</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-3">
+            {topRows.map((row, i) => (
+              <CookieRowItem key={row.employeeId} row={row} rank={i + 1} medal={MEDALS[i]} />
+            ))}
+          </ul>
+          {restRows.length > 0 && (
+            <>
+              {expanded && (
+                <ul className="mt-3 space-y-3 border-t border-outline-variant pt-3">
+                  {restRows.map((row, i) => (
+                    <CookieRowItem key={row.employeeId} row={row} rank={i + COOKIE_VISIBLE_COUNT + 1} />
+                  ))}
+                </ul>
+              )}
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-3 flex w-full items-center justify-center gap-1 text-xs font-bold text-secondary"
+              >
+                {expanded ? "ซ่อน" : `ดูเพิ่มเติม (อีก ${restRows.length} คน)`}
+                <span className="material-symbols-outlined text-[16px]">{expanded ? "expand_less" : "expand_more"}</span>
+              </button>
+            </>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function CookieRowItem({ row, rank, medal }: { row: CookieRow; rank: number; medal?: string }) {
+  return (
+    <li className="flex items-center gap-3">
+      <span className="w-5 text-center">{medal ?? <span className="text-xs font-bold text-on-surface-variant">{rank}</span>}</span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container">
+        {row.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={row.photoUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="material-symbols-outlined text-on-surface-variant">person</span>
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-on-surface">{row.nickname || row.name}</p>
+        <p className="text-xs text-on-surface-variant">ได้รับ {row.totalCookies} คุกกี้</p>
+      </div>
+    </li>
   );
 }

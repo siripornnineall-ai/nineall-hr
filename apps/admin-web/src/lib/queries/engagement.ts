@@ -74,7 +74,10 @@ export async function getLateLeaderboard(): Promise<LateLeaderboardRow[]> {
 
 export async function getCookieLeaderboard(limit = 3): Promise<CookieLeaderboardRow[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_cookie_leaderboard", { p_limit: limit });
+  // Resets every calendar month — matches enforce_cookie_monthly_limit()'s own 5/month
+  // cap, which is keyed on the same kindness_cookies.month column.
+  const { start } = currentBangkokMonthRange();
+  const { data, error } = await supabase.rpc("get_cookie_leaderboard", { p_limit: limit, p_month: start });
   if (error || !data) return [];
   const rows = data as RawCookieRow[];
 
