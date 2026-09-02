@@ -1,16 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface NotificationRow {
   id: string;
+  type: string;
   title: string;
   body: string | null;
   is_read: boolean;
   created_at: string;
   data: { leave_request_id?: string } | null;
 }
+
+// Where clicking a notification should take you — keyed by notifications.type.
+const NOTIFICATION_LINKS: Record<string, string> = {
+  leave_request_submitted: "/leave",
+};
 
 function timeAgoTh(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -25,6 +32,7 @@ function timeAgoTh(iso: string): string {
 
 export function NotificationBell() {
   const supabase = createClient();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -37,7 +45,7 @@ export function NotificationBell() {
     if (!user) return;
     const { data } = await supabase
       .from("notifications")
-      .select("id, title, body, is_read, created_at, data")
+      .select("id, type, title, body, is_read, created_at, data")
       .eq("profile_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -66,6 +74,13 @@ export function NotificationBell() {
   async function markAsRead(id: string) {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     await supabase.from("notifications").update({ is_read: true, read_at: new Date().toISOString() }).eq("id", id);
+  }
+
+  function openNotification(n: NotificationRow) {
+    if (!n.is_read) markAsRead(n.id);
+    setOpen(false);
+    const href = NOTIFICATION_LINKS[n.type];
+    if (href) router.push(href);
   }
 
   async function markAllAsRead() {
@@ -105,7 +120,7 @@ export function NotificationBell() {
             {notifications.map((n) => (
               <button
                 key={n.id}
-                onClick={() => !n.is_read && markAsRead(n.id)}
+                onClick={() => openNotification(n)}
                 className={`block w-full border-b border-outline-variant px-4 py-3 text-left last:border-0 hover:bg-surface-container-low ${
                   n.is_read ? "" : "bg-primary/5"
                 }`}
