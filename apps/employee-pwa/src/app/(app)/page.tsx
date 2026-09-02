@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { LateLeaderboardCard, CookieLeaderboardCard } from "./LeaderboardCards";
 import { NotesRow } from "./NotesRow";
+import { NotificationBell } from "@/components/NotificationBell";
 
 interface HomeStats {
   leaveDaysRemaining: number;
@@ -120,9 +121,12 @@ export default function HomePage() {
               <p className="text-xs text-white/85">{profile?.jobTitle ?? ""}</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-white">{now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false })}</p>
-            <p className="text-xs text-white/80">{now.toLocaleDateString("th-TH")}</p>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <div className="text-right">
+              <p className="text-2xl font-bold text-white">{now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", hour12: false })}</p>
+              <p className="text-xs text-white/80">{now.toLocaleDateString("th-TH")}</p>
+            </div>
           </div>
         </div>
       </header>
