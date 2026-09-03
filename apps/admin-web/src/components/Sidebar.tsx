@@ -20,6 +20,7 @@ const NAV_ITEMS: { href: string; label: string; icon: string; roles?: UserRole[]
   { href: "/org-chart", label: "ผังองค์กร", icon: "account_tree" },
   { href: "/recruitment", label: "รับสมัครงาน", icon: "work" },
   { href: "/reviews", label: "ประเมินผลงาน", icon: "military_tech" },
+  { href: "/performance-teams", label: "ทีมผลงานประจำเดือน", icon: "groups", roles: ["super_admin", "hr"] },
   { href: "/training", label: "การอบรม", icon: "school" },
   { href: "/payroll", label: "Payroll", icon: "payments", roles: ["super_admin", "hr"] },
   { href: "/reports", label: "Reports", icon: "assessment", roles: ["super_admin", "hr"] },

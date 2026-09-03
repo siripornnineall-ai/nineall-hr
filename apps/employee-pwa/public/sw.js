@@ -43,3 +43,41 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(caches.match(event.request).then((cached) => cached ?? fetch(event.request)));
   }
 });
+
+// Team-output reminder pushes (see supabase/functions/send-team-reminders) — the OS/browser
+// plays its own default notification sound when showNotification() runs, which is the
+// "เสียงแจ้งเตือน" behavior; a custom sound file isn't reliably supported across web push
+// implementations, so this relies on the platform default like any other push notification.
+self.addEventListener("push", (event) => {
+  let payload = { title: "แจ้งเตือนผลงานประจำวัน", body: "อย่าลืมกรอกผลงานวันนี้ก่อนเลิกงาน" };
+  try {
+    if (event.data) payload = { ...payload, ...event.data.json() };
+  } catch {
+    // non-JSON payload — fall back to the default text above
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      vibrate: [200, 100, 200],
+      data: { url: payload.url || "/performance" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/performance";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
