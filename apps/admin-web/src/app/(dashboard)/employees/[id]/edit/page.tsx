@@ -44,7 +44,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
 
   return (
     <>
-      <Topbar title={`แก้ไขข้อมูล: ${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} />
+      <Topbar title={`แก้ไขข้อมูล: ${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} backHref={`/employees/${id}`} />
       <div className="p-4 md:p-8">
         <EditEmployeeForm
           employee={employee}

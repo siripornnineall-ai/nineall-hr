@@ -15,7 +15,7 @@ export default async function NewEmployeePage() {
 
   return (
     <>
-      <Topbar title="เพิ่มพนักงานใหม่" subtitle="กรอกข้อมูลพนักงานให้ครบถ้วน" />
+      <Topbar title="เพิ่มพนักงานใหม่" subtitle="กรอกข้อมูลพนักงานให้ครบถ้วน" backHref="/employees" />
       <div className="p-4 md:p-8">
         <NewEmployeeForm departments={departments} positions={positions} managers={managers} />
       </div>

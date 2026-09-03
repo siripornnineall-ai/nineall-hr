@@ -155,8 +155,17 @@ export async function syncAbsentAttendance(orgId: string, workDate: string): Pro
 
   const [{ data: employees }, { data: existingRecords }, { data: dateAssignments }, { data: recentAssignments }] = await Promise.all([
     // lte hire_date: someone hired after this date wasn't employed yet, so they can't have
-    // been absent from a job they didn't have.
-    supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]).lte("hire_date", workDate),
+    // been absent from a job they didn't have. attendance_exempt (owners/CEOs/managers who
+    // are paid their full salary regardless of clocking in at all) never gets auto-marked
+    // absent — there's nothing for them to be "absent" from.
+    supabase
+      .from("employees")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("attendance_exempt", false)
+      .is("deleted_at", null)
+      .in("employment_status", ["active", "probation"])
+      .lte("hire_date", workDate),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("shift_assignments").select("employee_id, shift_id, work_location_id, is_day_off").eq("org_id", orgId).eq("work_date", workDate),
     // Fallback for an employee with no shift_assignments row on workDate at all (the exact

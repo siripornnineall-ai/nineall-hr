@@ -183,7 +183,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
   return (
     <>
-      <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} />
+      <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={employee.employee_code} backHref="/employees" />
       <div className="grid grid-cols-1 gap-6 p-4 md:grid-cols-3 md:p-8">
         <div className="rounded-xl border border-outline-variant bg-white p-6 text-center shadow-sm">
           <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-surface-container">

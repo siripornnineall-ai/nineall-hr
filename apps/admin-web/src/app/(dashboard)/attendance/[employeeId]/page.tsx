@@ -117,7 +117,11 @@ export default async function EmployeeAttendanceDashboardPage({
 
   return (
     <>
-      <Topbar title={`${employee.first_name} ${employee.last_name}`} subtitle={`${employee.employee_code} • ${position ?? "-"} • ${department ?? "-"}`} />
+      <Topbar
+        title={`${employee.first_name} ${employee.last_name}`}
+        subtitle={`${employee.employee_code} • ${position ?? "-"} • ${department ?? "-"}`}
+        backHref="/attendance"
+      />
       <div className="space-y-6 p-4 md:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">

@@ -8,7 +8,7 @@ export default async function ImportEmployeesPage() {
 
   return (
     <>
-      <Topbar title="นำเข้าพนักงานจาก Excel" subtitle="เพิ่มพนักงานหลายคนพร้อมกันด้วยไฟล์ Excel" />
+      <Topbar title="นำเข้าพนักงานจาก Excel" subtitle="เพิ่มพนักงานหลายคนพร้อมกันด้วยไฟล์ Excel" backHref="/employees" />
       <div className="p-4 md:p-8">
         <ImportEmployeesForm />
       </div>
