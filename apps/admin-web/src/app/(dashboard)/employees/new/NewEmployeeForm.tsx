@@ -29,6 +29,7 @@ export function NewEmployeeForm({
   const [createLogin, setCreateLogin] = useState(true);
   const [loginPassword, setLoginPassword] = useState("");
   const [hireDate, setHireDate] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
   const [idCardAddress, setIdCardAddress] = useState<AddressValue>({});
@@ -99,6 +100,7 @@ export function NewEmployeeForm({
         <Field label="ชื่อ (ภาษาอังกฤษ)" name="firstNameEn" />
         <Field label="นามสกุล (ภาษาอังกฤษ)" name="lastNameEn" />
         <Field label="ชื่อเล่น" name="nickname" />
+        <DateField label="วันเกิด" name="dateOfBirth" value={dateOfBirth} onChange={setDateOfBirth} />
         <Select label="เพศ" name="gender" options={GENDERS.map((v) => ({ value: v, label: v }))} />
         <Select label="เพศสภาพ" name="genderIdentity" options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))} />
         <Field label="เบอร์โทร" name="phone" />

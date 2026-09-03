@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { LateLeaderboardCard, CookieLeaderboardCard } from "./LeaderboardCards";
 import { NotesRow } from "./NotesRow";
+import { AnnouncementBanner } from "./AnnouncementBanner";
+import { BirthdayBanner } from "./BirthdayBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 
 interface HomeStats {
@@ -105,6 +107,8 @@ export default function HomePage() {
 
   return (
     <div>
+      <BirthdayBanner />
+      <AnnouncementBanner />
       <header className="safe-top rounded-b-3xl bg-primary-container px-5 pb-7 pt-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

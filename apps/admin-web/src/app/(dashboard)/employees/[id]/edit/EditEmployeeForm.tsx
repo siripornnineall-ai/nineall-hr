@@ -28,6 +28,7 @@ interface EmployeeRow {
   phone: string | null;
   personal_email: string | null;
   hire_date: string;
+  date_of_birth: string | null;
   probation_end_date: string | null;
   employment_type: string;
   branch_id: string | null;
@@ -66,6 +67,7 @@ export function EditEmployeeForm({
   const boundAction = updateEmployeeAction.bind(null, employee.id);
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
   const [hireDate, setHireDate] = useState(employee.hire_date);
+  const [dateOfBirth, setDateOfBirth] = useState(employee.date_of_birth ?? "");
   const [departmentId, setDepartmentId] = useState(employee.department_id ?? "");
   const positionsInDepartment = departmentId ? positions.filter((p) => p.department_id === departmentId) : positions;
   const [idCardAddress, setIdCardAddress] = useState<AddressValue>(employee.id_card_address ?? {});
@@ -111,6 +113,7 @@ export function EditEmployeeForm({
         <Field label="ชื่อ (ภาษาอังกฤษ)" name="firstNameEn" defaultValue={employee.first_name_en ?? ""} />
         <Field label="นามสกุล (ภาษาอังกฤษ)" name="lastNameEn" defaultValue={employee.last_name_en ?? ""} />
         <Field label="ชื่อเล่น" name="nickname" defaultValue={employee.nickname ?? ""} />
+        <DateField label="วันเกิด" name="dateOfBirth" value={dateOfBirth} onChange={setDateOfBirth} />
         <Select label="เพศ" name="gender" defaultValue={employee.gender ?? ""} options={GENDERS.map((v) => ({ value: v, label: v }))} />
         <Select
           label="เพศสภาพ"

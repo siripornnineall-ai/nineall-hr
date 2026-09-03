@@ -114,8 +114,13 @@ body {
   background: transparent;
 }
 
-.material-symbols-outlined {
-  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
-  font-size: 22px;
-  line-height: 1;
+/* In @layer base so a smaller Tailwind size utility (text-[18px] etc.) on the same
+   element can actually override this default — an unlayered rule always beats a
+   layered one regardless of selector specificity or source order. */
+@layer base {
+  .material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    font-size: 22px;
+    line-height: 1;
+  }
 }
