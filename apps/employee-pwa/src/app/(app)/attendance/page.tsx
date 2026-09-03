@@ -6,6 +6,43 @@ import { createClient } from "@/lib/supabase/client";
 
 type Phase = "idle" | "requesting_location" | "submitting" | "done" | "error";
 
+function getPosition(options: PositionOptions): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+}
+
+// getCurrentPosition's error callback fires for three very different reasons (permission
+// denied, no GPS fix available, or a timeout) but the old code showed the same "grant GPS
+// permission" message for all three — so a real GPS timeout (e.g. weak signal indoors, a
+// common report from staff who HAD already granted permission) looked identical to a denied
+// permission and left people with no way to tell what was actually wrong. This resolves with
+// a high-accuracy fix first, falls back to a lower-accuracy one (much faster, works off
+// wifi/cell towers) if that times out or the position is unavailable, and only ever shows the
+// "grant permission" message when the browser actually reports PERMISSION_DENIED.
+async function resolvePosition(): Promise<GeolocationPosition> {
+  if (!navigator.geolocation) {
+    throw new Error("อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS");
+  }
+  try {
+    return await getPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
+  } catch (err) {
+    const code = (err as GeolocationPositionError)?.code;
+    if (code === GeolocationPositionError.PERMISSION_DENIED) {
+      throw new Error("แอปไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาไปที่การตั้งค่ามือถือแล้วอนุญาตสิทธิ์ตำแหน่งให้เบราว์เซอร์/แอปนี้");
+    }
+    try {
+      return await getPosition({ enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 });
+    } catch (err2) {
+      const code2 = (err2 as GeolocationPositionError)?.code;
+      if (code2 === GeolocationPositionError.PERMISSION_DENIED) {
+        throw new Error("แอปไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาไปที่การตั้งค่ามือถือแล้วอนุญาตสิทธิ์ตำแหน่งให้เบราว์เซอร์/แอปนี้");
+      }
+      throw new Error("ไม่สามารถระบุตำแหน่ง GPS ได้ กรุณาออกไปพื้นที่โล่งแจ้งหรือเชื่อมต่อ Wi-Fi แล้วลองใหม่อีกครั้ง");
+    }
+  }
+}
+
 export default function AttendancePage() {
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
@@ -40,16 +77,7 @@ export default function AttendancePage() {
 
     try {
       setPhase("requesting_location");
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error("อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS"));
-          return;
-        }
-        navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error("แอปต้องการสิทธิ์เข้าถึงตำแหน่ง GPS เพื่อลงเวลา")), {
-          enableHighAccuracy: true,
-          timeout: 15000,
-        });
-      });
+      const position = await resolvePosition();
 
       setPhase("submitting");
       const functionName = alreadyClockedIn ? "clock-out" : "clock-in";
