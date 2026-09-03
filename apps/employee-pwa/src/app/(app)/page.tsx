@@ -14,7 +14,6 @@ interface HomeStats {
   leaveDaysRemaining: number;
   otHoursThisMonth: number;
   pendingRequests: number;
-  latestPayslipLabel: string | null;
   todayStatus: string | null;
   todayClockIn: string | null;
 }
@@ -55,12 +54,11 @@ export default function HomePage() {
     const year = new Date().getFullYear();
     const monthStart = `${year}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
 
-    const [balances, ot, leaveReq, otReq, payslip, todayAttendance] = await Promise.all([
+    const [balances, ot, leaveReq, otReq, todayAttendance] = await Promise.all([
       supabase.from("leave_balances").select("entitled_days, carried_over_days, used_days, pending_days").eq("employee_id", profile.employeeId).eq("year", year),
       supabase.from("overtime_requests").select("approved_hours").eq("employee_id", profile.employeeId).eq("status", "approved").gte("work_date", monthStart),
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", profile.employeeId).eq("status", "pending"),
       supabase.from("overtime_requests").select("id", { count: "exact", head: true }).eq("employee_id", profile.employeeId).eq("status", "pending"),
-      supabase.from("payslips").select("payroll_periods(label)").eq("employee_id", profile.employeeId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("attendance_records").select("status, clock_in_server_at").eq("employee_id", profile.employeeId).eq("work_date", today).maybeSingle(),
     ]);
 
@@ -69,13 +67,11 @@ export default function HomePage() {
       0
     );
     const otHours = (ot.data ?? []).reduce((sum, o) => sum + Number(o.approved_hours ?? 0), 0);
-    const period = payslip.data?.payroll_periods as unknown as { label: string } | null;
 
     setStats({
       leaveDaysRemaining,
       otHoursThisMonth: otHours,
       pendingRequests: (leaveReq.count ?? 0) + (otReq.count ?? 0),
-      latestPayslipLabel: period?.label ?? null,
       todayStatus: todayAttendance.data?.status ?? null,
       todayClockIn: todayAttendance.data?.clock_in_server_at ?? null,
     });
@@ -155,11 +151,10 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2.5">
           <StatCard href="/leave/balances" icon="event_available" color="var(--color-tertiary)" label="วันลาคงเหลือ" value={`${stats?.leaveDaysRemaining ?? "-"} วัน`} />
           <StatCard href="/overtime" icon="timer" color="var(--color-secondary)" label="OT เดือนนี้" value={`${stats?.otHoursThisMonth ?? 0} ชม.`} />
           <StatCard href="/requests" icon="pending_actions" color="var(--color-status-warning)" label="คำขอรออนุมัติ" value={`${stats?.pendingRequests ?? 0} รายการ`} />
-          <StatCard href="/payslip" icon="payments" color="var(--color-status-info)" label="สลิปล่าสุด" value={stats?.latestPayslipLabel ?? "ยังไม่มี"} />
         </div>
 
         <div className="flex gap-3">
@@ -223,12 +218,12 @@ export default function HomePage() {
 
 function StatCard({ href, icon, color, label, value }: { href: string; icon: string; color: string; label: string; value: string }) {
   return (
-    <Link href={href} className="block rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-95 transition-transform">
-      <span className="material-symbols-outlined text-[22px]" style={{ color }}>
+    <Link href={href} className="block rounded-2xl bg-white p-3 shadow-[0_4px_20px_rgba(0,0,0,0.05)] active:scale-95 transition-transform">
+      <span className="material-symbols-outlined text-[18px]" style={{ color }}>
         {icon}
       </span>
-      <p className="mt-2 text-xs text-on-surface-variant">{label}</p>
-      <p className="mt-0.5 text-base font-bold text-on-surface">{value}</p>
+      <p className="mt-1.5 text-[10px] leading-tight text-on-surface-variant">{label}</p>
+      <p className="mt-0.5 text-sm font-bold leading-tight text-on-surface">{value}</p>
     </Link>
   );
 }

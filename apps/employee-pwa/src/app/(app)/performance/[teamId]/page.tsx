@@ -74,6 +74,7 @@ export default function TeamDetailPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
+  const [selectedDate, setSelectedDate] = useState(() => todayStr());
   const [isNone, setIsNone] = useState(false);
   const [quantity, setQuantity] = useState("");
   const [defectCount, setDefectCount] = useState("");
@@ -136,25 +137,41 @@ export default function TeamDetailPage() {
     );
     const rows = (entryRows ?? []) as Entry[];
     setEntries(rows);
-
-    const today = rows.find((r) => r.work_date === todayStr());
-    setIsNone(today?.is_none ?? false);
-    setQuantity(today?.quantity != null ? String(today.quantity) : "");
-    setDefectCount(today?.defect_count != null ? String(today.defect_count) : "");
-    setExistingPhotoPaths(today?.defect_photo_paths ?? []);
-    setContentNote(today?.content_note ?? "");
-    setSalesRows(
-      today?.sales_data && today.sales_data.length > 0
-        ? STORES.map((store) => today.sales_data!.find((s) => s.store === store) ?? { store, sales: 0, adSpend: 0 })
-        : emptySalesRows()
-    );
-    setPendingPhotos([]);
     setLoaded(true);
   }, [profile, supabase, teamId, monthDate]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Decoupled from `load()`/`entries` (which are scoped to the browsed month) so the form can
+  // edit any past date — picked directly, or via tapping a row in "รายวัน" below — not just
+  // today or a date that happens to fall in the currently-viewed month.
+  const loadSelectedDateEntry = useCallback(async () => {
+    if (!teamId) return;
+    const { data } = await supabase
+      .from("output_team_entries")
+      .select("work_date, is_none, quantity, defect_count, defect_photo_paths, sales_data, content_note")
+      .eq("output_team_id", teamId)
+      .eq("work_date", selectedDate)
+      .maybeSingle();
+    const row = data as Entry | null;
+    setIsNone(row?.is_none ?? false);
+    setQuantity(row?.quantity != null ? String(row.quantity) : "");
+    setDefectCount(row?.defect_count != null ? String(row.defect_count) : "");
+    setExistingPhotoPaths(row?.defect_photo_paths ?? []);
+    setContentNote(row?.content_note ?? "");
+    setSalesRows(
+      row?.sales_data && row.sales_data.length > 0
+        ? STORES.map((store) => row.sales_data!.find((s) => s.store === store) ?? { store, sales: 0, adSpend: 0 })
+        : emptySalesRows()
+    );
+    setPendingPhotos([]);
+  }, [supabase, teamId, selectedDate]);
+
+  useEffect(() => {
+    loadSelectedDateEntry();
+  }, [loadSelectedDateEntry]);
 
   useEffect(() => {
     if (existingPhotoPaths.length === 0) return;
@@ -179,7 +196,7 @@ export default function TeamDetailPage() {
       if (pendingPhotos.length > 0) {
         const uploaded: string[] = [];
         for (const file of pendingPhotos) {
-          const path = `${profile.orgId}/${profile.employeeId}/${team.id}/${todayStr()}/${crypto.randomUUID()}-${file.name}`;
+          const path = `${profile.orgId}/${profile.employeeId}/${team.id}/${selectedDate}/${crypto.randomUUID()}-${file.name}`;
           const { error: uploadError } = await supabase.storage.from("output-photos").upload(path, file);
           if (uploadError) throw new Error(uploadError.message);
           uploaded.push(path);
@@ -190,7 +207,7 @@ export default function TeamDetailPage() {
       const payload: Record<string, unknown> = {
         org_id: profile.orgId,
         output_team_id: team.id,
-        work_date: todayStr(),
+        work_date: selectedDate,
         is_none: isNone,
         submitted_by_profile_id: profile.profileId,
         updated_at: new Date().toISOString(),
@@ -211,8 +228,8 @@ export default function TeamDetailPage() {
       const { error: upsertError } = await supabase.from("output_team_entries").upsert(payload, { onConflict: "output_team_id,work_date" });
       if (upsertError) throw new Error(upsertError.message);
 
-      setSuccess("บันทึกผลงานวันนี้เรียบร้อยแล้ว");
-      await load();
+      setSuccess(selectedDate === todayStr() ? "บันทึกผลงานวันนี้เรียบร้อยแล้ว" : "บันทึกข้อมูลย้อนหลังเรียบร้อยแล้ว");
+      await Promise.all([load(), loadSelectedDateEntry()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
     } finally {
@@ -294,13 +311,22 @@ export default function TeamDetailPage() {
       ) : (
         <>
           <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-on-surface-variant">ผลงานวันนี้</p>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant">
-                <input type="checkbox" checked={isNone} onChange={(e) => setIsNone(e.target.checked)} />
-                วันนี้ไม่มี
-              </label>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-on-surface-variant">
+                {selectedDate === todayStr() ? "ผลงานวันนี้" : "ผลงานย้อนหลัง"}
+              </p>
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayStr()}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="h-8 rounded-lg border border-outline-variant px-2 text-xs"
+              />
             </div>
+            <label className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant">
+              <input type="checkbox" checked={isNone} onChange={(e) => setIsNone(e.target.checked)} />
+              วันนั้นไม่มี
+            </label>
 
             {!isNone && (
               <div className="space-y-3">
@@ -487,12 +513,20 @@ export default function TeamDetailPage() {
               )}
             </div>
 
-            <p className="mb-2 text-xs font-semibold text-on-surface-variant">รายวัน</p>
+            <p className="mb-2 text-xs font-semibold text-on-surface-variant">รายวัน (แตะเพื่อแก้ไข)</p>
             {entries.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีข้อมูลเดือนนี้</p>}
             <div className="space-y-1.5">
               {entries.map((e) => (
-                <div key={e.work_date} className="flex items-center justify-between border-b border-outline-variant/60 py-1.5 text-sm">
-                  <span className="text-on-surface-variant">{new Date(e.work_date).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</span>
+                <button
+                  key={e.work_date}
+                  onClick={() => setSelectedDate(e.work_date)}
+                  className={`flex w-full items-center justify-between border-b border-outline-variant/60 py-1.5 text-left text-sm ${
+                    e.work_date === selectedDate ? "text-primary" : ""
+                  }`}
+                >
+                  <span className={e.work_date === selectedDate ? "font-bold text-primary" : "text-on-surface-variant"}>
+                    {new Date(e.work_date).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}
+                  </span>
                   {e.is_none ? (
                     <span className="text-xs text-on-surface-variant">ไม่มี</span>
                   ) : (
@@ -503,7 +537,7 @@ export default function TeamDetailPage() {
                       {team.slug === "sales" && `รวม ${(e.sales_data ?? []).reduce((s, r) => s + r.sales, 0).toLocaleString()} บ.`}
                     </span>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           </div>
