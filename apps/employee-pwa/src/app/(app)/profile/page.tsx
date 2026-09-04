@@ -32,6 +32,8 @@ interface EditableProfile {
   currentAddress: AddressValue;
 }
 
+type Section = "basic" | "idCardAddress" | "currentAddress" | "taxInfo" | "password" | "privacy";
+
 // Free-text sub-fields only — province/district/subDistrict/postalCode are handled by
 // the cascading selects in ThaiAddressCascadeFields instead.
 const ADDRESS_TEXT_FIELDS: { key: keyof AddressValue; label: string }[] = [
@@ -42,10 +44,21 @@ const ADDRESS_TEXT_FIELDS: { key: keyof AddressValue; label: string }[] = [
   { key: "road", label: "ถนน" },
 ];
 
+const MENU_ITEMS: { section: Section; icon: string; label: string }[] = [
+  { section: "basic", icon: "person", label: "ข้อมูลส่วนตัว" },
+  { section: "idCardAddress", icon: "badge", label: "ที่อยู่ตามบัตรประชาชน" },
+  { section: "currentAddress", icon: "home", label: "ที่อยู่ปัจจุบัน" },
+  { section: "taxInfo", icon: "request_quote", label: "เลขผู้เสียภาษี / ประกันสังคม" },
+  { section: "password", icon: "lock", label: "เปลี่ยนรหัสผ่าน" },
+  { section: "privacy", icon: "privacy_tip", label: "ความเป็นส่วนตัว" },
+];
+
 export default function ProfilePage() {
   const { profile, loading: authLoading, signOut, refreshProfile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [openSection, setOpenSection] = useState<Section | null>(null);
 
   const [edit, setEdit] = useState<EditableProfile | null>(null);
   const [editLoadFailed, setEditLoadFailed] = useState(false);
@@ -143,8 +156,9 @@ export default function ProfilePage() {
       setProfileMessage({ type: "error", text: error.message });
       return;
     }
-    setProfileMessage({ type: "success", text: "บันทึกข้อมูลส่วนตัวแล้ว" });
+    setProfileMessage({ type: "success", text: "บันทึกข้อมูลแล้ว" });
     await refreshProfile();
+    setTimeout(() => setOpenSection(null), 700);
   }
 
   function updateIdCardAddress(key: keyof AddressValue, value: string) {
@@ -179,6 +193,7 @@ export default function ProfilePage() {
     } else {
       setNewPassword("");
       setMessage({ type: "success", text: "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว" });
+      setTimeout(() => setOpenSection(null), 700);
     }
   }
 
@@ -236,159 +251,216 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {edit && (
-        <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-          <h2 className="font-bold text-on-surface">ข้อมูลส่วนตัว</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อ</label>
-              <input
-                value={edit.firstName}
-                onChange={(e) => setEdit({ ...edit, firstName: e.target.value })}
-                className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">นามสกุล</label>
-              <input
-                value={edit.lastName}
-                onChange={(e) => setEdit({ ...edit, lastName: e.target.value })}
-                className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อเล่น</label>
-            <input
-              value={edit.nickname}
-              onChange={(e) => setEdit({ ...edit, nickname: e.target.value })}
-              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เบอร์โทร</label>
-            <input
-              type="tel"
-              value={edit.phone}
-              onChange={(e) => setEdit({ ...edit, phone: e.target.value })}
-              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-on-surface-variant">แนะนำตัว (ไม่บังคับ)</label>
-            <textarea
-              value={edit.bio}
-              onChange={(e) => setEdit({ ...edit, bio: e.target.value })}
-              rows={3}
-              placeholder="เล่าอะไรเกี่ยวกับตัวคุณสักหน่อย..."
-              className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขผู้เสียภาษี</label>
-              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">
-                {edit.taxId ? formatThaiId13(edit.taxId) : "-"}
-              </p>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขประกันสังคม</label>
-              <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">
-                {edit.socialSecurityId ? formatThaiId13(edit.socialSecurityId) : "-"}
-              </p>
-            </div>
-          </div>
-          <p className="text-xs text-on-surface-variant">เลขผู้เสียภาษี/ประกันสังคมกรอกโดยฝ่ายบุคคลเท่านั้น หากไม่ถูกต้องกรุณาแจ้ง HR</p>
-
-          <div className="space-y-2 border-t border-outline-variant pt-3">
-            <p className="text-sm font-semibold text-on-surface">ที่อยู่ตามบัตรประชาชน</p>
-            <div className="grid grid-cols-2 gap-2">
-              {ADDRESS_TEXT_FIELDS.map((f) => (
-                <div key={f.key}>
-                  <label className="mb-1 block text-xs text-on-surface-variant">{f.label}</label>
-                  <input
-                    value={edit.idCardAddress[f.key] ?? ""}
-                    onChange={(e) => updateIdCardAddress(f.key, e.target.value)}
-                    className="w-full rounded-lg border border-outline-variant px-2.5 py-2 text-sm"
-                  />
-                </div>
-              ))}
-              <ThaiAddressCascadeFields value={edit.idCardAddress} onChange={patchIdCardAddress} />
-            </div>
-          </div>
-
-          <div className="space-y-2 border-t border-outline-variant pt-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-on-surface">ที่อยู่ปัจจุบัน</p>
-              <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-                <input type="checkbox" checked={sameAsIdCard} onChange={(e) => toggleSameAsIdCard(e.target.checked)} />
-                เหมือนที่อยู่ตามบัตรประชาชน
-              </label>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {ADDRESS_TEXT_FIELDS.map((f) => (
-                <div key={f.key}>
-                  <label className="mb-1 block text-xs text-on-surface-variant">{f.label}</label>
-                  <input
-                    value={edit.currentAddress[f.key] ?? ""}
-                    onChange={(e) => setEdit({ ...edit, currentAddress: { ...edit.currentAddress, [f.key]: e.target.value } })}
-                    readOnly={sameAsIdCard}
-                    className="w-full rounded-lg border border-outline-variant px-2.5 py-2 text-sm read-only:bg-surface-container-low"
-                  />
-                </div>
-              ))}
-              <ThaiAddressCascadeFields
-                value={edit.currentAddress}
-                onChange={(patch) => setEdit({ ...edit, currentAddress: { ...edit.currentAddress, ...patch } })}
-                disabled={sameAsIdCard}
-              />
-            </div>
-          </div>
-
-          {profileMessage && (
-            <p className={`text-sm font-semibold ${profileMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>
-              {profileMessage.text}
-            </p>
-          )}
+      <div className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+        {MENU_ITEMS.map((item, i) => (
           <button
-            onClick={handleSaveProfile}
-            disabled={savingProfile}
-            className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60"
+            key={item.section}
+            onClick={() => setOpenSection(item.section)}
+            className={`flex w-full items-center gap-3 px-4 py-3.5 text-left ${i > 0 ? "border-t border-outline-variant" : ""}`}
           >
-            {savingProfile ? "กำลังบันทึก..." : "บันทึกข้อมูลส่วนตัว"}
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <span className="material-symbols-outlined text-[18px] text-primary">{item.icon}</span>
+            </span>
+            <span className="flex-1 text-sm font-semibold text-on-surface">{item.label}</span>
+            <span className="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>
           </button>
-        </div>
-      )}
-
-      <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-        <h2 className="font-bold text-on-surface">เปลี่ยนรหัสผ่าน</h2>
-        <input
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)"
-          className="w-full rounded-xl border border-outline-variant px-3.5 py-2.5 text-sm"
-        />
-        {message && (
-          <p className={`text-sm font-semibold ${message.type === "error" ? "text-status-danger" : "text-status-success"}`}>{message.text}</p>
-        )}
-        <button onClick={handleChangePassword} disabled={changing} className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60">
-          {changing ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}
-        </button>
-      </div>
-
-      <div className="space-y-2 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-        <h2 className="font-bold text-on-surface">ความเป็นส่วนตัว</h2>
-        <p className="text-xs leading-relaxed text-on-surface-variant">
-          แอปนี้เก็บข้อมูลตำแหน่ง GPS และภาพเซลฟีเฉพาะขณะลงเวลาเข้า-ออกงานเท่านั้น ไม่มีการติดตามตำแหน่งพนักงานตลอดเวลา ข้อมูลเงินเดือนและเอกสารส่วนตัว
-          จัดเก็บแบบส่วนตัว (Private Storage) และเข้าถึงได้เฉพาะผู้ที่เกี่ยวข้องเท่านั้น
-        </p>
+        ))}
       </div>
 
       <button onClick={() => signOut()} className="flex w-full items-center justify-center gap-2 py-3 font-bold text-status-danger">
         <span className="material-symbols-outlined text-[18px]">logout</span>
         ออกจากระบบ
       </button>
+
+      {openSection && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center" onClick={() => setOpenSection(null)}>
+          <div
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.2)] sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-bold text-on-surface">{MENU_ITEMS.find((m) => m.section === openSection)?.label}</h2>
+              <button onClick={() => setOpenSection(null)} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-container">
+                <span className="material-symbols-outlined text-[18px] text-on-surface-variant">close</span>
+              </button>
+            </div>
+
+            {openSection === "basic" && edit && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อ</label>
+                    <input
+                      value={edit.firstName}
+                      onChange={(e) => setEdit({ ...edit, firstName: e.target.value })}
+                      className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-on-surface-variant">นามสกุล</label>
+                    <input
+                      value={edit.lastName}
+                      onChange={(e) => setEdit({ ...edit, lastName: e.target.value })}
+                      className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-on-surface-variant">ชื่อเล่น</label>
+                  <input
+                    value={edit.nickname}
+                    onChange={(e) => setEdit({ ...edit, nickname: e.target.value })}
+                    className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เบอร์โทร</label>
+                  <input
+                    type="tel"
+                    value={edit.phone}
+                    onChange={(e) => setEdit({ ...edit, phone: e.target.value })}
+                    className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-on-surface-variant">แนะนำตัว (ไม่บังคับ)</label>
+                  <textarea
+                    value={edit.bio}
+                    onChange={(e) => setEdit({ ...edit, bio: e.target.value })}
+                    rows={3}
+                    placeholder="เล่าอะไรเกี่ยวกับตัวคุณสักหน่อย..."
+                    className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
+                  />
+                </div>
+                {profileMessage && (
+                  <p className={`text-sm font-semibold ${profileMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>
+                    {profileMessage.text}
+                  </p>
+                )}
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60"
+                >
+                  {savingProfile ? "กำลังบันทึก..." : "บันทึก"}
+                </button>
+              </div>
+            )}
+
+            {openSection === "idCardAddress" && edit && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {ADDRESS_TEXT_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <label className="mb-1 block text-xs text-on-surface-variant">{f.label}</label>
+                      <input
+                        value={edit.idCardAddress[f.key] ?? ""}
+                        onChange={(e) => updateIdCardAddress(f.key, e.target.value)}
+                        className="w-full rounded-lg border border-outline-variant px-2.5 py-2 text-sm"
+                      />
+                    </div>
+                  ))}
+                  <ThaiAddressCascadeFields value={edit.idCardAddress} onChange={patchIdCardAddress} />
+                </div>
+                {profileMessage && (
+                  <p className={`text-sm font-semibold ${profileMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>
+                    {profileMessage.text}
+                  </p>
+                )}
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60"
+                >
+                  {savingProfile ? "กำลังบันทึก..." : "บันทึก"}
+                </button>
+              </div>
+            )}
+
+            {openSection === "currentAddress" && edit && (
+              <div className="space-y-3">
+                <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                  <input type="checkbox" checked={sameAsIdCard} onChange={(e) => toggleSameAsIdCard(e.target.checked)} />
+                  เหมือนที่อยู่ตามบัตรประชาชน
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ADDRESS_TEXT_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <label className="mb-1 block text-xs text-on-surface-variant">{f.label}</label>
+                      <input
+                        value={edit.currentAddress[f.key] ?? ""}
+                        onChange={(e) => setEdit({ ...edit, currentAddress: { ...edit.currentAddress, [f.key]: e.target.value } })}
+                        readOnly={sameAsIdCard}
+                        className="w-full rounded-lg border border-outline-variant px-2.5 py-2 text-sm read-only:bg-surface-container-low"
+                      />
+                    </div>
+                  ))}
+                  <ThaiAddressCascadeFields
+                    value={edit.currentAddress}
+                    onChange={(patch) => setEdit({ ...edit, currentAddress: { ...edit.currentAddress, ...patch } })}
+                    disabled={sameAsIdCard}
+                  />
+                </div>
+                {profileMessage && (
+                  <p className={`text-sm font-semibold ${profileMessage.type === "error" ? "text-status-danger" : "text-status-success"}`}>
+                    {profileMessage.text}
+                  </p>
+                )}
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60"
+                >
+                  {savingProfile ? "กำลังบันทึก..." : "บันทึก"}
+                </button>
+              </div>
+            )}
+
+            {openSection === "taxInfo" && edit && (
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขผู้เสียภาษี</label>
+                  <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">
+                    {edit.taxId ? formatThaiId13(edit.taxId) : "-"}
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-on-surface-variant">เลขประกันสังคม</label>
+                  <p className="w-full rounded-xl bg-surface-container-low px-3 py-2.5 text-sm text-on-surface-variant">
+                    {edit.socialSecurityId ? formatThaiId13(edit.socialSecurityId) : "-"}
+                  </p>
+                </div>
+                <p className="text-xs text-on-surface-variant">เลขผู้เสียภาษี/ประกันสังคมกรอกโดยฝ่ายบุคคลเท่านั้น หากไม่ถูกต้องกรุณาแจ้ง HR</p>
+              </div>
+            )}
+
+            {openSection === "password" && (
+              <div className="space-y-3">
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)"
+                  className="w-full rounded-xl border border-outline-variant px-3.5 py-2.5 text-sm"
+                />
+                {message && (
+                  <p className={`text-sm font-semibold ${message.type === "error" ? "text-status-danger" : "text-status-success"}`}>{message.text}</p>
+                )}
+                <button onClick={handleChangePassword} disabled={changing} className="h-11 w-full rounded-xl bg-primary font-bold text-white disabled:opacity-60">
+                  {changing ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่"}
+                </button>
+              </div>
+            )}
+
+            {openSection === "privacy" && (
+              <p className="text-sm leading-relaxed text-on-surface-variant">
+                แอปนี้เก็บข้อมูลตำแหน่ง GPS และภาพเซลฟีเฉพาะขณะลงเวลาเข้า-ออกงานเท่านั้น ไม่มีการติดตามตำแหน่งพนักงานตลอดเวลา ข้อมูลเงินเดือนและเอกสารส่วนตัว
+                จัดเก็บแบบส่วนตัว (Private Storage) และเข้าถึงได้เฉพาะผู้ที่เกี่ยวข้องเท่านั้น
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
