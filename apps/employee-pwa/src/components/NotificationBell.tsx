@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/push";
 
 interface NotificationRow {
   id: string;
@@ -36,6 +37,9 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<PushStatus>("unsupported");
+  const [subscribing, setSubscribing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -43,6 +47,7 @@ export function NotificationBell() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+    setProfileId(user.id);
     const { data } = await supabase
       .from("notifications")
       .select("id, type, title, body, is_read, created_at")
@@ -58,6 +63,18 @@ export function NotificationBell() {
     const interval = setInterval(load, 60_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  useEffect(() => {
+    getPushStatus().then(setPushStatus);
+  }, []);
+
+  async function handleEnableNotifications() {
+    if (!profileId) return;
+    setSubscribing(true);
+    const status = await subscribeToPush(supabase, profileId);
+    setPushStatus(status);
+    setSubscribing(false);
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -89,7 +106,20 @@ export function NotificationBell() {
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex items-center gap-3">
+      {pushStatus === "unsubscribed" && (
+        <button
+          onClick={handleEnableNotifications}
+          disabled={subscribing}
+          title="เปิดการแจ้งเตือนบนมือถือ"
+          aria-label="เปิดการแจ้งเตือนบนมือถือ"
+          className="relative text-white disabled:opacity-60"
+        >
+          <span className="material-symbols-outlined text-[24px]">notification_add</span>
+          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-white" />
+        </button>
+      )}
+
       <button onClick={() => setOpen((v) => !v)} className="relative text-white" aria-label="การแจ้งเตือน">
         <span className="material-symbols-outlined text-[26px]">notifications</span>
         {unreadCount > 0 && (
@@ -109,6 +139,11 @@ export function NotificationBell() {
               </button>
             )}
           </div>
+          {pushStatus === "denied" && (
+            <p className="border-b border-outline-variant bg-status-danger/10 px-4 py-2.5 text-xs text-status-danger">
+              การแจ้งเตือนถูกปิดไว้ในมือถือ — ไปที่การตั้งค่ามือถือแล้วอนุญาตการแจ้งเตือนให้แอปนี้
+            </p>
+          )}
           <div className="max-h-96 overflow-y-auto">
             {loaded && notifications.length === 0 && <p className="p-4 text-center text-sm text-on-surface-variant">ยังไม่มีการแจ้งเตือน</p>}
             {notifications.map((n) => (
