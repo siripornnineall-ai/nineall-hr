@@ -9,7 +9,7 @@ export default async function OrgChartPage() {
   const user = await requireUser();
   const supabase = await createClient();
 
-  const [{ data: employees }, { data: departments }] = await Promise.all([
+  const [{ data: employees }, { data: departments }, { data: secondaryManagers }] = await Promise.all([
     supabase
       .from("employees")
       .select("id, first_name, last_name, photo_url, manager_employee_id, department_id, job_positions(title), departments(name)")
@@ -18,6 +18,7 @@ export default async function OrgChartPage() {
       .in("employment_status", ["active", "probation"])
       .order("first_name"),
     supabase.from("departments").select("id, name").eq("org_id", user.orgId).is("deleted_at", null).order("name"),
+    supabase.from("employee_secondary_managers").select("id, employee_id, manager_employee_id").eq("org_id", user.orgId),
   ]);
 
   const signedByPath = await signAvatarUrls(supabase, (employees ?? []).map((e) => e.photo_url));
@@ -46,7 +47,12 @@ export default async function OrgChartPage() {
           )}
         </div>
 
-        <OrgChartTree employees={nodes} departments={departments ?? []} />
+        <OrgChartTree
+          employees={nodes}
+          departments={departments ?? []}
+          secondaryManagers={(secondaryManagers ?? []).map((m) => ({ id: m.id, employeeId: m.employee_id, managerId: m.manager_employee_id }))}
+          canManage={["super_admin", "hr"].includes(user.role)}
+        />
       </div>
     </>
   );

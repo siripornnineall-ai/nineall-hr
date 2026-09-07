@@ -20,6 +20,11 @@ interface LayoutNode extends OrgNode {
   x: number;
 }
 
+interface SecondaryLink {
+  employeeId: string;
+  managerId: string;
+}
+
 // Fixed card size + gaps rather than DOM measurement — deterministic layout, no measure-then-
 // reposition flash. Mirrors admin-web's org-chart layout (same algorithm, employee-pwa styling).
 const CARD_W = 176;
@@ -78,6 +83,7 @@ export default function OrgChartPage() {
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [nodes, setNodes] = useState<OrgNode[]>([]);
+  const [secondaryLinks, setSecondaryLinks] = useState<SecondaryLink[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [deptFilter, setDeptFilter] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -86,7 +92,10 @@ export default function OrgChartPage() {
   useEffect(() => {
     if (!profile) return;
     (async () => {
-      const { data } = await supabase.rpc("get_org_chart_nodes");
+      const [{ data }, { data: secondaryData }] = await Promise.all([
+        supabase.rpc("get_org_chart_nodes"),
+        supabase.rpc("get_org_chart_secondary_managers"),
+      ]);
       const rows = (data ?? []) as {
         employee_id: string;
         first_name: string;
@@ -96,6 +105,12 @@ export default function OrgChartPage() {
         department_name: string | null;
         manager_employee_id: string | null;
       }[];
+      setSecondaryLinks(
+        ((secondaryData ?? []) as { employee_id: string; manager_employee_id: string }[]).map((r) => ({
+          employeeId: r.employee_id,
+          managerId: r.manager_employee_id,
+        }))
+      );
 
       const photoPaths = Array.from(new Set(rows.map((r) => r.photo_url).filter((p): p is string => !!p)));
       const urlByPath = new Map<string, string>();
@@ -169,6 +184,17 @@ export default function OrgChartPage() {
         </div>
       )}
 
+      {secondaryLinks.length > 0 && (
+        <div className="flex items-center gap-3 text-[10px] text-on-surface-variant">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-5 bg-outline" /> หัวหน้าโดยตรง
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-secondary" /> หัวหน้าเพิ่มเติม
+          </span>
+        </div>
+      )}
+
       {allNodes.length === 0 ? (
         <p className="text-center text-sm text-on-surface-variant">ยังไม่มีข้อมูลพนักงาน</p>
       ) : (
@@ -197,12 +223,41 @@ export default function OrgChartPage() {
                   />
                 );
               })}
+              {secondaryLinks.map((link) => {
+                const employee = nodeById.get(link.employeeId);
+                const manager = nodeById.get(link.managerId);
+                if (!employee || !manager) return null;
+                const mPos = pixelPos(manager);
+                const cPos = pixelPos(employee);
+                const x1 = mPos.left + CARD_W / 2;
+                const y1 = mPos.top + CARD_H / 2;
+                const x2 = cPos.left + CARD_W / 2;
+                const y2 = cPos.top + CARD_H / 2;
+                const dimmed = !!deptFilter && employee.departmentName !== deptFilter && manager.departmentName !== deptFilter;
+                return (
+                  <line
+                    key={`${link.employeeId}-${link.managerId}`}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={dimmed ? "var(--color-outline-variant)" : "var(--color-secondary)"}
+                    strokeWidth={1.5}
+                    strokeDasharray="5 4"
+                    opacity={dimmed ? 0.35 : 0.7}
+                  />
+                );
+              })}
             </svg>
 
             {allNodes.map((node) => {
               const pos = pixelPos(node);
               const dimmed = !!deptFilter && node.departmentName !== deptFilter;
               const isSelf = node.id === profile?.employeeId;
+              const extraManagerNames = secondaryLinks
+                .filter((l) => l.employeeId === node.id)
+                .map((l) => nodeById.get(l.managerId)?.name)
+                .filter((n): n is string => !!n);
               return (
                 <Link
                   key={node.id}
@@ -227,6 +282,9 @@ export default function OrgChartPage() {
                   <p className="mt-auto truncate border-t border-outline-variant pt-1 text-[9px] text-on-surface-variant">
                     {node.departmentName ?? "ไม่ระบุแผนก"}
                   </p>
+                  {extraManagerNames.length > 0 && (
+                    <p className="truncate text-[9px] text-secondary">+ หัวหน้า: {extraManagerNames.join(", ")}</p>
+                  )}
                 </Link>
               );
             })}
