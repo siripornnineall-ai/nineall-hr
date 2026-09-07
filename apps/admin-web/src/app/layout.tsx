@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans, Noto_Sans_Thai, Noto_Sans_Lao, Noto_Sans_Myanmar } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const notoSans = Noto_Sans({ variable: "--font-noto-sans", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 const notoThai = Noto_Sans_Thai({
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${notoSans.variable} ${notoThai.variable} ${notoLao.variable} ${notoMyanmar.variable} antialiased`}
       >
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>
