@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/push";
+import { useAuth } from "@/lib/AuthContext";
 
 interface NotificationRow {
   id: string;
@@ -12,13 +13,19 @@ interface NotificationRow {
   body: string | null;
   is_read: boolean;
   created_at: string;
+  data: { note_id?: string } | null;
 }
 
 // Where tapping a notification should take you — keyed by notifications.type.
 const NOTIFICATION_LINKS: Record<string, string> = {
   leave_request_decided: "/leave",
   note_comment: "/",
+  note_reaction: "/",
 };
+
+// Types that can be replied to inline from the bell, Facebook-style — both point at a note
+// via data.note_id, so a reply is just another note_comments insert on that same note.
+const REPLYABLE_TYPES = new Set(["note_comment", "note_reaction"]);
 
 function timeAgoTh(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -34,12 +41,16 @@ function timeAgoTh(iso: string): string {
 export function NotificationBell() {
   const supabase = createClient();
   const router = useRouter();
+  const { profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<PushStatus>("unsupported");
   const [subscribing, setSubscribing] = useState(false);
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [posting, setPosting] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -50,7 +61,7 @@ export function NotificationBell() {
     setProfileId(user.id);
     const { data } = await supabase
       .from("notifications")
-      .select("id, type, title, body, is_read, created_at")
+      .select("id, type, title, body, is_read, created_at, data")
       .eq("profile_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -105,6 +116,24 @@ export function NotificationBell() {
     await supabase.from("notifications").update({ is_read: true, read_at: new Date().toISOString() }).in("id", unreadIds);
   }
 
+  async function submitReply(n: NotificationRow) {
+    const noteId = n.data?.note_id;
+    const text = replyText.trim();
+    if (!noteId || !text || !profile || posting) return;
+    setPosting(true);
+    const { error } = await supabase.from("note_comments").insert({
+      org_id: profile.orgId,
+      note_id: noteId,
+      employee_id: profile.employeeId,
+      text,
+    });
+    setPosting(false);
+    if (error) return;
+    setReplyingId(null);
+    setReplyText("");
+    if (!n.is_read) markAsRead(n.id);
+  }
+
   return (
     <div ref={containerRef} className="relative flex items-center gap-3">
       {pushStatus === "unsubscribed" && (
@@ -146,24 +175,65 @@ export function NotificationBell() {
           )}
           <div className="max-h-96 overflow-y-auto">
             {loaded && notifications.length === 0 && <p className="p-4 text-center text-sm text-on-surface-variant">ยังไม่มีการแจ้งเตือน</p>}
-            {notifications.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => openNotification(n)}
-                className={`block w-full border-b border-outline-variant px-4 py-3 text-left last:border-0 hover:bg-surface-container-low ${
-                  n.is_read ? "" : "bg-primary/5"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-on-surface">{n.title}</p>
-                    {n.body && <p className="mt-0.5 text-xs text-on-surface-variant">{n.body}</p>}
-                    <p className="mt-1 text-[11px] text-on-surface-variant">{timeAgoTh(n.created_at)}</p>
-                  </div>
+            {notifications.map((n) => {
+              const canReply = REPLYABLE_TYPES.has(n.type) && !!n.data?.note_id && !!profile;
+              return (
+                <div key={n.id} className={`border-b border-outline-variant last:border-0 ${n.is_read ? "" : "bg-primary/5"}`}>
+                  <button
+                    onClick={() => openNotification(n)}
+                    className="block w-full px-4 pb-1.5 pt-3 text-left hover:bg-surface-container-low"
+                  >
+                    <div className="flex items-start gap-2">
+                      {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-on-surface">{n.title}</p>
+                        {n.body && <p className="mt-0.5 text-xs text-on-surface-variant">{n.body}</p>}
+                        <p className="mt-1 text-[11px] text-on-surface-variant">{timeAgoTh(n.created_at)}</p>
+                      </div>
+                    </div>
+                  </button>
+                  {canReply && (
+                    <div className="px-4 pb-3 pl-8">
+                      {replyingId === n.id ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            submitReply(n);
+                          }}
+                          className="flex items-center gap-1.5"
+                        >
+                          <input
+                            autoFocus
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder="ตอบกลับ..."
+                            maxLength={200}
+                            className="h-8 flex-1 rounded-full border border-outline-variant px-3 text-xs"
+                          />
+                          <button
+                            type="submit"
+                            disabled={posting || !replyText.trim()}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-white disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">send</span>
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setReplyingId(n.id);
+                            setReplyText("");
+                          }}
+                          className="text-xs font-semibold text-primary"
+                        >
+                          ตอบกลับ
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
