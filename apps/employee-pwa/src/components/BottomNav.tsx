@@ -9,6 +9,7 @@ const ITEMS = [
   { href: "/attendance", label: "ลงเวลา", icon: "fingerprint" },
   { href: "/leave", label: "ลางาน", icon: "event_note" },
   { href: "/performance", label: "ผลงาน", icon: "insights" },
+  { href: "/org-chart", label: "ผังองค์กร", icon: "account_tree" },
   { href: "/profile", label: "โปรไฟล์", icon: "person" },
 ];
 

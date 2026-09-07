@@ -176,7 +176,6 @@ export default function HomePage() {
           <QuickLink href="/calendar" icon="calendar_month" label="ปฏิทิน" />
           <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
           <QuickLink href="/colleagues" icon="groups" label="เพื่อนร่วมงาน" />
-          <QuickLink href="/org-chart" icon="account_tree" label="ผังองค์กร" />
         </div>
 
         <LateLeaderboardCard />
