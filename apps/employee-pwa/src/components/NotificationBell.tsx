@@ -105,6 +105,13 @@ export function NotificationBell() {
   function openNotification(n: NotificationRow) {
     if (!n.is_read) markAsRead(n.id);
     setOpen(false);
+    // Note comment/reaction notifications are always about YOUR OWN current note — jump
+    // straight to it (same page as /colleagues/:id, self-view mode shows your note + full
+    // comment thread with names + a reply box) rather than just the home screen.
+    if (REPLYABLE_TYPES.has(n.type) && profile) {
+      router.push(`/colleagues/${profile.employeeId}`);
+      return;
+    }
     const href = NOTIFICATION_LINKS[n.type];
     if (href) router.push(href);
   }
