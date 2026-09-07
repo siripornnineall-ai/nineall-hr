@@ -27,6 +27,50 @@ function buildAddress(raw: Record<string, FormDataEntryValue>, prefix: "idCard" 
   return Object.keys(address).length > 0 ? address : null;
 }
 
+// Org-chart safety net: walks up from the proposed new manager toward the root, following
+// manager_employee_id, and fails if it ever reaches the employee being edited (self-reference)
+// or loops back on itself (a broken chain elsewhere) — either would make manager_employee_id
+// describe a cycle instead of a tree, which the org-chart renderer can't lay out. The employee
+// edit form's manager dropdown already excludes the employee themselves as a one-hop guard;
+// this catches the deeper multi-hop case (A reports to B, B reports to C, C reports to A).
+async function detectManagerCycle(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  employeeId: string,
+  proposedManagerId: string
+): Promise<string | null> {
+  if (proposedManagerId === employeeId) {
+    return "พนักงานไม่สามารถเป็นหัวหน้าของตัวเองได้";
+  }
+  const visited = new Set<string>();
+  let currentId: string | null = proposedManagerId;
+  for (let i = 0; i < 100 && currentId; i++) {
+    if (currentId === employeeId) {
+      return "ไม่สามารถตั้งหัวหน้าคนนี้ได้ เพราะจะทำให้เกิดโครงสร้างวนลูป (หัวหน้าที่เลือกอยู่ใต้บังคับบัญชาของพนักงานคนนี้อยู่แล้ว)";
+    }
+    if (visited.has(currentId)) break;
+    visited.add(currentId);
+    const result: { data: { manager_employee_id: string | null } | null } = await supabase
+      .from("employees")
+      .select("manager_employee_id")
+      .eq("id", currentId)
+      .maybeSingle();
+    currentId = result.data?.manager_employee_id ?? null;
+  }
+  return null;
+}
+
+// Shared by delete/offboard: both remove an employee from the active roster, which would
+// silently orphan anyone still reporting to them in the org chart if left unchecked.
+async function countActiveDirectReports(supabase: Awaited<ReturnType<typeof createClient>>, employeeId: string): Promise<number> {
+  const { count } = await supabase
+    .from("employees")
+    .select("id", { count: "exact", head: true })
+    .eq("manager_employee_id", employeeId)
+    .is("deleted_at", null)
+    .in("employment_status", ["active", "probation"]);
+  return count ?? 0;
+}
+
 // Prorates by join month, except leave types with a min-service requirement (annual
 // leave): those grant nothing until the employee reaches that tenure, then the full
 // yearly entitlement (not prorated) — matches how Thai annual leave is actually meant
@@ -313,6 +357,11 @@ export async function updateEmployeeAction(
   const input = parsed.data;
   const supabase = await createClient();
 
+  if (input.managerEmployeeId) {
+    const cycleError = await detectManagerCycle(supabase, employeeId, input.managerEmployeeId);
+    if (cycleError) return { error: cycleError };
+  }
+
   const { data: before } = await supabase
     .from("employees")
     .select("department_id, job_position_id, manager_employee_id, employment_type")
@@ -456,6 +505,14 @@ export async function deleteEmployeeAction(employeeId: string, reason: string) {
   requireRole(user, ["super_admin", "hr"]);
 
   const supabase = await createClient();
+
+  const reportCount = await countActiveDirectReports(supabase, employeeId);
+  if (reportCount > 0) {
+    throw new Error(
+      `ลบไม่ได้ เพราะยังมีพนักงาน ${reportCount} คนที่รายงานตรงกับคนนี้อยู่ในผังองค์กร กรุณาไปที่หน้าแก้ไขของพนักงานแต่ละคนแล้วเปลี่ยน "หัวหน้างาน" ของพวกเขาก่อน แล้วจึงลบคนนี้ได้`
+    );
+  }
+
   const { error } = await supabase.rpc("delete_employee", {
     p_employee_id: employeeId,
     p_reason: reason || null,
@@ -477,6 +534,14 @@ export async function offboardEmployeeAction(
   if (!effectiveDate) throw new Error("กรุณาระบุวันที่มีผล");
 
   const supabase = await createClient();
+
+  const reportCount = await countActiveDirectReports(supabase, employeeId);
+  if (reportCount > 0) {
+    throw new Error(
+      `บันทึกไม่ได้ เพราะยังมีพนักงาน ${reportCount} คนที่รายงานตรงกับคนนี้อยู่ในผังองค์กร กรุณาไปที่หน้าแก้ไขของพนักงานแต่ละคนแล้วเปลี่ยน "หัวหน้างาน" ของพวกเขาก่อน แล้วจึงบันทึกคนนี้ว่าลาออก/พ้นสภาพได้`
+    );
+  }
+
   const { error } = await supabase.rpc("offboard_employee", {
     p_employee_id: employeeId,
     p_status: status,
