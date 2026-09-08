@@ -94,7 +94,7 @@ export function LateLeaderboardCard() {
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-      <p className="mb-3 text-sm font-bold text-on-surface">ท็อป 3 มาสายประจำเดือน</p>
+      <p className="mb-3 text-sm font-bold text-on-surface">ท็อป 5 มาสายประจำเดือน</p>
       {rows.length === 0 ? (
         <p className="text-xs text-on-surface-variant">เดือนนี้ยังไม่มีใครมาสาย</p>
       ) : (
@@ -102,7 +102,7 @@ export function LateLeaderboardCard() {
           {rows.map((row, i) => (
             <li key={row.employeeId}>
               <Link href={`/late/${row.employeeId}`} className="flex items-center gap-3 active:opacity-70">
-                <span className="w-5 text-center">{MEDALS[i]}</span>
+                <span className="w-5 text-center">{MEDALS[i] ?? <span className="text-xs font-bold text-on-surface-variant">{i + 1}</span>}</span>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container">
                   {row.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
