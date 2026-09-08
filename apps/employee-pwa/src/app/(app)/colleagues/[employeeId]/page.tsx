@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { EditEmployeeModal } from "./EditEmployeeModal";
 
 interface BasicInfo {
   first_name: string;
@@ -62,6 +63,8 @@ export default function ColleagueProfilePage() {
   const [commentDraft, setCommentDraft] = useState("");
   const [cookieBalance, setCookieBalance] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const canEdit = profile?.role === "super_admin" || profile?.role === "hr";
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -202,10 +205,18 @@ export default function ColleagueProfilePage() {
 
   return (
     <div className="safe-top space-y-4 px-4 pb-6 pt-4">
-      <button onClick={() => router.back()} className="flex items-center gap-1 text-sm font-semibold text-primary">
-        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-        เพื่อนร่วมงาน
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={() => router.back()} className="flex items-center gap-1 text-sm font-semibold text-primary">
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+          เพื่อนร่วมงาน
+        </button>
+        {canEdit && (
+          <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-sm font-semibold text-secondary">
+            <span className="material-symbols-outlined text-[18px]">edit</span>
+            แก้ไขข้อมูล
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-col items-center gap-2 pt-2">
         {note && (
@@ -309,6 +320,17 @@ export default function ColleagueProfilePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {editing && (
+        <EditEmployeeModal
+          employeeId={employeeId}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            load();
+          }}
+        />
       )}
     </div>
   );
