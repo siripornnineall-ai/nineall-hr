@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { AddBackdatedLeaveForm } from "./AddBackdatedLeaveForm";
 
 interface LeaveRow {
   id: string;
@@ -103,6 +104,8 @@ export default function LeaveApprovalsPage() {
   return (
     <div className="safe-top space-y-4 px-4 pb-6 pt-4">
       <h1 className="text-lg font-bold text-primary">คำขอลารออนุมัติ</h1>
+
+      {profile && <AddBackdatedLeaveForm orgId={profile.orgId} onSaved={load} />}
 
       {error && <p className="rounded-xl bg-status-danger/10 p-3 text-sm font-semibold text-status-danger">{error}</p>}
 

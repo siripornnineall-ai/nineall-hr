@@ -177,7 +177,10 @@ export default function HomePage() {
           <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
           <QuickLink href="/colleagues" icon="groups" label="เพื่อนร่วมงาน" />
           {(profile?.role === "super_admin" || profile?.role === "hr") && (
-            <QuickLink href="/leave-approvals" icon="assignment_turned_in" label="อนุมัติการลา" />
+            <>
+              <QuickLink href="/leave-approvals" icon="assignment_turned_in" label="อนุมัติการลา" />
+              <QuickLink href="/ot-approvals" icon="timer" label="อนุมัติ OT" />
+            </>
           )}
         </div>
 
