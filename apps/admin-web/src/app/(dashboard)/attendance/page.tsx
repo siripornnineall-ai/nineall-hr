@@ -27,7 +27,8 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
       .select("id, employee_code, first_name, last_name, photo_url")
       .eq("org_id", user.orgId)
       .is("deleted_at", null)
-      .in("employment_status", ["active", "probation"]),
+      .in("employment_status", ["active", "probation"])
+      .lte("hire_date", workDate),
   ]);
 
   // syncHolidayAttendance/syncDayOffAttendance only cover employees with an explicit
