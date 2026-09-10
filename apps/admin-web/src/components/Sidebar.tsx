@@ -18,6 +18,7 @@ const NAV_ITEMS: { href: string; label: string; icon: string; roles?: UserRole[]
   { href: "/day-off-swap", label: "สลับวันหยุดประจำ", icon: "published_with_changes" },
   { href: "/schedule", label: "ตารางกะประจำ", icon: "calendar_view_week", roles: ["super_admin", "hr"] },
   { href: "/org-chart", label: "ผังองค์กร", icon: "account_tree" },
+  { href: "/admin-responsibilities", label: "ความรับผิดชอบแอดมิน", icon: "support_agent" },
   { href: "/recruitment", label: "รับสมัครงาน", icon: "work" },
   { href: "/reviews", label: "ประเมินผลงาน", icon: "military_tech" },
   { href: "/performance-teams", label: "ทีมผลงานประจำเดือน", icon: "groups", roles: ["super_admin", "hr"] },
