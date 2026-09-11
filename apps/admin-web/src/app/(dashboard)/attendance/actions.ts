@@ -47,7 +47,7 @@ export async function updateAttendanceTimeAction(
 
   const { data: existing } = await supabase
     .from("attendance_records")
-    .select("clock_in_server_at, clock_out_server_at, status, shift_id, work_location_id, clock_in_latitude, clock_in_longitude")
+    .select("employee_id, clock_in_server_at, clock_out_server_at, status, shift_id, work_location_id, clock_in_latitude, clock_in_longitude")
     .eq("id", recordId)
     .eq("org_id", user.orgId)
     .single();
@@ -66,11 +66,20 @@ export async function updateAttendanceTimeAction(
   if (values.shiftId) update.shift_id = values.shiftId;
   if (values.workLocationId) update.work_location_id = values.workLocationId;
 
+  // An auto-marked "ขาดงาน" row (syncAbsentAttendance fills one in for every past date
+  // with no record) that HR then types real clock times into was staying "absent"
+  // forever: "absent" is a SPECIAL_STATUS, so the shift-based recompute below was
+  // skipped and only the times changed (30 such rows found live on 2026-09-11).
+  // A clock-in entered on an absent row means "they actually came in" — treat it like
+  // a fresh clock-in and derive on_time/late/early_leave, unless HR explicitly picked
+  // a status in the same edit.
+  const recomputeFromTimes = !values.status && existing.status === "absent" && !!values.clockIn;
+
   // An admin-chosen status (e.g. correcting "มาสาย" to "ลา" for a half-day-leave morning
   // where the employee's real afternoon clock-in should stay visible) always wins over
   // whatever the shift-based calculation below would derive. late/early/OT aren't
   // meaningful for these statuses, but worked_minutes still reflects real clocked hours.
-  const effectiveStatus = values.status || existing.status;
+  const effectiveStatus = values.status || (recomputeFromTimes ? "on_time" : existing.status);
   if (values.status) {
     update.status = values.status;
     if (SPECIAL_STATUSES.has(values.status)) {
@@ -85,7 +94,29 @@ export async function updateAttendanceTimeAction(
   // entered time — or a shift assigned after the fact (e.g. the employee clocked in
   // before any shift_assignments row existed for that day, so shift_id came back null) —
   // still gets the right status instead of silently staying blank.
-  const shiftId = values.shiftId || existing.shift_id;
+  let shiftId = values.shiftId || existing.shift_id;
+  // Auto-absent rows for employees with no shift_assignments row on that date can carry
+  // no shift at all (10 of the 30 stuck rows above). Fall back to the employee's shift
+  // assignment closest to this date so the recompute still has shift times to judge by.
+  if (!shiftId && recomputeFromTimes) {
+    const { data: assignments } = await supabase
+      .from("shift_assignments")
+      .select("shift_id, work_date")
+      .eq("employee_id", existing.employee_id)
+      .not("shift_id", "is", null)
+      .order("work_date", { ascending: false })
+      .limit(400);
+    const targetMs = new Date(`${workDate}T00:00:00Z`).getTime();
+    let best: { shift_id: string; distance: number } | null = null;
+    for (const a of assignments ?? []) {
+      const distance = Math.abs(new Date(`${a.work_date}T00:00:00Z`).getTime() - targetMs);
+      if (!best || distance < best.distance) best = { shift_id: a.shift_id!, distance };
+    }
+    if (best) {
+      shiftId = best.shift_id;
+      update.shift_id = best.shift_id;
+    }
+  }
   const { data: shift } = shiftId
     ? await supabase
         .from("work_shifts")
@@ -93,6 +124,16 @@ export async function updateAttendanceTimeAction(
         .eq("id", shiftId)
         .single()
     : { data: null };
+
+  if (!shift && clockInAt && recomputeFromTimes) {
+    // No shift anywhere on file: late/early can't be judged, but a typed-in clock time
+    // still means they were present — never leave the row reading "ขาดงาน".
+    update.status = "on_time";
+    update.late_minutes = 0;
+    update.early_leave_minutes = 0;
+    update.ot_minutes = 0;
+    if (clockOutAt) update.worked_minutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
+  }
 
   if (shift && clockInAt && !SPECIAL_STATUSES.has(effectiveStatus)) {
     const [sh, sm] = shift.start_time.split(":").map(Number);
