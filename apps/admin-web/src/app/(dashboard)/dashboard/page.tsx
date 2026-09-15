@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { getDashboardStats } from "@/lib/queries/dashboard";
-import { getLateLeaderboard, getCookieLeaderboard } from "@/lib/queries/engagement";
+import { getLateLeaderboard, getCookieLeaderboard, getEmployeeNotes } from "@/lib/queries/engagement";
+import { Avatar } from "@/components/Avatar";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/StatCard";
@@ -14,7 +15,7 @@ function formatThaiDate(date: Date): string {
 export default async function DashboardPage() {
   const user = await requireUser();
   const supabase = await createClient();
-  const [stats, { data: holidays }, lateLeaderboard, cookieLeaderboard] = await Promise.all([
+  const [stats, { data: holidays }, lateLeaderboard, cookieLeaderboard, recentNotes] = await Promise.all([
     getDashboardStats(user.orgId),
     supabase
       .from("company_holidays")
@@ -25,6 +26,7 @@ export default async function DashboardPage() {
       .limit(5),
     getLateLeaderboard(),
     getCookieLeaderboard(50),
+    getEmployeeNotes({ sinceHours: 24, limit: 8 }),
   ]);
 
   return (
@@ -88,6 +90,42 @@ export default async function DashboardPage() {
               </ul>
             )}
           </div>
+        </div>
+
+        <div className="rounded-xl border border-outline-variant bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-bold">โน้ตพนักงานวันนี้ 📝</h3>
+            <a href="/notes" className="text-xs font-bold text-primary hover:underline">
+              ดูทั้งหมด
+            </a>
+          </div>
+          {recentNotes.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">ยังไม่มีใครโพสต์โน้ตใน 24 ชม. ที่ผ่านมา</p>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {recentNotes.map((n) => (
+                <li key={n.id} className="flex items-start gap-3 rounded-lg bg-surface-container p-3">
+                  <Avatar url={n.author.photoUrl} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="truncate text-sm font-bold">{n.author.nickname || n.author.name}</p>
+                      <span className="shrink-0 text-[11px] text-on-surface-variant">
+                        {new Date(n.createdAt).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-sm">{n.text}</p>
+                    {(n.reactions.length > 0 || n.comments.length > 0) && (
+                      <p className="mt-1 text-[11px] text-on-surface-variant">
+                        {n.reactions.length > 0 && `${n.reactions.map((r) => r.emoji).join(" ")} ${n.reactions.length}`}
+                        {n.reactions.length > 0 && n.comments.length > 0 && " · "}
+                        {n.comments.length > 0 && `💬 ${n.comments.length}`}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

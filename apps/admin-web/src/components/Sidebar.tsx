@@ -26,6 +26,7 @@ const NAV_ITEMS: { href: string; label: string; icon: string; roles?: UserRole[]
   { href: "/payroll", label: "Payroll", icon: "payments", roles: ["super_admin", "hr"] },
   { href: "/reports", label: "Reports", icon: "assessment", roles: ["super_admin", "hr"] },
   { href: "/announcements", label: "ประกาศ", icon: "campaign" },
+  { href: "/notes", label: "โน้ตพนักงาน", icon: "sticky_note_2" },
   { href: "/translations", label: "ภาษา", icon: "translate", roles: ["super_admin", "hr"] },
   { href: "/admins", label: "ผู้ดูแลระบบ", icon: "admin_panel_settings", roles: ["super_admin"] },
   { href: "/settings", label: "Settings", icon: "settings", roles: ["super_admin", "hr"] },

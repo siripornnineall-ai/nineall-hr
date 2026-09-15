@@ -72,6 +72,92 @@ export async function getLateLeaderboard(): Promise<LateLeaderboardRow[]> {
   }));
 }
 
+export interface NotePerson {
+  employeeId: string;
+  employeeCode: string;
+  name: string;
+  nickname: string | null;
+  photoUrl: string | null;
+}
+
+export interface EmployeeNoteRow {
+  id: string;
+  text: string;
+  createdAt: string;
+  author: NotePerson;
+  reactions: { emoji: string; by: NotePerson }[];
+  comments: { id: string; text: string; createdAt: string; by: NotePerson }[];
+}
+
+interface RawBasicInfo {
+  employee_id: string;
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+  nickname: string | null;
+  photo_url: string | null;
+}
+
+// Employee notes are the Instagram-style status bubbles employees post from the PWA home
+// page. The PWA only ever shows the last 24 hours (nothing expires server-side), so admins
+// get the same default window plus an opt-in longer history. Authors/reactors/commenters are
+// resolved through get_employees_basic_info() — the security-definer RPC the PWA uses — not a
+// PostgREST embed, because employees_select would hide non-team members from a manager-role
+// admin user.
+export async function getEmployeeNotes(options: { sinceHours: number; limit?: number }): Promise<EmployeeNoteRow[]> {
+  const supabase = await createClient();
+  const since = new Date(Date.now() - options.sinceHours * 60 * 60 * 1000).toISOString();
+  const { data: notes, error } = await supabase
+    .from("employee_notes")
+    .select("id, employee_id, text, created_at")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(options.limit ?? 200);
+  if (error || !notes || notes.length === 0) return [];
+
+  const noteIds = notes.map((n) => n.id);
+  const [{ data: reactions }, { data: comments }] = await Promise.all([
+    supabase.from("note_reactions").select("note_id, employee_id, emoji, created_at").in("note_id", noteIds).order("created_at"),
+    supabase.from("note_comments").select("id, note_id, employee_id, text, created_at").in("note_id", noteIds).order("created_at"),
+  ]);
+
+  const personIds = Array.from(
+    new Set([
+      ...notes.map((n) => n.employee_id),
+      ...(reactions ?? []).map((r) => r.employee_id),
+      ...(comments ?? []).map((c) => c.employee_id),
+    ])
+  );
+  const { data: people } = await supabase.rpc("get_employees_basic_info", { p_employee_ids: personIds });
+  const peopleRows = (people ?? []) as RawBasicInfo[];
+  const photoMap = await signAvatarUrls(supabase, peopleRows.map((p) => p.photo_url));
+  const personById = new Map<string, NotePerson>(
+    peopleRows.map((p) => [
+      p.employee_id,
+      {
+        employeeId: p.employee_id,
+        employeeCode: p.employee_code,
+        name: `${p.first_name} ${p.last_name}`,
+        nickname: p.nickname,
+        photoUrl: p.photo_url ? (photoMap.get(p.photo_url) ?? null) : null,
+      },
+    ])
+  );
+  const personOrUnknown = (id: string): NotePerson =>
+    personById.get(id) ?? { employeeId: id, employeeCode: "", name: "ไม่ทราบชื่อ", nickname: null, photoUrl: null };
+
+  return notes.map((n) => ({
+    id: n.id,
+    text: n.text,
+    createdAt: n.created_at,
+    author: personOrUnknown(n.employee_id),
+    reactions: (reactions ?? []).filter((r) => r.note_id === n.id).map((r) => ({ emoji: r.emoji, by: personOrUnknown(r.employee_id) })),
+    comments: (comments ?? [])
+      .filter((c) => c.note_id === n.id)
+      .map((c) => ({ id: c.id, text: c.text, createdAt: c.created_at, by: personOrUnknown(c.employee_id) })),
+  }));
+}
+
 export async function getCookieLeaderboard(limit = 3): Promise<CookieLeaderboardRow[]> {
   const supabase = await createClient();
   // Resets every calendar month — matches enforce_cookie_monthly_limit()'s own 5/month
