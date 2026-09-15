@@ -17,9 +17,9 @@ function formatCutoffLabel(monthKey: string): string {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-export default async function OvertimePage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+export default async function OvertimePage({ searchParams }: { searchParams: Promise<{ month?: string; employeeId?: string }> }) {
   const user = await requireUser();
-  const { month: monthParam } = await searchParams;
+  const { month: monthParam, employeeId: employeeParam } = await searchParams;
   const supabase = await createClient();
 
   const monthKey = parseMonthKey(monthParam);
@@ -29,21 +29,27 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name")
+    .select("id, employee_code, first_name, last_name, nickname")
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
     .in("employment_status", ["active", "probation"])
     .order("employee_code");
 
-  const { data } = await supabase
+  // Only honour the filter if it names a real, listed employee — a stale id in a bookmarked
+  // URL should fall back to "everyone" rather than an empty page.
+  const selectedEmployee = (employees ?? []).find((e) => e.id === employeeParam) ?? null;
+  const employeeQuery = selectedEmployee ? `&employeeId=${selectedEmployee.id}` : "";
+
+  let query = supabase
     .from("overtime_requests")
     .select(
-      "id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status, reason, task_description, employees(employee_code, first_name, last_name, photo_url)"
+      "id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status, reason, task_description, source, employees(employee_code, first_name, last_name, photo_url)"
     )
     .eq("org_id", user.orgId)
     .gte("work_date", start)
-    .lte("work_date", end)
-    .order("work_date", { ascending: false });
+    .lte("work_date", end);
+  if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
+  const { data } = await query.order("work_date", { ascending: false });
 
   const signedByPath = await signAvatarUrls(
     supabase,
@@ -63,6 +69,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
       status: r.status,
       taskDescription: r.task_description,
       reason: r.reason,
+      source: (r.source as string | null) ?? "request",
       employeeCode: emp?.employee_code ?? "-",
       employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
       employeePhotoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
@@ -90,20 +97,50 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-semibold text-on-surface-variant">รอบ: {formatCutoffLabel(monthKey)}</p>
           <div className="flex items-center gap-2">
-            <Link href={`?month=${prevMonthKey}`} className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold hover:bg-surface-variant/20">
+            <Link href={`?month=${prevMonthKey}${employeeQuery}`} className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold hover:bg-surface-variant/20">
               ← รอบก่อน
             </Link>
-            <Link href={`?month=${nextMonthKey}`} className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold hover:bg-surface-variant/20">
+            <Link href={`?month=${nextMonthKey}${employeeQuery}`} className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold hover:bg-surface-variant/20">
               รอบถัดไป →
             </Link>
           </div>
         </div>
 
+        <form method="get" className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant bg-white p-4 shadow-sm">
+          <input type="hidden" name="month" value={monthKey} />
+          <label className="text-sm font-semibold text-on-surface-variant" htmlFor="ot-employee-filter">
+            ดูเฉพาะพนักงาน
+          </label>
+          <select
+            id="ot-employee-filter"
+            name="employeeId"
+            defaultValue={selectedEmployee?.id ?? ""}
+            className="h-10 min-w-[240px] rounded-lg border border-outline-variant bg-surface-container-low px-3 text-sm"
+          >
+            <option value="">ทุกคน</option>
+            {(employees ?? []).map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.employee_code} {e.nickname ? `${e.nickname} ` : ""}{e.first_name} {e.last_name}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-white">
+            แสดง
+          </button>
+          {selectedEmployee && (
+            <Link href={`?month=${monthKey}`} className="text-sm font-semibold text-primary hover:underline">
+              ล้างตัวกรอง
+            </Link>
+          )}
+        </form>
+
         <AddBackdatedOvertimeForm employees={employees ?? []} />
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container px-4 py-3">
-            <p className="text-sm font-bold text-on-surface">สรุปยอด OT ต่อคน (เฉพาะที่อนุมัติแล้ว)</p>
+            <p className="text-sm font-bold text-on-surface">
+              {selectedEmployee ? `ยอด OT ของ ${selectedEmployee.first_name} ${selectedEmployee.last_name} (เฉพาะที่อนุมัติแล้ว)` : "สรุปยอด OT ต่อคน (เฉพาะที่อนุมัติแล้ว)"}
+            </p>
             <p className="text-sm font-bold text-primary">รวมทั้งหมด {grandTotal} ชม.</p>
           </div>
           {totals.length === 0 ? (

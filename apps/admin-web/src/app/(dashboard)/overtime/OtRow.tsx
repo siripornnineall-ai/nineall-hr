@@ -22,6 +22,7 @@ interface OtRowData {
   status: string;
   taskDescription: string | null;
   reason: string | null;
+  source: string;
   employeeCode: string;
   employeeName: string;
   employeePhotoUrl: string | null;
@@ -142,7 +143,14 @@ export function OtRow({ row }: { row: OtRowData }) {
       <td className="px-4 py-3">{row.requestedHours} ชม.</td>
       <td className="px-4 py-3">x{row.rateMultiplier}</td>
       <td className="px-4 py-3">
-        <Badge tone={badge.tone}>{badge.label}</Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone={badge.tone}>{badge.label}</Badge>
+          {row.source === "auto_clock_out" && (
+            <span title={row.reason ?? undefined} className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+              ตัดอัตโนมัติ
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         {confirmingDelete ? (
