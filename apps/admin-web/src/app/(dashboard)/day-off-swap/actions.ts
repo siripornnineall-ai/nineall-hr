@@ -100,8 +100,31 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
       // substitute date is deliberately left untouched; the employee's real clock-in on
       // that date naturally reflects the shorter day HR agreed to.
       const times = HALF_DAY_TIMES[request.period];
-      const clockIn = parseBangkokDateTime(request.original_date, times.start);
-      const clockOut = parseBangkokDateTime(request.original_date, times.end);
+      let clockIn = parseBangkokDateTime(request.original_date, times.start);
+      let clockOut = parseBangkokDateTime(request.original_date, times.end);
+
+      // The date may already hold worked time — a real clock-in, or the *other* half
+      // approved earlier as a separate swap (afternoon first, morning now). Widen to cover
+      // both instead of overwriting what's there with just this half.
+      const { data: existing } = await supabase
+        .from("attendance_records")
+        .select("clock_in_server_at, clock_out_server_at")
+        .eq("employee_id", request.employee_id)
+        .eq("work_date", request.original_date)
+        .maybeSingle();
+      if (existing?.clock_in_server_at) {
+        const existingIn = new Date(existing.clock_in_server_at);
+        if (existingIn < clockIn) clockIn = existingIn;
+      }
+      if (existing?.clock_out_server_at) {
+        const existingOut = new Date(existing.clock_out_server_at);
+        if (existingOut > clockOut) clockOut = existingOut;
+      }
+      // If the merged span crosses the 12:00-13:00 lunch break, don't count that hour.
+      const lunchStart = parseBangkokDateTime(request.original_date, HALF_DAY_TIMES.morning.end);
+      const lunchEnd = parseBangkokDateTime(request.original_date, HALF_DAY_TIMES.afternoon.start);
+      const spansLunch = clockIn <= lunchStart && clockOut >= lunchEnd;
+      const workedMinutes = Math.round((clockOut.getTime() - clockIn.getTime()) / 60000) - (spansLunch ? 60 : 0);
       await supabase.from("attendance_records").upsert(
         {
           org_id: request.org_id,
@@ -114,7 +137,7 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
           status: "on_time",
           late_minutes: 0,
           early_leave_minutes: 0,
-          worked_minutes: Math.round((clockOut.getTime() - clockIn.getTime()) / 60000),
+          worked_minutes: workedMinutes,
           needs_review: false,
         },
         { onConflict: "employee_id,work_date" }

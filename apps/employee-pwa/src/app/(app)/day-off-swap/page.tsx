@@ -95,12 +95,15 @@ export default function DayOffSwapPage() {
       return;
     }
     const activeRequests = requests.filter((r) => r.status === "pending" || r.status === "approved");
-    const dateInUse = activeRequests.some(
-      (r) =>
-        (mode === "swap" && (r.original_date === originalDate || r.substitute_date === originalDate)) ||
-        r.original_date === substituteDate ||
-        r.substitute_date === substituteDate
-    );
+    // A half-day request only occupies its own period (morning or afternoon) on both of its
+    // dates, so two half-day swaps can share a date as long as they cover different halves —
+    // e.g. working the afternoon of a day off (approved earlier) and later the morning too.
+    // Full-day requests occupy both periods.
+    const newPeriod = mode === "swap" && unit === "half_day" ? period : null;
+    const periodsOverlap = (a: string | null, b: string | null) => a === null || b === null || a === b;
+    const touches = (r: SwapRow, date: string) =>
+      (r.original_date === date || r.substitute_date === date) && periodsOverlap(r.unit === "half_day" ? r.period : null, newPeriod);
+    const dateInUse = activeRequests.some((r) => (mode === "swap" && touches(r, originalDate)) || touches(r, substituteDate));
     if (dateInUse) {
       setError("วันที่เลือกมีคำขอสลับวันหยุดอื่นที่รออนุมัติ/อนุมัติแล้วอยู่ กรุณาเลือกวันอื่น");
       return;
