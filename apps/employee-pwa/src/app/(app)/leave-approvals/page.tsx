@@ -7,8 +7,9 @@ import { createClient } from "@/lib/supabase/client";
 import { AddBackdatedLeaveForm } from "./AddBackdatedLeaveForm";
 
 // Leave is approved in two steps: the employee's หัวหน้างาน first, then HR/admin.
-//   - HR / super_admin see everything pending, split by whose turn it is, and can still
-//     decide a request that's waiting on a manager (absent manager, urgent case).
+//   - HR / super_admin see only requests whose manager step is done (or that never had
+//     one). Owner's rule: a request stays off the admin side until the หัวหน้า has approved
+//     it — only a count of those still waiting is shown.
 //   - A line manager sees only their own reports' requests that are waiting on them, via
 //     get_manager_leave_queue() — หัวหน้า are ordinary 'employee' logins, so RLS on
 //     leave_requests/employees wouldn't show them anything.
@@ -46,6 +47,7 @@ export default function LeaveApprovalsPage() {
   const [rows, setRows] = useState<LeaveRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [isLineManager, setIsLineManager] = useState<boolean | null>(null);
+  const [waitingOnManagerCount, setWaitingOnManagerCount] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -67,7 +69,9 @@ export default function LeaveApprovalsPage() {
         .eq("status", "pending")
         .order("created_at");
 
-      const list = data ?? [];
+      const all = data ?? [];
+      const list = all.filter((r) => r.approval_stage !== "manager");
+      setWaitingOnManagerCount(all.length - list.length);
       // Names of the managers involved: whoever already approved, or whoever it's waiting on.
       const managerIds = Array.from(
         new Set(
@@ -254,6 +258,11 @@ export default function LeaveApprovalsPage() {
       {notice && <p className="rounded-xl bg-status-success/10 p-3 text-sm font-semibold text-status-success">{notice}</p>}
 
       {loaded && rows.length === 0 && <p className="text-center text-sm text-on-surface-variant">ไม่มีคำขอลารออนุมัติ</p>}
+      {isHr && waitingOnManagerCount > 0 && (
+        <p className="text-center text-xs text-on-surface-variant">
+          มีอีก {waitingOnManagerCount} คำขอที่ยังรอหัวหน้างานอนุมัติ — จะแสดงที่นี่เมื่อหัวหน้าอนุมัติแล้ว
+        </p>
+      )}
 
       {isHr ? (
         <>

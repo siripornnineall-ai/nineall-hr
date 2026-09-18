@@ -13,13 +13,17 @@ export default async function LeavePage() {
   // (employee_id and delegate_employee_id), so a bare `employees(...)` embed is
   // ambiguous to PostgREST and errors out silently (same bug as employees/[id]'s
   // teams embed — see that page's comment).
-  const [{ data }, { data: leaveTypes }, { data: employees }] = await Promise.all([
+  // Owner's rule: a request doesn't appear on the admin side until the หัวหน้า has approved
+  // it. Only a count of those is shown, so HR can tell an employee "it's still with your
+  // manager" instead of "I can't find it".
+  const [{ data }, { data: leaveTypes }, { data: employees }, { count: waitingOnManagerCount }] = await Promise.all([
     supabase
       .from("leave_requests")
       .select(
         "id, start_date, end_date, total_days, unit, status, reason, created_at, leave_type_id, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url, manager_employee_id), leave_types(name_th)"
       )
       .eq("org_id", user.orgId)
+      .neq("approval_stage", "manager")
       .order("created_at", { ascending: false })
       .limit(50),
     supabase.from("leave_types").select("id, name_th").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),
@@ -30,6 +34,12 @@ export default async function LeavePage() {
       .is("deleted_at", null)
       .in("employment_status", ["active", "probation"])
       .order("employee_code"),
+    supabase
+      .from("leave_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", user.orgId)
+      .eq("status", "pending")
+      .eq("approval_stage", "manager"),
   ]);
 
   const signedByPath = await signAvatarUrls(
@@ -81,6 +91,11 @@ export default async function LeavePage() {
       <Topbar title="การลา" subtitle="คำขอลาทั้งหมด — อนุมัติ 2 ขั้น: หัวหน้างาน แล้วจึง HR/แอดมิน" />
       <div className="space-y-4 p-4 md:p-8">
         <AddBackdatedLeaveForm employees={employees ?? []} leaveTypes={leaveTypes ?? []} />
+        {(waitingOnManagerCount ?? 0) > 0 && (
+          <p className="text-xs text-on-surface-variant">
+            มีอีก {waitingOnManagerCount} คำขอที่ยังรอหัวหน้างานอนุมัติ — จะแสดงในหน้านี้เมื่อหัวหน้าอนุมัติแล้ว
+          </p>
+        )}
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
