@@ -164,47 +164,25 @@ async function autoFillLeaveAttendance(
   revalidatePath("/attendance");
 }
 
+// Goes through the decide_leave_request RPC — the same one the employee app uses — so the
+// two-step flow (หัวหน้า -> HR) has a single implementation: it checks who the caller is,
+// records a bypass when HR decides a request still waiting on a manager, sets the status,
+// closes the approval steps and auto-fills attendance. Admin-web users are always
+// HR/super_admin, so a decision made here is the final one.
 export async function decideLeaveRequest(requestId: string, decision: "approved" | "rejected", comment?: string) {
-  const user = await requireUser();
+  await requireUser();
   const supabase = await createClient();
 
-  const { data: request } = await supabase
-    .from("leave_requests")
-    .select("employee_id, leave_type_id, start_date, end_date, unit, start_time, end_time")
-    .eq("id", requestId)
-    .eq("org_id", user.orgId)
-    .single();
-
-  const { error } = await supabase
-    .from("leave_requests")
-    .update({ status: decision })
-    .eq("id", requestId)
-    .eq("org_id", user.orgId);
-
-  if (error) throw new Error(error.message);
-
-  await supabase
-    .from("approval_steps")
-    .update({ status: decision, comment, acted_at: new Date().toISOString(), approver_employee_id: user.employeeId })
-    .eq("request_type", "leave")
-    .eq("request_id", requestId)
-    .eq("status", "pending");
-
-  if (decision === "approved" && request) {
-    await autoFillLeaveAttendance(
-      supabase,
-      user.orgId,
-      request.employee_id,
-      request.leave_type_id,
-      request.start_date,
-      request.end_date,
-      request.unit,
-      request.start_time,
-      request.end_time
-    );
-  }
+  const { error } = await supabase.rpc("decide_leave_request", {
+    p_request_id: requestId,
+    p_decision: decision,
+    p_comment: comment ?? null,
+  });
+  if (error) return { error: error.message };
 
   revalidatePath("/leave");
+  revalidatePath("/attendance");
+  revalidatePath("/dashboard");
 }
 
 export async function updateLeaveRequestAction(

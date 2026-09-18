@@ -11,10 +11,17 @@ interface RequestRow {
   title: string;
   detail: string;
   status: string;
+  stage: string | null;
   createdAt: string;
 }
 
 const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
+// Leave is approved in two steps (หัวหน้า -> HR); while pending, say whose turn it is.
+function statusLabel(status: string, stage: string | null): string {
+  if (status === "pending" && stage === "manager") return "รอหัวหน้าอนุมัติ";
+  if (status === "pending" && stage === "hr") return "รอ HR อนุมัติ";
+  return STATUS_TH[status] ?? status;
+}
 const STATUS_CLASS: Record<string, string> = {
   pending: "text-status-warning",
   approved: "text-status-success",
@@ -33,7 +40,7 @@ export default function RequestsPage() {
     const [{ data: leave }, { data: ot }] = await Promise.all([
       supabase
         .from("leave_requests")
-        .select("id, start_date, end_date, total_days, status, created_at, leave_types(name_th)")
+        .select("id, start_date, end_date, total_days, status, approval_stage, created_at, leave_types(name_th)")
         .eq("employee_id", profile.employeeId)
         .order("created_at", { ascending: false })
         .limit(30),
@@ -51,6 +58,7 @@ export default function RequestsPage() {
       title: (r.leave_types as unknown as { name_th: string } | null)?.name_th ?? "ลางาน",
       detail: `${r.start_date} - ${r.end_date} (${r.total_days} วัน)`,
       status: r.status,
+      stage: r.approval_stage,
       createdAt: r.created_at,
     }));
     const otRows: RequestRow[] = (ot ?? []).map((r) => ({
@@ -59,6 +67,7 @@ export default function RequestsPage() {
       title: "ทำงานล่วงเวลา (OT)",
       detail: `${new Date(r.work_date).toLocaleDateString("th-TH")} (${r.requested_hours} ชม.)`,
       status: r.status,
+      stage: null,
       createdAt: r.created_at,
     }));
 
@@ -82,7 +91,7 @@ export default function RequestsPage() {
               <p className="font-semibold text-on-surface">{r.title}</p>
               <p className="text-xs text-on-surface-variant">{r.detail}</p>
             </div>
-            <span className={clsx("text-xs font-bold", STATUS_CLASS[r.status])}>{STATUS_TH[r.status] ?? r.status}</span>
+            <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{statusLabel(r.status, r.stage)}</span>
           </div>
         ))}
       </div>

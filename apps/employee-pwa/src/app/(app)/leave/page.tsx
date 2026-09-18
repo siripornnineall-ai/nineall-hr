@@ -20,10 +20,17 @@ interface LeaveRequestRow {
   end_date: string;
   total_days: number;
   status: string;
+  approval_stage: string | null;
   leave_types: { name_th: string } | null;
 }
 
 const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
+// Leave is approved in two steps (หัวหน้า -> HR); while pending, say whose turn it is.
+function statusLabel(status: string, stage: string | null): string {
+  if (status === "pending" && stage === "manager") return "รอหัวหน้าอนุมัติ";
+  if (status === "pending" && stage === "hr") return "รอ HR อนุมัติ";
+  return STATUS_TH[status] ?? status;
+}
 const STATUS_CLASS: Record<string, string> = {
   pending: "text-status-warning",
   approved: "text-status-success",
@@ -60,7 +67,7 @@ export default function LeavePage() {
         .order("effective_date", { ascending: false }),
       supabase
         .from("leave_requests")
-        .select("id, start_date, end_date, total_days, status, leave_types(name_th)")
+        .select("id, start_date, end_date, total_days, status, approval_stage, leave_types(name_th)")
         .eq("employee_id", profile.employeeId)
         .order("created_at", { ascending: false })
         .limit(20),
@@ -338,7 +345,7 @@ export default function LeavePage() {
                   {r.start_date} - {r.end_date} ({r.total_days} วัน)
                 </p>
               </div>
-              <span className={clsx("text-xs font-bold", STATUS_CLASS[r.status])}>{STATUS_TH[r.status] ?? r.status}</span>
+              <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{statusLabel(r.status, r.approval_stage)}</span>
             </div>
           ))}
         </div>

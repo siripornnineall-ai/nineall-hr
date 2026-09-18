@@ -27,7 +27,8 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats> 
   ] = await Promise.all([
     supabase.from("employees").select("id", { count: "exact", head: true }).eq("org_id", orgId).is("deleted_at", null).eq("employment_status", "active"),
     supabase.from("attendance_records").select("status, clock_out_server_at").eq("org_id", orgId).eq("work_date", today),
-    supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "pending"),
+    // Only requests whose turn it is for HR — ones still waiting on a หัวหน้า aren't actionable here yet.
+    supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "pending").eq("approval_stage", "hr"),
     supabase.from("overtime_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "pending"),
     supabase.from("time_correction_requests").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "pending"),
     supabase

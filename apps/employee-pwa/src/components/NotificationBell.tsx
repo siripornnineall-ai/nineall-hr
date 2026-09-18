@@ -19,6 +19,7 @@ interface NotificationRow {
 // Where tapping a notification should take you — keyed by notifications.type.
 const NOTIFICATION_LINKS: Record<string, string> = {
   leave_request_decided: "/leave",
+  leave_request_submitted: "/leave-approvals",
   note_comment: "/",
   note_reaction: "/",
 };

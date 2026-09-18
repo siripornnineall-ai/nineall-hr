@@ -17,7 +17,7 @@ export default async function LeavePage() {
     supabase
       .from("leave_requests")
       .select(
-        "id, start_date, end_date, total_days, unit, status, reason, created_at, leave_type_id, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url), leave_types(name_th)"
+        "id, start_date, end_date, total_days, unit, status, reason, created_at, leave_type_id, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url, manager_employee_id), leave_types(name_th)"
       )
       .eq("org_id", user.orgId)
       .order("created_at", { ascending: false })
@@ -37,8 +37,25 @@ export default async function LeavePage() {
     (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
   );
 
+  // Leave is approved in two steps (หัวหน้า -> HR). Resolve the manager involved in each row:
+  // whoever already decided the first step, otherwise whoever it's waiting on.
+  const managerIdOf = (r: NonNullable<typeof data>[number]): string | null => {
+    const emp = r.employees as unknown as { manager_employee_id: string | null } | null;
+    return (r.manager_decided_by as string | null) ?? emp?.manager_employee_id ?? null;
+  };
+  const managerIds = Array.from(new Set((data ?? []).map(managerIdOf).filter((id): id is string => !!id)));
+  const { data: managerPeople } =
+    managerIds.length > 0 ? await supabase.rpc("get_employees_basic_info", { p_employee_ids: managerIds }) : { data: [] };
+  const managerNameById = new Map<string, string>(
+    ((managerPeople ?? []) as { employee_id: string; first_name: string; last_name: string; nickname: string | null }[]).map((p) => [
+      p.employee_id,
+      p.nickname || `${p.first_name} ${p.last_name}`,
+    ])
+  );
+
   const rows = (data ?? []).map((r) => {
     const emp = r.employees as unknown as { employee_code: string; first_name: string; last_name: string; photo_url: string | null } | null;
+    const managerId = managerIdOf(r);
     const leaveType = r.leave_types as unknown as { name_th: string } | null;
     return {
       id: r.id,
@@ -48,6 +65,10 @@ export default async function LeavePage() {
       endDate: r.end_date,
       totalDays: Number(r.total_days),
       status: r.status,
+      approvalStage: (r.approval_stage as string | null) ?? "hr",
+      managerName: managerId ? (managerNameById.get(managerId) ?? null) : null,
+      managerDecision: (r.manager_decision as string | null) ?? null,
+      managerComment: (r.manager_comment as string | null) ?? null,
       reason: r.reason,
       employeeCode: emp?.employee_code ?? "-",
       employeeName: emp ? `${emp.first_name} ${emp.last_name}` : "-",
@@ -57,7 +78,7 @@ export default async function LeavePage() {
 
   return (
     <>
-      <Topbar title="การลา" subtitle="คำขอลาทั้งหมด" />
+      <Topbar title="การลา" subtitle="คำขอลาทั้งหมด — อนุมัติ 2 ขั้น: หัวหน้างาน แล้วจึง HR/แอดมิน" />
       <div className="space-y-4 p-4 md:p-8">
         <AddBackdatedLeaveForm employees={employees ?? []} leaveTypes={leaveTypes ?? []} />
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">

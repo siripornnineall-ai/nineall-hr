@@ -20,6 +20,10 @@ interface LeaveRowData {
   endDate: string;
   totalDays: number;
   status: string;
+  approvalStage: string;
+  managerName: string | null;
+  managerDecision: string | null;
+  managerComment: string | null;
   reason: string | null;
   employeeCode: string;
   employeeName: string;
@@ -35,7 +39,12 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
   const [reason, setReason] = useState(row.reason ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
+  // While pending, the badge says whose turn it is in the two-step flow.
+  const waitingOnManager = row.status === "pending" && row.approvalStage === "manager";
+  const badge =
+    row.status === "pending"
+      ? { tone: "warning" as const, label: waitingOnManager ? "รอหัวหน้าอนุมัติ" : "รอ HR อนุมัติ" }
+      : (STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status });
 
   function save() {
     setError(null);
@@ -48,7 +57,10 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
 
   function decide(decision: "approved" | "rejected") {
     setError(null);
-    startTransition(() => decideLeaveRequest(row.id, decision));
+    startTransition(async () => {
+      const result = await decideLeaveRequest(row.id, decision);
+      if (result?.error) setError(result.error);
+    });
   }
 
   if (editing) {
@@ -129,6 +141,17 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
       </td>
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
+        {waitingOnManager && row.managerName && <div className="mt-1 text-[11px] text-on-surface-variant">หัวหน้า: {row.managerName}</div>}
+        {row.managerDecision === "approved" && (
+          <div className="mt-1 text-[11px] text-status-success" title={row.managerComment ?? undefined}>
+            หัวหน้า{row.managerName ? ` (${row.managerName})` : ""} อนุมัติแล้ว
+          </div>
+        )}
+        {row.managerDecision === "rejected" && (
+          <div className="mt-1 text-[11px] text-status-danger" title={row.managerComment ?? undefined}>
+            หัวหน้า{row.managerName ? ` (${row.managerName})` : ""} ปฏิเสธ{row.managerComment ? `: ${row.managerComment}` : ""}
+          </div>
+        )}
       </td>
       <td className="px-4 py-3">
         <div className="flex justify-end gap-2">
@@ -142,7 +165,7 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
           {row.status === "pending" && (
             <>
               <button onClick={() => decide("approved")} disabled={isPending} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">
-                อนุมัติ
+                {waitingOnManager ? "อนุมัติแทนหัวหน้า" : "อนุมัติ"}
               </button>
               <button
                 onClick={() => decide("rejected")}
@@ -154,6 +177,7 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
             </>
           )}
         </div>
+        {error && <p className="mt-1 text-right text-xs font-semibold text-status-danger">{error}</p>}
       </td>
     </tr>
   );

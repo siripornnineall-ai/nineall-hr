@@ -42,6 +42,14 @@ export default function HomePage() {
   const [stats, setStats] = useState<HomeStats | null>(null);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [now, setNow] = useState(new Date());
+  // หัวหน้างาน are ordinary 'employee' logins — whether someone reports to them is the only
+  // thing that makes them an approver, so ask the database rather than checking the role.
+  const [isLineManager, setIsLineManager] = useState(false);
+
+  useEffect(() => {
+    if (!profile) return;
+    supabase.rpc("is_line_manager").then(({ data }) => setIsLineManager(data === true));
+  }, [profile, supabase]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -177,12 +185,10 @@ export default function HomePage() {
           <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
           <QuickLink href="/colleagues" icon="groups" label="เพื่อนร่วมงาน" />
           <QuickLink href="/admin-responsibilities" icon="support_agent" label="ความรับผิดชอบแอดมิน" />
-          {(profile?.role === "super_admin" || profile?.role === "hr") && (
-            <>
-              <QuickLink href="/leave-approvals" icon="assignment_turned_in" label="อนุมัติการลา" />
-              <QuickLink href="/ot-approvals" icon="timer" label="อนุมัติ OT" />
-            </>
+          {(profile?.role === "super_admin" || profile?.role === "hr" || isLineManager) && (
+            <QuickLink href="/leave-approvals" icon="assignment_turned_in" label="อนุมัติการลา" />
           )}
+          {(profile?.role === "super_admin" || profile?.role === "hr") && <QuickLink href="/ot-approvals" icon="timer" label="อนุมัติ OT" />}
         </div>
 
         <LateLeaderboardCard />
