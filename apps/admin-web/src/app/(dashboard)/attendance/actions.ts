@@ -151,6 +151,16 @@ export async function updateAttendanceTimeAction(
       if (earlyLeaveMinutes > 0 && status === "on_time") status = "early_leave";
       update.worked_minutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000) - (shift.unpaid_break_minutes ?? 0));
       update.ot_minutes = shift.ot_after_shift_allowed ? Math.max(0, toMinuteOfDay(clockOutAt) - shiftEndMinute) : 0;
+
+      // Same rule as clock_out() (migration 0068): staying past the normal shift end makes
+      // up for a late arrival minute-for-minute, down to zero. Without this, a time HR typed
+      // in by hand kept the "มาสาย" mark that the employee's own scan would have cleared.
+      const minutesAfterEnd = toMinuteOfDay(clockOutAt) - shiftEndMinute;
+      if (status === "late" && minutesAfterEnd > 0) {
+        const remainingLate = Math.max(0, lateMinutes - minutesAfterEnd);
+        update.late_minutes = remainingLate;
+        if (remainingLate === 0) status = "on_time";
+      }
     }
     update.status = status;
   }
