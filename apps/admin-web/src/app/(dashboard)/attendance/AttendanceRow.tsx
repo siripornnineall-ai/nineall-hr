@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
-import { updateAttendanceTimeAction } from "./actions";
+import { deleteAttendanceRecordAction, updateAttendanceTimeAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "info" | "holiday" | "neutral"; label: string }> = {
   on_time: { tone: "success", label: "ตรงเวลา" },
@@ -29,8 +29,8 @@ const STATUS_EDIT_OPTIONS: { value: string; label: string }[] = [
   { value: "early_leave", label: "ออกก่อน" },
   { value: "leave", label: "ลา" },
   { value: "absent", label: "ขาดงาน" },
-  { value: "holiday", label: "วันหยุด" },
-  { value: "day_off", label: "หยุดประจำ" },
+  { value: "holiday", label: "วันหยุดนักขัตฤกษ์ (นับเป็นวันทำงาน ได้ค่าจ้าง)" },
+  { value: "day_off", label: "หยุดประจำ (ไม่นับเป็นวันทำงาน)" },
   { value: "work_from_home", label: "WFH" },
   { value: "off_site", label: "นอกสถานที่" },
 ];
@@ -89,7 +89,19 @@ export function AttendanceRow({
   const [workLocationId, setWorkLocationId] = useState(row.workLocationId ?? "");
   const [statusOverride, setStatusOverride] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  function confirmDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteAttendanceRecordAction(row.id);
+      if (result?.error) {
+        setError(result.error);
+        setConfirmingDelete(false);
+      }
+    });
+  }
   const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
 
   function save() {
@@ -189,9 +201,27 @@ export function AttendanceRow({
         {row.statusDetail && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
       </td>
       <td className="px-4 py-3 text-right">
-        <button onClick={() => setEditing(true)} className="text-xs font-bold text-primary hover:underline">
-          แก้ไขเวลา
-        </button>
+        {confirmingDelete ? (
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-xs font-semibold text-status-danger">ลบรายการนี้?</span>
+            <button onClick={confirmDelete} disabled={isPending} className="rounded-lg bg-status-danger px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">
+              {isPending ? "กำลังลบ..." : "ยืนยันลบ"}
+            </button>
+            <button onClick={() => setConfirmingDelete(false)} disabled={isPending} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-on-surface-variant">
+              ยกเลิก
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-3">
+            <button onClick={() => setEditing(true)} disabled={isPending} className="text-xs font-bold text-primary hover:underline">
+              แก้ไขเวลา
+            </button>
+            <button onClick={() => setConfirmingDelete(true)} disabled={isPending} className="text-xs font-bold text-status-danger hover:underline">
+              ลบ
+            </button>
+          </div>
+        )}
+        {error && <p className="mt-1 text-right text-xs font-semibold text-status-danger">{error}</p>}
       </td>
     </tr>
   );

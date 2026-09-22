@@ -173,6 +173,32 @@ export async function updateAttendanceTimeAction(
   revalidatePath("/attendance");
 }
 
+// Removes a day's record outright — for rows HR entered by mistake (wrong date, wrong
+// person, a "วันหยุด" that should never have been recorded). The BEFORE DELETE trigger on
+// attendance_records (migration 0089) removes any auto-cut OT that pointed at it, so
+// nothing paid survives the row. Real clock-ins can be deleted too, so this is HR-only and
+// the UI asks twice.
+export async function deleteAttendanceRecordAction(recordId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("id, employee_id, work_date")
+    .eq("id", recordId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!existing) return { error: "ไม่พบข้อมูลการลงเวลานี้" };
+
+  const { error } = await supabase.from("attendance_records").delete().eq("id", recordId).eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/attendance");
+  revalidatePath(`/attendance/${existing.employee_id}`);
+  revalidatePath("/overtime");
+}
+
 // Empty string means "compute on_time/late/early_leave from the entered times" (see below) —
 // the rest are day types with no clock time to derive a status from.
 const SPECIAL_STATUS_OPTIONS = new Set(["", "absent", "holiday", "leave", "work_from_home", "off_site", "day_off"]);

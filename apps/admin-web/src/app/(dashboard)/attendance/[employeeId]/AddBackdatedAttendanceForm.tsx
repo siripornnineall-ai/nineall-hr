@@ -19,8 +19,8 @@ const SPECIAL_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "ปกติ (คำนวณสถานะจากเวลาที่กรอกให้อัตโนมัติ)" },
   { value: "leave", label: "ลา" },
   { value: "absent", label: "ขาดงาน" },
-  { value: "holiday", label: "วันหยุด" },
-  { value: "day_off", label: "หยุดประจำ" },
+  { value: "holiday", label: "วันหยุดนักขัตฤกษ์ (นับเป็นวันทำงาน ได้ค่าจ้าง)" },
+  { value: "day_off", label: "หยุดประจำ (ไม่นับเป็นวันทำงาน)" },
   { value: "work_from_home", label: "WFH" },
   { value: "off_site", label: "นอกสถานที่" },
 ];
