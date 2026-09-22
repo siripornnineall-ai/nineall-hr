@@ -209,6 +209,58 @@ export async function deleteAttendanceRecordAction(recordId: string): Promise<{ 
   revalidatePath("/overtime");
 }
 
+// One click for "this was their regular day off": the attendance row becomes 'day_off'
+// (not a working day, so nothing is paid or deducted for it) and the schedule for that
+// date is marked is_day_off so the nightly absent-sync and the payroll's scheduled-day
+// count agree with it. Chosen over the status picker because the paid "วันหยุด"
+// (public holiday) option sat right next to it and kept getting picked by mistake.
+export async function markDayOffAction(recordId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("id, employee_id, work_date, clock_in_server_at, clock_out_server_at")
+    .eq("id", recordId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!existing) return { error: "ไม่พบข้อมูลการลงเวลานี้" };
+
+  const { error } = await supabase
+    .from("attendance_records")
+    .update({
+      status: "day_off",
+      shift_id: null,
+      clock_in_server_at: null,
+      clock_out_server_at: null,
+      clock_in_device_at: null,
+      clock_out_device_at: null,
+      late_minutes: 0,
+      early_leave_minutes: 0,
+      worked_minutes: 0,
+      ot_minutes: 0,
+      needs_review: false,
+      edited_by: user.employeeId,
+      edited_at: new Date().toISOString(),
+      edit_reason: existing.clock_in_server_at
+        ? "ตั้งเป็นวันหยุดประจำโดยแอดมิน (มีเวลาลงงานเดิม " + new Date(existing.clock_in_server_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }) + ")"
+        : "ตั้งเป็นวันหยุดประจำโดยแอดมิน",
+    })
+    .eq("id", recordId)
+    .eq("org_id", user.orgId);
+  if (error) return { error: error.message };
+
+  await supabase.from("shift_assignments").upsert(
+    { org_id: user.orgId, employee_id: existing.employee_id, work_date: existing.work_date, shift_id: null, work_location_id: null, is_day_off: true, source: "admin" },
+    { onConflict: "employee_id,work_date" }
+  );
+
+  revalidatePath("/attendance");
+  revalidatePath(`/attendance/${existing.employee_id}`);
+  revalidatePath("/overtime");
+}
+
 // Empty string means "compute on_time/late/early_leave from the entered times" (see below) —
 // the rest are day types with no clock time to derive a status from.
 const SPECIAL_STATUS_OPTIONS = new Set(["", "absent", "holiday", "leave", "work_from_home", "off_site", "day_off"]);

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
-import { deleteAttendanceRecordAction, updateAttendanceTimeAction } from "../actions";
+import { deleteAttendanceRecordAction, markDayOffAction, updateAttendanceTimeAction } from "../actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "info" | "holiday" | "neutral"; label: string }> = {
   on_time: { tone: "success", label: "ตรงเวลา" },
@@ -78,6 +78,14 @@ export function EmployeeAttendanceRow({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
+
+  function markDayOff() {
+    setError(null);
+    startTransition(async () => {
+      const result = await markDayOffAction(row.id);
+      if (result?.error) setError(result.error);
+    });
+  }
 
   function confirmDelete() {
     setError(null);
@@ -188,6 +196,11 @@ export function EmployeeAttendanceRow({
             <button onClick={() => setEditing(true)} disabled={isPending} className="text-xs font-bold text-primary hover:underline">
               แก้ไข
             </button>
+            {row.status !== "day_off" && (
+              <button onClick={markDayOff} disabled={isPending} title="ตั้งวันนี้เป็นวันหยุดประจำของพนักงาน (ไม่นับเป็นวันทำงาน)" className="text-xs font-bold text-on-surface-variant hover:underline">
+                หยุดประจำ
+              </button>
+            )}
             <button onClick={() => setConfirmingDelete(true)} disabled={isPending} className="text-xs font-bold text-status-danger hover:underline">
               ลบ
             </button>
