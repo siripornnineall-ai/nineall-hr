@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrl } from "@/lib/avatars";
 
 interface DayRow {
   work_date: string;
@@ -56,8 +57,7 @@ export default function LateDetailPage() {
       if (basic) {
         let photoUrl: string | null = null;
         if (basic.photo_url) {
-          const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(basic.photo_url, 3600);
-          photoUrl = signed?.signedUrl ?? null;
+          photoUrl = await signAvatarUrl(supabase, basic.photo_url);
         }
         setInfo({ name: `${basic.first_name} ${basic.last_name}`, nickname: basic.nickname, photoUrl });
       }

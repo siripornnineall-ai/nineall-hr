@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrl } from "@/lib/avatars";
 
 export interface EmployeeProfile {
   profileId: string;
@@ -50,8 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // straight into an <img src> without repeating this call.
     let photoUrl: string | null = null;
     if (employee?.photo_url) {
-      const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(employee.photo_url, 3600);
-      photoUrl = signed?.signedUrl ?? null;
+      photoUrl = await signAvatarUrl(supabase, employee.photo_url);
     }
 
     setProfile({

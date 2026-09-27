@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface RawNote {
   id: string;
@@ -66,10 +67,7 @@ export function NotesRow() {
     const photoPaths = Array.from(new Set(peopleRows.map((p) => p.photo_url).filter((p): p is string => !!p)));
     const map = new Map<string, string>();
     if (photoPaths.length > 0) {
-      const { data: signed } = await supabase.storage.from("avatars").createSignedUrls(photoPaths, 3600);
-      for (const item of signed ?? []) {
-        if (item.signedUrl && item.path) map.set(item.path, item.signedUrl);
-      }
+      for (const [p, u] of await signAvatarUrls(supabase, photoPaths)) map.set(p, u);
     }
     setPhotoMap(map);
 

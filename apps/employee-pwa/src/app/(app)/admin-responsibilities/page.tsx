@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface Channel {
   id: string;
@@ -69,10 +70,7 @@ export default function AdminResponsibilitiesPage() {
     const photoPaths = Array.from(new Set(rawRows.map((r) => r.photo_url).filter((p): p is string => !!p)));
     const urlByPath = new Map<string, string>();
     if (photoPaths.length > 0) {
-      const { data: signed } = await supabase.storage.from("avatars").createSignedUrls(photoPaths, 3600);
-      for (const item of signed ?? []) {
-        if (item.signedUrl && item.path) urlByPath.set(item.path, item.signedUrl);
-      }
+      for (const [p, u] of await signAvatarUrls(supabase, photoPaths)) urlByPath.set(p, u);
     }
 
     setProfiles(

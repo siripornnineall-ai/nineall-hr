@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface LateRow {
   employeeId: string;
@@ -58,10 +59,7 @@ async function signPhotos(supabase: ReturnType<typeof createClient>, paths: (str
   const unique = Array.from(new Set(paths.filter((p): p is string => !!p)));
   const map = new Map<string, string>();
   if (unique.length === 0) return map;
-  const { data } = await supabase.storage.from("avatars").createSignedUrls(unique, 3600);
-  for (const item of data ?? []) {
-    if (item.signedUrl && item.path) map.set(item.path, item.signedUrl);
-  }
+  for (const [p, u] of await signAvatarUrls(supabase, unique)) map.set(p, u);
   return map;
 }
 

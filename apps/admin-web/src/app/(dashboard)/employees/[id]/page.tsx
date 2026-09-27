@@ -8,6 +8,7 @@ import { OffboardButton } from "./OffboardButton";
 import { DeleteEmployeeButton } from "./DeleteEmployeeButton";
 import { CreateLoginAccountButton } from "./CreateLoginAccountButton";
 import { EmployeeDetailTabs } from "./EmployeeDetailTabs";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface AddressValue {
   houseNo?: string;
@@ -63,8 +64,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   // photo_url is a private-bucket storage path, not a fetchable URL.
   let photoUrl: string | null = null;
   if (employee.photo_url) {
-    const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(employee.photo_url, 3600);
-    photoUrl = signed?.signedUrl ?? null;
+    photoUrl = (await signAvatarUrls(supabase, [employee.photo_url])).get(employee.photo_url) ?? null;
   }
 
   const canSeeSalary = ["super_admin", "hr"].includes(user.role) || user.employeeId === employee.id;

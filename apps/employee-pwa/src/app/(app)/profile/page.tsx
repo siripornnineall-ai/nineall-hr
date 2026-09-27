@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { ThaiAddressCascadeFields } from "./ThaiAddressCascadeFields";
 import { formatThaiId13 } from "@nineall-hr/shared-validation";
+import { forgetAvatarUrl, shrinkImage, signAvatarUrl } from "@/lib/avatars";
 
 interface AddressValue {
   houseNo?: string;
@@ -99,8 +100,8 @@ export default function ProfilePage() {
           currentAddress: (data.current_address as AddressValue | null) ?? {},
         });
         if (data.photo_url) {
-          const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(data.photo_url, 3600);
-          if (signed) setPhotoPreview(signed.signedUrl);
+          const signedAvatarUrl = await signAvatarUrl(supabase, data.photo_url);
+          if (signedAvatarUrl) setPhotoPreview(signedAvatarUrl);
         }
       });
   }, [profile, supabase]);
@@ -112,14 +113,19 @@ export default function ProfilePage() {
     setProfileMessage(null);
     try {
       const path = `${profile.orgId}/${profile.employeeId}/${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { contentType: file.type });
+      // Shrink on the phone first — full-size camera photos (up to several MB) were the
+      // bulk of the storage egress that got the project throttled.
+      const shrunk = await shrinkImage(file);
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, shrunk, { contentType: shrunk.type || file.type, cacheControl: "604800" });
       if (uploadError) throw new Error(uploadError.message);
 
       const { error: updateError } = await supabase.from("employees").update({ photo_url: path }).eq("id", profile.employeeId);
       if (updateError) throw new Error(updateError.message);
 
-      const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(path, 3600);
-      setPhotoPreview(signed?.signedUrl ?? null);
+      if (edit.photoUrl) forgetAvatarUrl(edit.photoUrl);
+      setPhotoPreview(await signAvatarUrl(supabase, path));
       setEdit({ ...edit, photoUrl: path });
       await refreshProfile();
       setProfileMessage({ type: "success", text: "เปลี่ยนรูปโปรไฟล์แล้ว" });

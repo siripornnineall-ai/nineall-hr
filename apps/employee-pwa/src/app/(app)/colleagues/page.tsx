@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface Colleague {
   employee_id: string;
@@ -36,10 +37,7 @@ export default function ColleaguesPage() {
         const paths = Array.from(new Set(rows.map((r) => r.photo_url).filter((p): p is string => !!p)));
         const map = new Map<string, string>();
         if (paths.length > 0) {
-          const { data: signed } = await supabase.storage.from("avatars").createSignedUrls(paths, 3600);
-          for (const item of signed ?? []) {
-            if (item.signedUrl && item.path) map.set(item.path, item.signedUrl);
-          }
+          for (const [p, u] of await signAvatarUrls(supabase, paths)) map.set(p, u);
         }
         setPhotoMap(map);
         setColleagues(rows);

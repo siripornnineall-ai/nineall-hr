@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { signAvatarUrls } from "@/lib/avatars";
 
 interface OrgNode {
   id: string;
@@ -115,10 +116,7 @@ export default function OrgChartPage() {
       const photoPaths = Array.from(new Set(rows.map((r) => r.photo_url).filter((p): p is string => !!p)));
       const urlByPath = new Map<string, string>();
       if (photoPaths.length > 0) {
-        const { data: signed } = await supabase.storage.from("avatars").createSignedUrls(photoPaths, 3600);
-        for (const item of signed ?? []) {
-          if (item.signedUrl && item.path) urlByPath.set(item.path, item.signedUrl);
-        }
+        for (const [p, u] of await signAvatarUrls(supabase, photoPaths)) urlByPath.set(p, u);
       }
 
       setNodes(

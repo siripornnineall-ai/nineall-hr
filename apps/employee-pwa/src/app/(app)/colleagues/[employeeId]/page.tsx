@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { EditEmployeeModal } from "./EditEmployeeModal";
+import { signAvatarUrl } from "@/lib/avatars";
 
 interface BasicInfo {
   first_name: string;
@@ -86,8 +87,7 @@ export default function ColleagueProfilePage() {
     const basic = basicData as BasicInfo | null;
     setInfo(basic);
     if (basic?.photo_url) {
-      const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(basic.photo_url, 3600);
-      setPhotoUrl(signed?.signedUrl ?? null);
+      setPhotoUrl(await signAvatarUrl(supabase, basic.photo_url));
     } else {
       setPhotoUrl(null);
     }

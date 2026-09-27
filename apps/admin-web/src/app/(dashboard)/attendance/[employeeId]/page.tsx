@@ -7,6 +7,7 @@ import { StatCard } from "@/components/StatCard";
 import { Avatar } from "@/components/Avatar";
 import { AddBackdatedAttendanceForm } from "./AddBackdatedAttendanceForm";
 import { EmployeeAttendanceRow } from "./EmployeeAttendanceRow";
+import { signAvatarUrls } from "@/lib/avatars";
 
 function parseMonth(month: string | undefined): { year: number; monthIndex: number } {
   if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -49,8 +50,7 @@ export default async function EmployeeAttendanceDashboardPage({
 
   let photoUrl: string | null = null;
   if (employee.photo_url) {
-    const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(employee.photo_url, 3600);
-    photoUrl = signed?.signedUrl ?? null;
+    photoUrl = (await signAvatarUrls(supabase, [employee.photo_url])).get(employee.photo_url) ?? null;
   }
   const position = (employee.job_positions as unknown as { title: string } | null)?.title ?? null;
   const department = (employee.departments as unknown as { name: string } | null)?.name ?? null;

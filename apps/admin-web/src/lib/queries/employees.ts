@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { signAvatarUrls } from "@/lib/avatars";
 
 export interface EmployeeListFilters {
   search?: string;
@@ -53,13 +54,10 @@ export async function listEmployees(orgId: string, filters: EmployeeListFilters)
 
   // photo_url is a private-bucket storage path, not a fetchable URL — resolve each to a
   // short-lived signed URL here so callers can drop it straight into an <img src>.
+  const signedByPath = await signAvatarUrls(supabase, (data ?? []).map((e) => e.photo_url));
   const rows: EmployeeListRow[] = await Promise.all(
     (data ?? []).map(async (e) => {
-      let photoUrl: string | null = null;
-      if (e.photo_url) {
-        const { data: signed } = await supabase.storage.from("avatars").createSignedUrl(e.photo_url, 3600);
-        photoUrl = signed?.signedUrl ?? null;
-      }
+      const photoUrl: string | null = e.photo_url ? (signedByPath.get(e.photo_url) ?? null) : null;
       return {
         id: e.id,
         employeeCode: e.employee_code,
