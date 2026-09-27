@@ -180,6 +180,14 @@ export async function updateAttendanceTimeAction(
   const { error } = await supabase.from("attendance_records").update(update).eq("id", recordId).eq("org_id", user.orgId);
   if (error) return { error: error.message };
 
+  // The database holds the full late / early-leave rules (partial-day leave moving the
+  // start or end, half-day swaps, evening make-up — migration 0097). Unless HR explicitly
+  // chose a status, let it have the final say on the values computed above.
+  if (!values.status) {
+    const { error: rejudgeError } = await supabase.rpc("rejudge_attendance_day", { p_attendance_id: recordId });
+    if (rejudgeError) return { error: rejudgeError.message };
+  }
+
   revalidatePath("/attendance");
 }
 
