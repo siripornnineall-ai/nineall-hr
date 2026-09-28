@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { countsTowardLeaveQuota } from "@/lib/leaveTypes";
 import { LateLeaderboardCard, CookieLeaderboardCard } from "./LeaderboardCards";
 import { NotesRow } from "./NotesRow";
 import { AnnouncementBanner } from "./AnnouncementBanner";
@@ -63,17 +64,16 @@ export default function HomePage() {
     const monthStart = `${year}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
 
     const [balances, ot, leaveReq, otReq, todayAttendance] = await Promise.all([
-      supabase.from("leave_balances").select("entitled_days, carried_over_days, used_days, pending_days").eq("employee_id", profile.employeeId).eq("year", year),
+      supabase.from("leave_balances").select("entitled_days, carried_over_days, used_days, pending_days, leave_types(code)").eq("employee_id", profile.employeeId).eq("year", year),
       supabase.from("overtime_requests").select("approved_hours").eq("employee_id", profile.employeeId).eq("status", "approved").gte("work_date", monthStart),
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", profile.employeeId).eq("status", "pending"),
       supabase.from("overtime_requests").select("id", { count: "exact", head: true }).eq("employee_id", profile.employeeId).eq("status", "pending"),
       supabase.from("attendance_records").select("status, clock_in_server_at").eq("employee_id", profile.employeeId).eq("work_date", today).maybeSingle(),
     ]);
 
-    const leaveDaysRemaining = (balances.data ?? []).reduce(
-      (sum, b) => sum + Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days),
-      0
-    );
+    const leaveDaysRemaining = (balances.data ?? [])
+      .filter((b) => countsTowardLeaveQuota((b.leave_types as unknown as { code: string } | null)?.code))
+      .reduce((sum, b) => sum + Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days), 0);
     const otHours = (ot.data ?? []).reduce((sum, o) => sum + Number(o.approved_hours ?? 0), 0);
 
     setStats({

@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { countsTowardLeaveQuota } from "@/lib/leaveTypes";
 
 interface LeaveType {
   id: string;
   name_th: string;
+  code: string;
 }
 interface LeaveBalanceRow {
   leave_type_id: string;
@@ -28,7 +30,7 @@ export default function LeaveBalancesPage() {
     if (!profile) return;
     const year = new Date().getFullYear();
     const [{ data: types }, { data: bal }, { data: history }] = await Promise.all([
-      supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
+      supabase.from("leave_types").select("id, name_th, code").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
       supabase
         .from("leave_balances")
         .select("leave_type_id, entitled_days, carried_over_days, used_days, pending_days")
@@ -42,7 +44,12 @@ export default function LeaveBalancesPage() {
     const usageCount = new Map<string, number>();
     for (const r of history ?? []) usageCount.set(r.leave_type_id, (usageCount.get(r.leave_type_id) ?? 0) + 1);
 
-    const sortedBalances = [...(bal ?? [])].sort((a, b) => (usageCount.get(b.leave_type_id) ?? 0) - (usageCount.get(a.leave_type_id) ?? 0));
+    // Only quota leave types are shown here — unpaid / WFH / off-site / marriage / childcare
+    // are request types, not days an employee "has left".
+    const quotaTypeIds = new Set((types ?? []).filter((t) => countsTowardLeaveQuota(t.code)).map((t) => t.id));
+    const sortedBalances = [...(bal ?? [])]
+      .filter((b) => quotaTypeIds.has(b.leave_type_id))
+      .sort((a, b) => (usageCount.get(b.leave_type_id) ?? 0) - (usageCount.get(a.leave_type_id) ?? 0));
 
     setLeaveTypes(types ?? []);
     setBalances(sortedBalances);
@@ -86,6 +93,9 @@ export default function LeaveBalancesPage() {
         })}
         {loaded && balances.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีข้อมูลวันลาคงเหลือ</p>}
       </div>
+      <p className="text-[11px] text-on-surface-variant">
+        ไม่นับรวม: ลาไม่รับค่าจ้าง, Work From Home, ทำงานนอกสถานที่, ลาแต่งงาน, ลาเพื่อดูแลบุตร (ยื่นขอได้ตามปกติจากหน้าขอลางาน)
+      </p>
     </div>
   );
 }
