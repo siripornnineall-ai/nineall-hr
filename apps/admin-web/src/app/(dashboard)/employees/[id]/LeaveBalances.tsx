@@ -31,7 +31,8 @@ export function LeaveBalances({ employeeId, leaveTypes, balances }: { employeeId
       ]}
       rows={balances.map((b) => {
         const type = leaveTypes.find((t) => t.id === b.leave_type_id);
-        const remaining = Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days);
+        const two = (n: number) => Math.round(n * 100) / 100;
+        const remaining = two(Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days));
         return {
           id: b.id,
           leaveTypeId: b.leave_type_id,
@@ -39,7 +40,7 @@ export function LeaveBalances({ employeeId, leaveTypes, balances }: { employeeId
           entitledDays: b.entitled_days,
           carriedOverDays: b.carried_over_days,
           label: `${type?.name_th ?? "-"} (${b.year})`,
-          subLabel: `เหลือ ${remaining} วัน (ใช้ไป ${b.used_days}, รออนุมัติ ${b.pending_days})`,
+          subLabel: `เหลือ ${remaining} วัน (ใช้ไป ${two(Number(b.used_days))}, รออนุมัติ ${two(Number(b.pending_days))})`,
         };
       })}
       onCreate={boundCreate}

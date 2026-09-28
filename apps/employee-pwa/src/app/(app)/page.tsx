@@ -77,7 +77,7 @@ export default function HomePage() {
     const otHours = (ot.data ?? []).reduce((sum, o) => sum + Number(o.approved_hours ?? 0), 0);
 
     setStats({
-      leaveDaysRemaining,
+      leaveDaysRemaining: Math.round(leaveDaysRemaining * 100) / 100,
       otHoursThisMonth: otHours,
       pendingRequests: (leaveReq.count ?? 0) + (otReq.count ?? 0),
       todayStatus: todayAttendance.data?.status ?? null,

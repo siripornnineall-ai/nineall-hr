@@ -66,7 +66,7 @@ export default function LeaveBalancesPage() {
           const type = leaveTypes.find((t) => t.id === b.leave_type_id);
           const total = Number(b.entitled_days) + Number(b.carried_over_days);
           const used = Number(b.used_days) + Number(b.pending_days);
-          const remaining = total - used;
+          const remaining = Math.round((total - used) * 100) / 100;
           const usedPct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
           return (
             <div key={b.leave_type_id} className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
