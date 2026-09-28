@@ -110,8 +110,10 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
       const netHours = Math.max(0, Math.round((t.approvedHours - lateMinutes / 60) * 100) / 100);
       return { ...t, lateMinutes, netHours };
     })
-    .sort((a, b) => b.netHours - a.netHours);
+    .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode));
   const grandTotal = Math.round(totals.reduce((sum, t) => sum + t.netHours, 0) * 100) / 100;
+  // Detail list: grouped by employee code, newest date first within each employee.
+  rows.sort((a, b) => a.employeeCode.localeCompare(b.employeeCode) || b.workDate.localeCompare(a.workDate));
 
   return (
     <>
