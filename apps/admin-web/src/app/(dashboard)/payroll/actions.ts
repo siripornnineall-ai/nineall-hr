@@ -130,7 +130,7 @@ export async function calculatePayrollRunAction(runId: string) {
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, departments(name), job_positions(title)"
+      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, social_security_exempt, departments(name), job_positions(title)"
     )
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
@@ -225,7 +225,15 @@ export async function calculatePayrollRunAction(runId: string) {
     // payroll and must never have withholding tax deducted, regardless of salary — a
     // flat 0% bracket achieves that without touching social security or anything else
     // in the calculation.
-    const effectivePolicy = emp.tax_exempt ? { ...policy, taxBrackets: [{ uptoSatang: null, rate: 0 }] } : policy;
+    // Likewise social_security_exempt (owners/family not registered with the SSO): a 0%
+    // employee rate with a 0 cap yields a 0 contribution through the same code path.
+    const effectivePolicy = {
+      ...policy,
+      taxBrackets: emp.tax_exempt ? [{ uptoSatang: null, rate: 0 }] : policy.taxBrackets,
+      socialSecurity: emp.social_security_exempt
+        ? { ...policy.socialSecurity, employeeRate: 0, maxContributionSatang: 0, minBaseSatang: 0 }
+        : policy.socialSecurity,
+    };
 
     const input: PayrollEmployeeInput = {
       employmentType: comp.employment_type,

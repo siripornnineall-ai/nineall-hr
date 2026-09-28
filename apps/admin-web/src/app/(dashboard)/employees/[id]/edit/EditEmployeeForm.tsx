@@ -42,6 +42,7 @@ interface EmployeeRow {
   current_address: AddressValue | null;
   attendance_exempt: boolean;
   tax_exempt: boolean;
+  social_security_exempt: boolean;
 }
 
 const initialState: UpdateEmployeeState = {};
@@ -180,6 +181,11 @@ export function EditEmployeeForm({
       <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
         <input type="checkbox" name="taxExempt" defaultChecked={employee.tax_exempt} className="h-4 w-4 accent-primary" />
         ไม่ต้องหักภาษี ณ ที่จ่าย (พนักงานยื่นภาษีเอง ไม่ว่าเงินเดือนเท่าไหร่)
+      </label>
+
+      <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
+        <input type="checkbox" name="socialSecurityExempt" defaultChecked={employee.social_security_exempt} className="h-4 w-4 accent-primary" />
+        ไม่ต้องหักประกันสังคม (ไม่ได้ขึ้นทะเบียนผู้ประกันตน เช่น เจ้าของกิจการ/ครอบครัว)
       </label>
 
       <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">

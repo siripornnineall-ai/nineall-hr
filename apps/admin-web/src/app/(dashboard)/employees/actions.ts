@@ -400,6 +400,7 @@ export async function updateEmployeeAction(
       current_address: buildAddress(raw, "current"),
       attendance_exempt: formData.get("attendanceExempt") === "on",
       tax_exempt: formData.get("taxExempt") === "on",
+      social_security_exempt: formData.get("socialSecurityExempt") === "on",
       updated_by: user.profileId,
     })
     .eq("id", employeeId)
