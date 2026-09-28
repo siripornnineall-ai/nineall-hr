@@ -132,26 +132,33 @@ export function calculatePayrollForEmployee(input: PayrollEmployeeInput): Payrol
   for (const e of input.recurringEarnings ?? []) earnings.push(e);
   for (const e of input.oneTimeEarnings ?? []) earnings.push(e);
 
-  const otHours = input.overtime.reduce((sum, o) => sum + o.approvedHours, 0);
-  let otAmountSatang = 0;
+  const grossOtHours = input.overtime.reduce((sum, o) => sum + o.approvedHours, 0);
+  let grossOtAmountSatang = 0;
   for (const ot of input.overtime) {
-    const amount = Math.round(hourlyRate * ot.approvedHours * ot.rateMultiplier);
-    otAmountSatang += amount;
+    grossOtAmountSatang += Math.round(hourlyRate * ot.approvedHours * ot.rateMultiplier);
   }
-  if (otHours > 0) {
-    earnings.push({ label: "ค่าล่วงเวลา (OT)", quantity: otHours, amountSatang: otAmountSatang });
+
+  // Uncompensated lateness comes straight off the OT (never below zero) — the OT figure
+  // the owner wants to see is the net one, so it is netted here rather than shown as a
+  // separate deduction line. Same-day lateness the employee stayed late to cover has
+  // already been netted before it reaches here.
+  const lateMinutesForOt = Math.max(0, Math.round(input.lateMinutesForOtDeduction ?? 0));
+  const otLateDeductedMinutes = grossOtHours > 0 ? Math.min(lateMinutesForOt, Math.round(grossOtHours * 60)) : 0;
+  const otLateDeductedSatang = otLateDeductedMinutes > 0
+    ? Math.min(grossOtAmountSatang, Math.round(((hourlyRate * input.policy.otRateMultipliers.normal) / 60) * otLateDeductedMinutes))
+    : 0;
+  const otHours = Math.round((grossOtHours - otLateDeductedMinutes / 60) * 100) / 100;
+  const otAmountSatang = grossOtAmountSatang - otLateDeductedSatang;
+
+  if (grossOtHours > 0) {
+    earnings.push({
+      label: otLateDeductedMinutes > 0 ? `ค่าล่วงเวลา (OT) ${grossOtHours} ชม. หักมาสาย ${otLateDeductedMinutes} นาที` : "ค่าล่วงเวลา (OT)",
+      quantity: otHours,
+      amountSatang: otAmountSatang,
+    });
   }
   if (otHours > 100) {
     anomalyNotes.push(`OT ${otHours} ชั่วโมงในรอบนี้สูงผิดปกติ (เกิน 100 ชม.)`);
-  }
-
-  // Uncompensated lateness is taken off the OT pay (never below zero). Same-day lateness
-  // that the employee stayed late to cover has already been netted before it reaches here.
-  const lateMinutesForOt = Math.max(0, Math.round(input.lateMinutesForOtDeduction ?? 0));
-  if (lateMinutesForOt > 0 && otAmountSatang > 0) {
-    const perMinuteSatang = (hourlyRate * input.policy.otRateMultipliers.normal) / 60;
-    const amount = Math.min(otAmountSatang, Math.round(perMinuteSatang * lateMinutesForOt));
-    deductions.push({ label: "หักมาสาย (จาก OT)", quantity: lateMinutesForOt, rate: Math.round(perMinuteSatang), amountSatang: amount });
   }
 
   if (input.unpaidLeaveDays > 0) {
