@@ -94,7 +94,7 @@ export default function LeaveBalancesPage() {
         {loaded && balances.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีข้อมูลวันลาคงเหลือ</p>}
       </div>
       <p className="text-[11px] text-on-surface-variant">
-        ไม่นับรวม: ลาไม่รับค่าจ้าง, Work From Home, ทำงานนอกสถานที่, ลาแต่งงาน, ลาเพื่อดูแลบุตร (ยื่นขอได้ตามปกติจากหน้าขอลางาน)
+        แสดงเฉพาะลาป่วย ลากิจ และลาพักร้อน — ประเภทอื่น (ลาไม่รับค่าจ้าง, WFH, ทำงานนอกสถานที่, ลาแต่งงาน, ลาเพื่อดูแลบุตร, ลาคลอด) ยื่นขอได้ตามปกติจากหน้าขอลางาน
       </p>
     </div>
   );
