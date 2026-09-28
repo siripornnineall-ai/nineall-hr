@@ -78,8 +78,8 @@ export default function LeaveBalancesPage() {
                 <div className="h-full rounded-full bg-primary" style={{ width: `${usedPct}%` }} />
               </div>
               <div className="mt-1.5 flex items-center justify-between text-[11px] text-on-surface-variant">
-                <span>ใช้ไป {used} วัน</span>
-                <span>ทั้งหมด {total} วัน</span>
+                <span>ใช้ไป {Math.round(used * 100) / 100} วัน</span>
+                <span>ทั้งหมด {Math.round(total * 100) / 100} วัน</span>
               </div>
             </div>
           );
