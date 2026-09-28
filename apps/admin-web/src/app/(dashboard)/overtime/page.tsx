@@ -51,6 +51,23 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
   if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
   const { data } = await query.order("work_date", { ascending: false });
 
+  // Uncompensated late minutes in the same window — company rule: they come off OT.
+  let lateQuery = supabase
+    .from("attendance_records")
+    .select("late_minutes, employees!inner(employee_code)")
+    .eq("org_id", user.orgId)
+    .eq("status", "late")
+    .gt("late_minutes", 0)
+    .gte("work_date", start)
+    .lte("work_date", end);
+  if (selectedEmployee) lateQuery = lateQuery.eq("employee_id", selectedEmployee.id);
+  const { data: lateRows } = await lateQuery;
+  const lateMinutesByCode = new Map<string, number>();
+  for (const r of lateRows ?? []) {
+    const code = (r.employees as unknown as { employee_code: string } | null)?.employee_code;
+    if (code) lateMinutesByCode.set(code, (lateMinutesByCode.get(code) ?? 0) + (r.late_minutes ?? 0));
+  }
+
   const signedByPath = await signAvatarUrls(
     supabase,
     (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
@@ -87,8 +104,14 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
     if (r.status === "pending") existing.pendingCount += 1;
     totalsByEmployee.set(key, existing);
   }
-  const totals = Array.from(totalsByEmployee.values()).sort((a, b) => b.approvedHours - a.approvedHours);
-  const grandTotal = totals.reduce((sum, t) => sum + t.approvedHours, 0);
+  const totals = Array.from(totalsByEmployee.values())
+    .map((t) => {
+      const lateMinutes = lateMinutesByCode.get(t.employeeCode) ?? 0;
+      const netHours = Math.max(0, Math.round((t.approvedHours - lateMinutes / 60) * 100) / 100);
+      return { ...t, lateMinutes, netHours };
+    })
+    .sort((a, b) => b.netHours - a.netHours);
+  const grandTotal = Math.round(totals.reduce((sum, t) => sum + t.netHours, 0) * 100) / 100;
 
   return (
     <>
@@ -141,7 +164,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
             <p className="text-sm font-bold text-on-surface">
               {selectedEmployee ? `ยอด OT ของ ${selectedEmployee.first_name} ${selectedEmployee.last_name} (เฉพาะที่อนุมัติแล้ว)` : "สรุปยอด OT ต่อคน (เฉพาะที่อนุมัติแล้ว)"}
             </p>
-            <p className="text-sm font-bold text-primary">รวมทั้งหมด {grandTotal} ชม.</p>
+            <p className="text-sm font-bold text-primary">รวมสุทธิ {grandTotal} ชม.</p>
           </div>
           {totals.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-on-surface-variant">ไม่มี OT ที่อนุมัติแล้วในรอบนี้</p>
@@ -153,8 +176,14 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
                     <span className="font-semibold text-on-surface">{t.employeeName}</span>
                     <span className="ml-2 text-xs text-on-surface-variant">{t.employeeCode}</span>
                     {t.pendingCount > 0 && <span className="ml-2 text-xs font-semibold text-status-warning">(รออนุมัติอีก {t.pendingCount} รายการ)</span>}
+                    {t.lateMinutes > 0 && (
+                      <span className="ml-2 text-xs font-semibold text-status-danger">หักมาสาย {t.lateMinutes} นาที</span>
+                    )}
                   </div>
-                  <span className="font-bold text-on-surface">{t.approvedHours} ชม.</span>
+                  <span className="font-bold text-on-surface">
+                    {t.netHours} ชม.
+                    {t.lateMinutes > 0 && <span className="ml-1 text-xs font-normal text-on-surface-variant">(OT {t.approvedHours})</span>}
+                  </span>
                 </div>
               ))}
             </div>

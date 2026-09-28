@@ -158,7 +158,7 @@ export async function calculatePayrollRunAction(runId: string) {
     // schedule-based hours to project. Only queried when the period genuinely still has
     // days left to run (period_end > today).
     const needsProjection = comp.employment_type === "daily" && period.period_end > todayBangkok;
-    const [{ data: attendance }, { data: overtime }, { data: unpaidLeave }, { data: remainingShifts }] = await Promise.all([
+    const [{ data: attendance }, { data: overtime }, { data: unpaidLeave }, { data: remainingShifts }, { data: lateInOtWindow }] = await Promise.all([
       supabase
         .from("attendance_records")
         .select("work_date, status, late_minutes, early_leave_minutes, worked_minutes")
@@ -189,7 +189,18 @@ export async function calculatePayrollRunAction(runId: string) {
             .gt("work_date", todayBangkok)
             .lte("work_date", period.period_end)
         : Promise.resolve({ data: null }),
+      // Late minutes still standing after the evening make-up, over the same 26th-25th
+      // window as the OT they are deducted from.
+      supabase
+        .from("attendance_records")
+        .select("late_minutes")
+        .eq("employee_id", emp.id)
+        .eq("status", "late")
+        .gt("late_minutes", 0)
+        .gte("work_date", otWindow.start)
+        .lte("work_date", otWindow.end),
     ]);
+    const lateMinutesForOtDeduction = (lateInOtWindow ?? []).reduce((sum, a) => sum + (a.late_minutes ?? 0), 0);
     const remainingScheduledWorkDays = (remainingShifts ?? []).length;
 
     const days: PayrollInputDay[] = (attendance ?? []).map((a) => ({
@@ -232,6 +243,7 @@ export async function calculatePayrollRunAction(runId: string) {
         rateMultiplier: Number(o.rate_multiplier),
       })),
       unpaidLeaveDays,
+      lateMinutesForOtDeduction,
       recurringEarnings: [
         comp.position_allowance ? { label: "ค่าตำแหน่ง", amountSatang: bahtToSatang(Number(comp.position_allowance)) } : null,
         comp.transport_allowance ? { label: "ค่าเดินทาง", amountSatang: bahtToSatang(Number(comp.transport_allowance)) } : null,

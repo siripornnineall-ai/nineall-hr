@@ -145,6 +145,15 @@ export function calculatePayrollForEmployee(input: PayrollEmployeeInput): Payrol
     anomalyNotes.push(`OT ${otHours} ชั่วโมงในรอบนี้สูงผิดปกติ (เกิน 100 ชม.)`);
   }
 
+  // Uncompensated lateness is taken off the OT pay (never below zero). Same-day lateness
+  // that the employee stayed late to cover has already been netted before it reaches here.
+  const lateMinutesForOt = Math.max(0, Math.round(input.lateMinutesForOtDeduction ?? 0));
+  if (lateMinutesForOt > 0 && otAmountSatang > 0) {
+    const perMinuteSatang = (hourlyRate * input.policy.otRateMultipliers.normal) / 60;
+    const amount = Math.min(otAmountSatang, Math.round(perMinuteSatang * lateMinutesForOt));
+    deductions.push({ label: "หักมาสาย (จาก OT)", quantity: lateMinutesForOt, rate: Math.round(perMinuteSatang), amountSatang: amount });
+  }
+
   if (input.unpaidLeaveDays > 0) {
     const amount = dailyRate * input.unpaidLeaveDays;
     deductions.push({ label: "ลาไม่รับค่าจ้าง", quantity: input.unpaidLeaveDays, rate: dailyRate, amountSatang: amount });

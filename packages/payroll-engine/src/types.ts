@@ -131,6 +131,13 @@ export interface PayrollEmployeeInput {
   oneTimeDeductions?: EarningLine[];
   latePenaltyPerMinuteSatang?: number;
   absentPenaltyPerDaySatang?: number;
+  /**
+   * Late minutes in the OT cutoff window that were NOT made up by staying past shift end
+   * (attendance_records.late_minutes after the evening make-up). Company rule
+   * (2026-09-28): these come straight off the employee's OT for the period, at the normal
+   * OT rate, capped at the OT amount.
+   */
+  lateMinutesForOtDeduction?: number;
   policy: PayrollPolicyConfig;
 }
 
