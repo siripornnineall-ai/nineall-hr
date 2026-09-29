@@ -186,6 +186,7 @@ export default function HomePage() {
           <QuickLink href="/calendar" icon="calendar_month" label={t("ปฏิทิน")} />
           <QuickLink href="/certificate" icon="workspace_premium" label={t("ใบรับรอง")} />
           <QuickLink href="/colleagues" icon="groups" label={t("เพื่อนร่วมงาน")} />
+          <QuickLink href="/org-chart" icon="account_tree" label={t("ผังองค์กร")} />
           <QuickLink href="/admin-responsibilities" icon="support_agent" label={t("ความรับผิดชอบแอดมิน")} />
           {(profile?.role === "super_admin" || profile?.role === "hr" || isLineManager) && (
             <QuickLink href="/leave-approvals" icon="assignment_turned_in" label={t("อนุมัติการลา")} />

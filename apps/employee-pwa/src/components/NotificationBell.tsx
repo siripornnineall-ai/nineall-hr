@@ -14,7 +14,7 @@ interface NotificationRow {
   body: string | null;
   is_read: boolean;
   created_at: string;
-  data: { note_id?: string } | null;
+  data: { note_id?: string; url?: string } | null;
 }
 
 // Where tapping a notification should take you — keyed by notifications.type.
@@ -115,7 +115,10 @@ export function NotificationBell() {
       router.push(`/colleagues/${profile.employeeId}`);
       return;
     }
-    const href = NOTIFICATION_LINKS[n.type];
+    // Notifications that carry their own in-app link (chat messages → /chat/<id>) win over
+    // the static per-type map.
+    const dataUrl = n.data?.url;
+    const href = dataUrl && dataUrl.startsWith("/") ? dataUrl : NOTIFICATION_LINKS[n.type];
     if (href) router.push(href);
   }
 
