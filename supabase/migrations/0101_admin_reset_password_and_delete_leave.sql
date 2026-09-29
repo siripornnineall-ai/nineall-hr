@@ -20,7 +20,7 @@ as $$
 declare
   v_profile_id uuid;
 begin
-  if not is_admin_or_hr() then
+  if not coalesce(is_admin_or_hr(), false) then
     raise exception 'FORBIDDEN: only super_admin/hr can reset a password';
   end if;
   if length(coalesce(p_password, '')) < 8 then
@@ -65,7 +65,7 @@ declare
   v_year int;
   v_prev_trusted text;
 begin
-  if not is_admin_or_hr() then
+  if not coalesce(is_admin_or_hr(), false) then
     raise exception 'FORBIDDEN: only super_admin/hr can delete a leave request';
   end if;
 
