@@ -12,7 +12,6 @@ const TABS = [
   { key: "employee", label: "พนักงาน", icon: "person" },
   { key: "contracts", label: "สัญญาจ้าง", icon: "description" },
   { key: "leaves", label: "วันลา", icon: "event_busy" },
-  { key: "trainings", label: "การอบรม", icon: "school" },
   { key: "locations", label: "สถานที่", icon: "location_on" },
   { key: "attachments", label: "เอกสารแนบ", icon: "attach_file" },
   { key: "history", label: "ประวัติ", icon: "history" },
@@ -92,7 +91,6 @@ export function EmployeeDetailTabs({
   compensation,
   leaveTypes,
   leaveBalances,
-  trainingRecords,
   shifts,
   workLocations,
   currentShiftAssignment,
@@ -142,7 +140,6 @@ export function EmployeeDetailTabs({
         ) : (
           <EmptyCard text="ไม่มีสิทธิ์ดูข้อมูลวันลา" />
         ))}
-      {tab === "trainings" && <TrainingsTab records={trainingRecords} />}
       {tab === "locations" &&
         (canManage ? (
           <ShiftAssignment employeeId={employee.id} shifts={shifts} workLocations={workLocations} currentAssignment={currentShiftAssignment} />
@@ -357,32 +354,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex items-center justify-between py-2">
       <dt className="text-on-surface-variant">{label}</dt>
       <dd className="font-semibold">{value}</dd>
-    </div>
-  );
-}
-
-function TrainingsTab({ records }: { records: TrainingRow[] }) {
-  return (
-    <div className="space-y-3 rounded-xl border border-outline-variant bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h4 className="font-bold">ประวัติการอบรม</h4>
-        <Link href="/training" className="text-xs font-bold text-primary hover:underline">
-          + บันทึกการอบรม
-        </Link>
-      </div>
-      {records.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีประวัติการอบรม</p>}
-      <div className="space-y-2">
-        {records.map((r) => (
-          <div key={r.id} className="rounded-lg border border-outline-variant p-3">
-            <p className="font-semibold">{r.title}</p>
-            <p className="text-xs text-on-surface-variant">
-              {new Date(r.trainingDate).toLocaleDateString("th-TH")}
-              {r.provider && ` — ${r.provider}`}
-              {r.hours != null && ` (${r.hours} ชม.)`}
-            </p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
