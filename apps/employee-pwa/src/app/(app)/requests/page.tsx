@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { t, useT } from "@/lib/i18n";
 
 interface RequestRow {
   id: string;
@@ -15,11 +16,11 @@ interface RequestRow {
   createdAt: string;
 }
 
-const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
+const STATUS_TH: Record<string, string> = { pending: t("รออนุมัติ"), approved: t("อนุมัติแล้ว"), rejected: t("ปฏิเสธ"), cancelled: t("ยกเลิก") };
 // Leave is approved in two steps (หัวหน้า -> HR); while pending, say whose turn it is.
 function statusLabel(status: string, stage: string | null): string {
-  if (status === "pending" && stage === "manager") return "รอหัวหน้าอนุมัติ";
-  if (status === "pending" && stage === "hr") return "รอ HR อนุมัติ";
+  if (status === "pending" && stage === "manager") return t("รอหัวหน้าอนุมัติ");
+  if (status === "pending" && stage === "hr") return t("รอ HR อนุมัติ");
   return STATUS_TH[status] ?? status;
 }
 const STATUS_CLASS: Record<string, string> = {
@@ -30,6 +31,7 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default function RequestsPage() {
+  const { t } = useT();
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<RequestRow[]>([]);
@@ -55,8 +57,8 @@ export default function RequestsPage() {
     const leaveRows: RequestRow[] = (leave ?? []).map((r) => ({
       id: r.id,
       kind: "leave",
-      title: (r.leave_types as unknown as { name_th: string } | null)?.name_th ?? "ลางาน",
-      detail: `${r.start_date} - ${r.end_date} (${r.total_days} วัน)`,
+      title: (r.leave_types as unknown as { name_th: string } | null)?.name_th ?? t("ลางาน"),
+      detail: `${r.start_date} - ${r.end_date} (${r.total_days} ${t("วัน")})`,
       status: r.status,
       stage: r.approval_stage,
       createdAt: r.created_at,
@@ -65,7 +67,7 @@ export default function RequestsPage() {
       id: r.id,
       kind: "overtime",
       title: "ทำงานล่วงเวลา (OT)",
-      detail: `${new Date(r.work_date).toLocaleDateString("th-TH")} (${r.requested_hours} ชม.)`,
+      detail: `${new Date(r.work_date).toLocaleDateString("th-TH")} (${r.requested_hours} ${t("ชม.")})`,
       status: r.status,
       stage: null,
       createdAt: r.created_at,
@@ -81,17 +83,17 @@ export default function RequestsPage() {
 
   return (
     <div className="safe-top space-y-4 px-4 pb-6 pt-4">
-      <h1 className="text-lg font-bold text-primary">คำขอทั้งหมด</h1>
-      {loaded && rows.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีคำขอ</p>}
+      <h1 className="text-lg font-bold text-primary">{t("คำขอทั้งหมด")}</h1>
+      {loaded && rows.length === 0 && <p className="text-sm text-on-surface-variant">{t("ยังไม่มีคำขอ")}</p>}
       <div className="space-y-2">
         {rows.map((r) => (
           <div key={`${r.kind}-${r.id}`} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
             <span className="material-symbols-outlined text-[20px] text-on-surface-variant">{r.kind === "leave" ? "event_note" : "timer"}</span>
             <div className="flex-1">
-              <p className="font-semibold text-on-surface">{r.title}</p>
+              <p className="font-semibold text-on-surface">{t(r.title)}</p>
               <p className="text-xs text-on-surface-variant">{r.detail}</p>
             </div>
-            <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{statusLabel(r.status, r.stage)}</span>
+            <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{t(statusLabel(r.status, r.stage))}</span>
           </div>
         ))}
       </div>

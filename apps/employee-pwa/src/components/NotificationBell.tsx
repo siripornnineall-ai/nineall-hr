@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/push";
 import { useAuth } from "@/lib/AuthContext";
+import { t, useT } from "@/lib/i18n";
 
 interface NotificationRow {
   id: string;
@@ -31,15 +32,16 @@ const REPLYABLE_TYPES = new Set(["note_comment", "note_reaction"]);
 function timeAgoTh(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "เมื่อสักครู่";
-  if (minutes < 60) return `${minutes} นาทีที่แล้ว`;
+  if (minutes < 1) return t("เมื่อสักครู่");
+  if (minutes < 60) return `${minutes} ${t("นาทีที่แล้ว")}`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ชม.ที่แล้ว`;
+  if (hours < 24) return `${hours} ${t("ชม.ที่แล้ว")}`;
   const days = Math.floor(hours / 24);
-  return `${days} วันที่แล้ว`;
+  return `${days} ${t("วันที่แล้ว")}`;
 }
 
 export function NotificationBell() {
+  const { t } = useT();
   const supabase = createClient();
   const router = useRouter();
   const { profile } = useAuth();
@@ -148,8 +150,8 @@ export function NotificationBell() {
         <button
           onClick={handleEnableNotifications}
           disabled={subscribing}
-          title="เปิดการแจ้งเตือนบนมือถือ"
-          aria-label="เปิดการแจ้งเตือนบนมือถือ"
+          title={t("เปิดการแจ้งเตือนบนมือถือ")}
+          aria-label={t("เปิดการแจ้งเตือนบนมือถือ")}
           className="relative text-white disabled:opacity-60"
         >
           <span className="material-symbols-outlined text-[24px]">notification_add</span>
@@ -157,7 +159,7 @@ export function NotificationBell() {
         </button>
       )}
 
-      <button onClick={() => setOpen((v) => !v)} className="relative text-white" aria-label="การแจ้งเตือน">
+      <button onClick={() => setOpen((v) => !v)} className="relative text-white" aria-label={t("การแจ้งเตือน")}>
         <span className="material-symbols-outlined text-[26px]">notifications</span>
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-status-danger px-1 text-[10px] font-bold text-white">
@@ -169,20 +171,20 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2.5rem))] rounded-2xl bg-white text-on-surface shadow-xl">
           <div className="flex items-center justify-between border-b border-outline-variant px-4 py-3">
-            <p className="font-bold text-on-surface">การแจ้งเตือน</p>
+            <p className="font-bold text-on-surface">{t("การแจ้งเตือน")}</p>
             {unreadCount > 0 && (
               <button onClick={markAllAsRead} className="text-xs font-semibold text-primary hover:underline">
-                อ่านทั้งหมด
+                {t("อ่านทั้งหมด")}
               </button>
             )}
           </div>
           {pushStatus === "denied" && (
             <p className="border-b border-outline-variant bg-status-danger/10 px-4 py-2.5 text-xs text-status-danger">
-              การแจ้งเตือนถูกปิดไว้ในมือถือ — ไปที่การตั้งค่ามือถือแล้วอนุญาตการแจ้งเตือนให้แอปนี้
+              {t("การแจ้งเตือนถูกปิดไว้ในมือถือ — ไปที่การตั้งค่ามือถือแล้วอนุญาตการแจ้งเตือนให้แอปนี้")}
             </p>
           )}
           <div className="max-h-96 overflow-y-auto">
-            {loaded && notifications.length === 0 && <p className="p-4 text-center text-sm text-on-surface-variant">ยังไม่มีการแจ้งเตือน</p>}
+            {loaded && notifications.length === 0 && <p className="p-4 text-center text-sm text-on-surface-variant">{t("ยังไม่มีการแจ้งเตือน")}</p>}
             {notifications.map((n) => {
               const canReply = REPLYABLE_TYPES.has(n.type) && !!n.data?.note_id && !!profile;
               return (
@@ -214,7 +216,7 @@ export function NotificationBell() {
                             autoFocus
                             value={replyText}
                             onChange={(e) => setReplyText(e.target.value)}
-                            placeholder="ตอบกลับ..."
+                            placeholder={t("ตอบกลับ...")}
                             maxLength={200}
                             className="h-8 flex-1 rounded-full border border-outline-variant px-3 text-xs"
                           />
@@ -234,7 +236,7 @@ export function NotificationBell() {
                           }}
                           className="text-xs font-semibold text-primary"
                         >
-                          ตอบกลับ
+                          {t("ตอบกลับ")}
                         </button>
                       )}
                     </div>

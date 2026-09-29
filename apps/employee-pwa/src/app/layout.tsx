@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans, Noto_Sans_Thai, Noto_Sans_Lao, Noto_Sans_Myanmar } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
+import { LanguageProvider } from "@/lib/i18n";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const notoSans = Noto_Sans({ variable: "--font-noto-sans", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
@@ -40,7 +41,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${notoSans.variable} ${notoThai.variable} ${notoLao.variable} ${notoMyanmar.variable} antialiased`}>
         <ServiceWorkerRegister />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <LanguageProvider>{children}</LanguageProvider>
+        </AuthProvider>
       </body>
     </html>
   );

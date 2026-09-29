@@ -2,17 +2,19 @@
 
 import { useActionState } from "react";
 import { loginAction, type LoginActionState } from "./actions";
+import { useT } from "@/lib/i18n";
 
 const initialState: LoginActionState = {};
 
 export function LoginForm() {
+  const { t } = useT();
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
 
   return (
     <form action={formAction} className="space-y-4">
       <div className="space-y-1.5">
         <label className="block text-sm font-semibold text-on-surface" htmlFor="identifier">
-          อีเมล หรือ รหัสพนักงาน
+          {t("อีเมล หรือ รหัสพนักงาน")}
         </label>
         <input
           id="identifier"
@@ -21,12 +23,12 @@ export function LoginForm() {
           autoComplete="username"
           required
           className="h-12 w-full rounded-xl border-[1.5px] border-outline-variant bg-surface-container-low px-4 text-base outline-none focus:border-secondary"
-          placeholder="เช่น EMP-004"
+          placeholder={t("เช่น EMP-004")}
         />
       </div>
       <div className="space-y-1.5">
         <label className="block text-sm font-semibold text-on-surface" htmlFor="password">
-          รหัสผ่าน
+          {t("รหัสผ่าน")}
         </label>
         <input
           id="password"
@@ -48,7 +50,7 @@ export function LoginForm() {
         disabled={isPending}
         className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-bold text-on-primary shadow-md transition-all active:scale-95 disabled:opacity-60"
       >
-        {isPending ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+        {isPending ? t("กำลังเข้าสู่ระบบ...") : t("เข้าสู่ระบบ")}
       </button>
     </form>
   );

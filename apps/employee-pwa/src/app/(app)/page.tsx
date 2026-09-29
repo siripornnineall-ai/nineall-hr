@@ -10,6 +10,7 @@ import { NotesRow } from "./NotesRow";
 import { AnnouncementBanner } from "./AnnouncementBanner";
 import { BirthdayBanner } from "./BirthdayBanner";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useT } from "@/lib/i18n";
 
 interface HomeStats {
   leaveDaysRemaining: number;
@@ -38,6 +39,7 @@ const STATUS_TH: Record<string, string> = {
 };
 
 export default function HomePage() {
+  const { t } = useT();
   const { profile, signOut, loading: authLoading } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [stats, setStats] = useState<HomeStats | null>(null);
@@ -152,43 +154,43 @@ export default function HomePage() {
           <div className="flex-1">
             <p className="text-sm font-semibold text-on-surface">
               {stats?.todayClockIn
-                ? `เข้างานวันนี้: ${new Date(stats.todayClockIn).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}`
-                : "ยังไม่ลงเวลาเข้างานวันนี้"}
+                ? `${t("เข้างานวันนี้:")} ${new Date(stats.todayClockIn).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}`
+                : t("ยังไม่ลงเวลาเข้างานวันนี้")}
             </p>
-            {stats?.todayStatus && <p className="mt-0.5 text-sm font-bold text-status-success">{STATUS_TH[stats.todayStatus] ?? stats.todayStatus}</p>}
+            {stats?.todayStatus && <p className="mt-0.5 text-sm font-bold text-status-success">{t(STATUS_TH[stats.todayStatus] ?? stats.todayStatus)}</p>}
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2.5">
-          <StatCard href="/leave/balances" icon="event_available" color="var(--color-tertiary)" label="วันลาคงเหลือ" value={`${stats?.leaveDaysRemaining ?? "-"} วัน`} />
-          <StatCard href="/overtime" icon="timer" color="var(--color-secondary)" label="OT เดือนนี้" value={`${stats?.otHoursThisMonth ?? 0} ชม.`} />
-          <StatCard href="/requests" icon="pending_actions" color="var(--color-status-warning)" label="คำขอรออนุมัติ" value={`${stats?.pendingRequests ?? 0} รายการ`} />
+          <StatCard href="/leave/balances" icon="event_available" color="var(--color-tertiary)" label={t("วันลาคงเหลือ")} value={`${stats?.leaveDaysRemaining ?? "-"} ${t("วัน")}`} />
+          <StatCard href="/overtime" icon="timer" color="var(--color-secondary)" label={t("OT เดือนนี้")} value={`${stats?.otHoursThisMonth ?? 0} ${t("ชม.")}`} />
+          <StatCard href="/requests" icon="pending_actions" color="var(--color-status-warning)" label={t("คำขอรออนุมัติ")} value={`${stats?.pendingRequests ?? 0} ${t("รายการ")}`} />
         </div>
 
         <div className="flex gap-3">
           <Link href="/attendance" className="flex flex-1 flex-col items-center gap-1 rounded-2xl bg-primary py-4 text-white">
             <span className="material-symbols-outlined text-[22px]">fingerprint</span>
-            <span className="text-xs font-bold">ลงเวลาเข้า-ออก</span>
+            <span className="text-xs font-bold">{t("ลงเวลาเข้า-ออก")}</span>
           </Link>
           <Link href="/leave" className="flex flex-1 flex-col items-center gap-1 rounded-2xl bg-secondary py-4 text-white">
             <span className="material-symbols-outlined text-[22px]">event_note</span>
-            <span className="text-xs font-bold">ขอลางาน</span>
+            <span className="text-xs font-bold">{t("ขอลางาน")}</span>
           </Link>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          <QuickLink href="/reimbursement" icon="receipt_long" label="เบิกเงิน" />
-          <QuickLink href="/shift-swap" icon="swap_horiz" label="สลับกะ" />
-          <QuickLink href="/holiday-swap" icon="event_repeat" label="สลับวันหยุด นขต." />
-          <QuickLink href="/day-off-swap" icon="published_with_changes" label="สลับวันหยุดประจำ" />
-          <QuickLink href="/calendar" icon="calendar_month" label="ปฏิทิน" />
-          <QuickLink href="/certificate" icon="workspace_premium" label="ใบรับรอง" />
-          <QuickLink href="/colleagues" icon="groups" label="เพื่อนร่วมงาน" />
-          <QuickLink href="/admin-responsibilities" icon="support_agent" label="ความรับผิดชอบแอดมิน" />
+          <QuickLink href="/reimbursement" icon="receipt_long" label={t("เบิกเงิน")} />
+          <QuickLink href="/shift-swap" icon="swap_horiz" label={t("สลับกะ")} />
+          <QuickLink href="/holiday-swap" icon="event_repeat" label={t("สลับวันหยุด นขต.")} />
+          <QuickLink href="/day-off-swap" icon="published_with_changes" label={t("สลับวันหยุดประจำ")} />
+          <QuickLink href="/calendar" icon="calendar_month" label={t("ปฏิทิน")} />
+          <QuickLink href="/certificate" icon="workspace_premium" label={t("ใบรับรอง")} />
+          <QuickLink href="/colleagues" icon="groups" label={t("เพื่อนร่วมงาน")} />
+          <QuickLink href="/admin-responsibilities" icon="support_agent" label={t("ความรับผิดชอบแอดมิน")} />
           {(profile?.role === "super_admin" || profile?.role === "hr" || isLineManager) && (
-            <QuickLink href="/leave-approvals" icon="assignment_turned_in" label="อนุมัติการลา" />
+            <QuickLink href="/leave-approvals" icon="assignment_turned_in" label={t("อนุมัติการลา")} />
           )}
-          {(profile?.role === "super_admin" || profile?.role === "hr") && <QuickLink href="/ot-approvals" icon="timer" label="อนุมัติ OT" />}
+          {(profile?.role === "super_admin" || profile?.role === "hr") && <QuickLink href="/ot-approvals" icon="timer" label={t("อนุมัติ OT")} />}
         </div>
 
         <LateLeaderboardCard />
@@ -196,7 +198,7 @@ export default function HomePage() {
 
         {holidays.length > 0 && (
           <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-            <p className="mb-3 text-sm font-bold text-on-surface">วันหยุดที่กำลังจะมาถึง</p>
+            <p className="mb-3 text-sm font-bold text-on-surface">{t("วันหยุดที่กำลังจะมาถึง")}</p>
             <ul className="space-y-3">
               {holidays.map((h) => {
                 const d = new Date(h.holiday_date);
@@ -221,7 +223,7 @@ export default function HomePage() {
 
         <div className="flex justify-end pt-2">
           <button onClick={() => signOut()} className="text-xs font-semibold text-status-danger">
-            ออกจากระบบ
+            {t("ออกจากระบบ")}
           </button>
         </div>
       </div>

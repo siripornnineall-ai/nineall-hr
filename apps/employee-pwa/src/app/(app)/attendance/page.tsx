@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { t, useT } from "@/lib/i18n";
 
 type Phase = "idle" | "requesting_location" | "submitting" | "done" | "error";
 
@@ -22,28 +23,29 @@ function getPosition(options: PositionOptions): Promise<GeolocationPosition> {
 // "grant permission" message when the browser actually reports PERMISSION_DENIED.
 async function resolvePosition(): Promise<GeolocationPosition> {
   if (!navigator.geolocation) {
-    throw new Error("อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS");
+    throw new Error(t("อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง GPS"));
   }
   try {
     return await getPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
   } catch (err) {
     const code = (err as GeolocationPositionError)?.code;
     if (code === GeolocationPositionError.PERMISSION_DENIED) {
-      throw new Error("แอปไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาไปที่การตั้งค่ามือถือแล้วอนุญาตสิทธิ์ตำแหน่งให้เบราว์เซอร์/แอปนี้");
+      throw new Error(t("แอปไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาไปที่การตั้งค่ามือถือแล้วอนุญาตสิทธิ์ตำแหน่งให้เบราว์เซอร์/แอปนี้"));
     }
     try {
       return await getPosition({ enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 });
     } catch (err2) {
       const code2 = (err2 as GeolocationPositionError)?.code;
       if (code2 === GeolocationPositionError.PERMISSION_DENIED) {
-        throw new Error("แอปไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาไปที่การตั้งค่ามือถือแล้วอนุญาตสิทธิ์ตำแหน่งให้เบราว์เซอร์/แอปนี้");
+        throw new Error(t("แอปไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง GPS กรุณาไปที่การตั้งค่ามือถือแล้วอนุญาตสิทธิ์ตำแหน่งให้เบราว์เซอร์/แอปนี้"));
       }
-      throw new Error("ไม่สามารถระบุตำแหน่ง GPS ได้ กรุณาออกไปพื้นที่โล่งแจ้งหรือเชื่อมต่อ Wi-Fi แล้วลองใหม่อีกครั้ง");
+      throw new Error(t("ไม่สามารถระบุตำแหน่ง GPS ได้ กรุณาออกไปพื้นที่โล่งแจ้งหรือเชื่อมต่อ Wi-Fi แล้วลองใหม่อีกครั้ง"));
     }
   }
 }
 
 export default function AttendancePage() {
+  const { t } = useT();
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
 
@@ -106,15 +108,15 @@ export default function AttendancePage() {
             // response body wasn't JSON — fall through to the generic message
           }
         }
-        throw new Error(specificError ?? fnError?.message ?? "บันทึกเวลาไม่สำเร็จ");
+        throw new Error(specificError ?? fnError?.message ?? t("บันทึกเวลาไม่สำเร็จ"));
       }
 
       setPhase("done");
-      setMessage(alreadyClockedIn ? "บันทึกเวลาออกงานสำเร็จ!" : "บันทึกเวลาเข้างานสำเร็จ!");
+      setMessage(alreadyClockedIn ? t("บันทึกเวลาออกงานสำเร็จ!") : t("บันทึกเวลาเข้างานสำเร็จ!"));
       await checkTodayStatus();
     } catch (error) {
       setPhase("error");
-      setMessage(error instanceof Error ? error.message : "เกิดข้อผิดพลาด กรุณาลองใหม่");
+      setMessage(error instanceof Error ? t(error.message) : t("เกิดข้อผิดพลาด กรุณาลองใหม่"));
     }
   }
 
@@ -130,24 +132,24 @@ export default function AttendancePage() {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 px-8 text-center">
         <span className="material-symbols-outlined text-5xl text-status-success">check_circle</span>
-        <p className="font-semibold text-on-surface">คุณลงเวลาเข้าและออกงานวันนี้เรียบร้อยแล้ว</p>
+        <p className="font-semibold text-on-surface">{t("คุณลงเวลาเข้าและออกงานวันนี้เรียบร้อยแล้ว")}</p>
       </div>
     );
   }
 
   const busy = phase === "requesting_location" || phase === "submitting";
-  const title = alreadyClockedIn ? "ลงเวลาออกงาน" : "ลงเวลาเข้างาน";
+  const title = alreadyClockedIn ? t("ลงเวลาออกงาน") : t("ลงเวลาเข้างาน");
 
   return (
     <div className="safe-top flex min-h-[75vh] flex-col justify-center px-5 pb-6 pt-4">
-      <h1 className="mb-4 text-center text-lg font-bold text-primary">{title}</h1>
+      <h1 className="mb-4 text-center text-lg font-bold text-primary">{t(title)}</h1>
 
       <div className="flex flex-col items-center justify-center gap-3 rounded-3xl bg-surface-container-low py-14">
         <span className="material-symbols-outlined text-6xl text-primary">{alreadyClockedIn ? "logout" : "login"}</span>
-        <p className="text-sm text-on-surface-variant">กดปุ่มด้านล่างเพื่อ{title}</p>
+        <p className="text-sm text-on-surface-variant">{t("กดปุ่มด้านล่างเพื่อ")}{t(title)}</p>
       </div>
 
-      <p className="mt-4 text-center text-xs text-on-surface-variant">*ระบบจะบันทึกพิกัด GPS เพื่อยืนยันตำแหน่งการลงเวลา</p>
+      <p className="mt-4 text-center text-xs text-on-surface-variant">{t("*ระบบจะบันทึกพิกัด GPS เพื่อยืนยันตำแหน่งการลงเวลา")}</p>
 
       {message && phase === "error" && <p className="mt-2 text-center text-sm font-semibold text-status-danger">{message}</p>}
       {message && phase === "done" && <p className="mt-2 text-center text-sm font-semibold text-status-success">{message}</p>}
@@ -162,7 +164,7 @@ export default function AttendancePage() {
         ) : (
           <>
             <span className="material-symbols-outlined">fingerprint</span>
-            {title}
+            {t(title)}
           </>
         )}
       </button>

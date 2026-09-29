@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
+import { useT } from "@/lib/i18n";
 
 const ITEMS = [
   { href: "/", label: "หน้าแรก", icon: "home" },
@@ -14,6 +15,7 @@ const ITEMS = [
 ];
 
 export function BottomNav() {
+  const { t } = useT();
   const pathname = usePathname();
 
   return (
@@ -32,7 +34,7 @@ export function BottomNav() {
             <span className="material-symbols-outlined text-[22px]" style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}>
               {item.icon}
             </span>
-            <span className="text-[11px] font-medium">{item.label}</span>
+            <span className="text-[11px] font-medium">{t(item.label)}</span>
           </Link>
         );
       })}

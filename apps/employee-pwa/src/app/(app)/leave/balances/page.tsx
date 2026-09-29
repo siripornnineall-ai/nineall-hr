@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { countsTowardLeaveQuota } from "@/lib/leaveTypes";
+import { useT } from "@/lib/i18n";
 
 interface LeaveType {
   id: string;
@@ -20,6 +21,7 @@ interface LeaveBalanceRow {
 }
 
 export default function LeaveBalancesPage() {
+  const { t } = useT();
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
@@ -63,9 +65,9 @@ export default function LeaveBalancesPage() {
   return (
     <div className="safe-top space-y-4 px-4 pb-6 pt-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-primary">วันลาคงเหลือ</h1>
+        <h1 className="text-lg font-bold text-primary">{t("วันลาคงเหลือ")}</h1>
         <Link href="/leave" className="text-xs font-semibold text-secondary">
-          ขอลางาน →
+          {t("ขอลางาน →")}
         </Link>
       </div>
       <div className="space-y-3">
@@ -78,23 +80,23 @@ export default function LeaveBalancesPage() {
           return (
             <div key={b.leave_type_id} className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-on-surface">{type?.name_th ?? "-"}</p>
-                <p className="text-sm font-bold text-primary">{remaining} วัน</p>
+                <p className="text-sm font-semibold text-on-surface">{t(type?.name_th ?? "-")}</p>
+                <p className="text-sm font-bold text-primary">{remaining} {t("วัน")}</p>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${usedPct}%` }} />
               </div>
               <div className="mt-1.5 flex items-center justify-between text-[11px] text-on-surface-variant">
-                <span>ใช้ไป {Math.round(used * 100) / 100} วัน</span>
-                <span>ทั้งหมด {Math.round(total * 100) / 100} วัน</span>
+                <span>{t("ใช้ไป")} {Math.round(used * 100) / 100} {t("วัน")}</span>
+                <span>{t("ทั้งหมด")} {Math.round(total * 100) / 100} {t("วัน")}</span>
               </div>
             </div>
           );
         })}
-        {loaded && balances.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีข้อมูลวันลาคงเหลือ</p>}
+        {loaded && balances.length === 0 && <p className="text-sm text-on-surface-variant">{t("ยังไม่มีข้อมูลวันลาคงเหลือ")}</p>}
       </div>
       <p className="text-[11px] text-on-surface-variant">
-        แสดงเฉพาะลาป่วย ลากิจ และลาพักร้อน — ประเภทอื่น (ลาไม่รับค่าจ้าง, WFH, ทำงานนอกสถานที่, ลาแต่งงาน, ลาเพื่อดูแลบุตร, ลาคลอด) ยื่นขอได้ตามปกติจากหน้าขอลางาน
+        {t("แสดงเฉพาะลาป่วย ลากิจ และลาพักร้อน — ประเภทอื่น (ลาไม่รับค่าจ้าง, WFH, ทำงานนอกสถานที่, ลาแต่งงาน, ลาเพื่อดูแลบุตร, ลาคลอด) ยื่นขอได้ตามปกติจากหน้าขอลางาน")}
       </p>
     </div>
   );

@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { t, useT } from "@/lib/i18n";
 
 interface LeaveType {
   id: string;
@@ -24,11 +25,11 @@ interface LeaveRequestRow {
   leave_types: { name_th: string } | null;
 }
 
-const STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ปฏิเสธ", cancelled: "ยกเลิก" };
+const STATUS_TH: Record<string, string> = { pending: t("รออนุมัติ"), approved: t("อนุมัติแล้ว"), rejected: t("ปฏิเสธ"), cancelled: t("ยกเลิก") };
 // Leave is approved in two steps (หัวหน้า -> HR); while pending, say whose turn it is.
 function statusLabel(status: string, stage: string | null): string {
-  if (status === "pending" && stage === "manager") return "รอหัวหน้าอนุมัติ";
-  if (status === "pending" && stage === "hr") return "รอ HR อนุมัติ";
+  if (status === "pending" && stage === "manager") return t("รอหัวหน้าอนุมัติ");
+  if (status === "pending" && stage === "hr") return t("รอ HR อนุมัติ");
   return STATUS_TH[status] ?? status;
 }
 const STATUS_CLASS: Record<string, string> = {
@@ -39,6 +40,7 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default function LeavePage() {
+  const { t } = useT();
   const { profile } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
@@ -132,19 +134,19 @@ export default function LeavePage() {
     setSuccess(null);
     const totalDays = computeTotalDays();
     if (!selectedType || !startDate || totalDays <= 0 || !reason) {
-      setError("กรุณากรอกข้อมูลให้ครบถ้วน");
+      setError(t("กรุณากรอกข้อมูลให้ครบถ้วน"));
       return;
     }
     if (unit === "full_day" && (!endDate || endDate < startDate)) {
-      setError("กรุณาระบุวันที่สิ้นสุดให้ถูกต้อง");
+      setError(t("กรุณาระบุวันที่สิ้นสุดให้ถูกต้อง"));
       return;
     }
     if (unit === "hourly" && computeHourlyHours() <= 0) {
-      setError("กรุณาระบุเวลาเริ่ม-สิ้นสุดให้ถูกต้อง");
+      setError(t("กรุณาระบุเวลาเริ่ม-สิ้นสุดให้ถูกต้อง"));
       return;
     }
     if (attachmentRequired && !attachmentFile) {
-      setError("ประเภทการลานี้ต้องแนบเอกสารประกอบ กรุณาแนบไฟล์");
+      setError(t("ประเภทการลานี้ต้องแนบเอกสารประกอบ กรุณาแนบไฟล์"));
       return;
     }
 
@@ -159,7 +161,7 @@ export default function LeavePage() {
       setUploadingAttachment(false);
       if (uploadError) {
         setSubmitting(false);
-        setError(`อัปโหลดเอกสารไม่สำเร็จ: ${uploadError.message}`);
+        setError(`${t("อัปโหลดเอกสารไม่สำเร็จ:")} ${uploadError.message}`);
         return;
       }
       attachmentPath = path;
@@ -181,44 +183,44 @@ export default function LeavePage() {
     });
     setSubmitting(false);
     if (insertError) {
-      setError(insertError.message.includes("INSUFFICIENT_LEAVE_BALANCE") ? "วันลาคงเหลือไม่เพียงพอ" : insertError.message);
+      setError(insertError.message.includes("INSUFFICIENT_LEAVE_BALANCE") ? t("วันลาคงเหลือไม่เพียงพอ") : insertError.message);
       return;
     }
     setStartDate("");
     setEndDate("");
     setReason("");
     setAttachmentFile(null);
-    setSuccess("ส่งคำขอลาเรียบร้อยแล้ว");
+    setSuccess(t("ส่งคำขอลาเรียบร้อยแล้ว"));
     load();
   }
 
   return (
     <div className="safe-top space-y-5 px-4 pb-6 pt-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-primary">ขอลางาน</h1>
+        <h1 className="text-lg font-bold text-primary">{t("ขอลางาน")}</h1>
         <Link href="/leave/balances" className="text-xs font-semibold text-secondary">
-          ดูวันลาคงเหลือ →
+          {t("ดูวันลาคงเหลือ →")}
         </Link>
       </div>
 
       <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">ประเภทการลา</label>
+          <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("ประเภทการลา")}</label>
           <div className="flex flex-wrap gap-2">
-            {leaveTypes.map((t) => (
+            {leaveTypes.map((lt) => (
               <button
-                key={t.id}
+                key={lt.id}
                 onClick={() => {
-                  setSelectedType(t.id);
-                  if (unit === "half_day" && !t.allow_half_day) setUnit("full_day");
-                  if (unit === "hourly" && !t.allow_hourly) setUnit("full_day");
+                  setSelectedType(lt.id);
+                  if (unit === "half_day" && !lt.allow_half_day) setUnit("full_day");
+                  if (unit === "hourly" && !lt.allow_hourly) setUnit("full_day");
                 }}
                 className={clsx(
                   "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-                  selectedType === t.id ? "border-primary bg-primary text-white font-bold" : "border-outline-variant text-on-surface-variant"
+                  selectedType === lt.id ? "border-primary bg-primary text-white font-bold" : "border-outline-variant text-on-surface-variant"
                 )}
               >
-                {t.name_th}
+                {t(lt.name_th)}
               </button>
             ))}
           </div>
@@ -226,15 +228,15 @@ export default function LeavePage() {
 
         {(selectedLeaveType?.allow_half_day || selectedLeaveType?.allow_hourly) && (
           <div>
-            <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">ช่วงเวลาลา</label>
+            <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("ช่วงเวลาลา")}</label>
             <div className="flex flex-wrap gap-2">
               {/* No "เต็มวัน" button — choosing a date range already means full-day leave, nothing to press.
                   Clicking an active chip here toggles back to full_day so switching back doesn't need one either. */}
               {selectedLeaveType?.allow_half_day && (
-                <UnitChip label="ครึ่งวัน" active={unit === "half_day"} onClick={() => setUnit(unit === "half_day" ? "full_day" : "half_day")} />
+                <UnitChip label={t("ครึ่งวัน")} active={unit === "half_day"} onClick={() => setUnit(unit === "half_day" ? "full_day" : "half_day")} />
               )}
               {selectedLeaveType?.allow_hourly && (
-                <UnitChip label="รายชั่วโมง" active={unit === "hourly"} onClick={() => setUnit(unit === "hourly" ? "full_day" : "hourly")} />
+                <UnitChip label={t("รายชั่วโมง")} active={unit === "hourly"} onClick={() => setUnit(unit === "hourly" ? "full_day" : "hourly")} />
               )}
             </div>
           </div>
@@ -243,11 +245,11 @@ export default function LeavePage() {
         {unit === "full_day" && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันที่เริ่ม</label>
+              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่เริ่ม")}</label>
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันที่สิ้นสุด</label>
+              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่สิ้นสุด")}</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
           </div>
@@ -256,14 +258,14 @@ export default function LeavePage() {
         {unit === "half_day" && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันที่ลา</label>
+              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่ลา")}</label>
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">ช่วง</label>
+              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("ช่วง")}</label>
               <div className="flex gap-2">
-                <UnitChip label="เช้า" active={halfDayPeriod === "morning"} onClick={() => setHalfDayPeriod("morning")} />
-                <UnitChip label="บ่าย" active={halfDayPeriod === "afternoon"} onClick={() => setHalfDayPeriod("afternoon")} />
+                <UnitChip label={t("เช้า")} active={halfDayPeriod === "morning"} onClick={() => setHalfDayPeriod("morning")} />
+                <UnitChip label={t("บ่าย")} active={halfDayPeriod === "afternoon"} onClick={() => setHalfDayPeriod("afternoon")} />
               </div>
             </div>
           </div>
@@ -272,16 +274,16 @@ export default function LeavePage() {
         {unit === "hourly" && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">วันที่ลา</label>
+              <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่ลา")}</label>
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">เวลาเริ่ม</label>
+                <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("เวลาเริ่ม")}</label>
                 <input type="time" value={hourlyStart} onChange={(e) => setHourlyStart(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">เวลาสิ้นสุด</label>
+                <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("เวลาสิ้นสุด")}</label>
                 <input type="time" value={hourlyEnd} onChange={(e) => setHourlyEnd(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
               </div>
             </div>
@@ -291,7 +293,7 @@ export default function LeavePage() {
         {selectedLeaveType?.requires_attachment && (
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">
-              เอกสารประกอบ{attachmentRequired ? <span className="text-status-danger"> * จำเป็น</span> : " (ไม่บังคับสำหรับจำนวนวันนี้)"}
+              {t("เอกสารประกอบ")}{attachmentRequired ? <span className="text-status-danger"> {t("* จำเป็น")}</span> : t(" (ไม่บังคับสำหรับจำนวนวันนี้)")}
             </label>
             <input
               type="file"
@@ -304,20 +306,20 @@ export default function LeavePage() {
         )}
 
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">เหตุผล</label>
+          <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("เหตุผล")}</label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
-            placeholder="ระบุเหตุผลการลา"
+            placeholder={t("ระบุเหตุผลการลา")}
             className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm"
           />
         </div>
 
         <div className="flex items-center justify-between rounded-xl bg-surface-container p-3.5">
-          <span className="text-sm font-semibold">ลารวมทั้งหมด:</span>
+          <span className="text-sm font-semibold">{t("ลารวมทั้งหมด:")}</span>
           <span className="font-bold text-primary">
-            {unit === "hourly" ? `${computeHourlyHours()} ชม.` : `${computeTotalDays()} วัน`}
+            {unit === "hourly" ? `${computeHourlyHours()} ${t("ชม.")}` : `${computeTotalDays()} ${t("วัน")}`}
           </span>
         </div>
 
@@ -329,23 +331,23 @@ export default function LeavePage() {
           disabled={submitting}
           className="h-12 w-full rounded-2xl bg-primary font-bold text-white disabled:opacity-60"
         >
-          {uploadingAttachment ? "กำลังอัปโหลดเอกสาร..." : submitting ? "กำลังส่ง..." : "ส่งคำขอลา"}
+          {uploadingAttachment ? t("กำลังอัปโหลดเอกสาร...") : submitting ? t("กำลังส่ง...") : t("ส่งคำขอลา")}
         </button>
       </div>
 
       <div>
-        <h2 className="mb-3 text-base font-bold text-on-surface">ประวัติคำขอ</h2>
-        {requests.length === 0 && <p className="text-sm text-on-surface-variant">ยังไม่มีคำขอลา</p>}
+        <h2 className="mb-3 text-base font-bold text-on-surface">{t("ประวัติคำขอ")}</h2>
+        {requests.length === 0 && <p className="text-sm text-on-surface-variant">{t("ยังไม่มีคำขอลา")}</p>}
         <div className="space-y-2">
           {requests.map((r) => (
             <div key={r.id} className="flex items-center justify-between rounded-2xl bg-white p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
               <div>
-                <p className="font-semibold text-on-surface">{r.leave_types?.name_th ?? "-"}</p>
+                <p className="font-semibold text-on-surface">{t(r.leave_types?.name_th ?? "-")}</p>
                 <p className="text-xs text-on-surface-variant">
-                  {r.start_date} - {r.end_date} ({r.total_days} วัน)
+                  {r.start_date} - {r.end_date} ({r.total_days} {t("วัน")})
                 </p>
               </div>
-              <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{statusLabel(r.status, r.approval_stage)}</span>
+              <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{t(statusLabel(r.status, r.approval_stage))}</span>
             </div>
           ))}
         </div>
