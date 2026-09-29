@@ -220,6 +220,25 @@ export async function createEmployeeLoginAccountAction(
   return {};
 }
 
+// HR sets a fresh temporary password for an employee who forgot theirs. The RPC
+// (migration 0101) writes the bcrypt hash directly, signs the account out everywhere and
+// sets must_change_password — no email involved, same reasoning as the create flow.
+export async function resetEmployeePasswordAction(employeeId: string, newPassword: string): Promise<{ error?: string }> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  if (newPassword.length < 8) return { error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" };
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("admin_reset_login_password", { p_employee_id: employeeId, p_password: newPassword });
+  if (error) {
+    if (error.message.includes("NO_LOGIN_ACCOUNT")) return { error: "พนักงานคนนี้ยังไม่มีบัญชีเข้าสู่ระบบ" };
+    return { error: error.message };
+  }
+
+  revalidatePath(`/employees/${employeeId}`);
+  return {};
+}
+
 export async function createEmployeeAction(
   _prevState: CreateEmployeeState,
   formData: FormData

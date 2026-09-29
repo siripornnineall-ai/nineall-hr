@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
-import { decideLeaveRequest, updateLeaveRequestAction } from "./actions";
+import { decideLeaveRequest, deleteLeaveRequestAction, updateLeaveRequestAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral"; label: string }> = {
   pending: { tone: "warning", label: "รออนุมัติ" },
@@ -38,7 +38,19 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
   const [totalDays, setTotalDays] = useState(String(row.totalDays));
   const [reason, setReason] = useState(row.reason ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  function confirmDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteLeaveRequestAction(row.id);
+      if (result?.error) {
+        setError(result.error);
+        setConfirmingDelete(false);
+      }
+    });
+  }
   // While pending, the badge says whose turn it is in the two-step flow.
   const waitingOnManager = row.status === "pending" && row.approvalStage === "manager";
   const badge =
@@ -175,6 +187,25 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
                 ปฏิเสธ
               </button>
             </>
+          )}
+          {confirmingDelete ? (
+            <>
+              <span className="self-center text-xs font-semibold text-status-danger">ลบใบลานี้?</span>
+              <button onClick={confirmDelete} disabled={isPending} className="rounded-lg bg-status-danger px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">
+                {isPending ? "กำลังลบ..." : "ยืนยันลบ"}
+              </button>
+              <button onClick={() => setConfirmingDelete(false)} disabled={isPending} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-on-surface-variant">
+                ยกเลิก
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              disabled={isPending}
+              className="rounded-lg border border-status-danger px-3 py-1.5 text-xs font-bold text-status-danger hover:bg-error-container/20 disabled:opacity-60"
+            >
+              ลบ
+            </button>
           )}
         </div>
         {error && <p className="mt-1 text-right text-xs font-semibold text-status-danger">{error}</p>}

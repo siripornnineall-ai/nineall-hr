@@ -7,6 +7,7 @@ import { Badge } from "@/components/Badge";
 import { OffboardButton } from "./OffboardButton";
 import { DeleteEmployeeButton } from "./DeleteEmployeeButton";
 import { CreateLoginAccountButton } from "./CreateLoginAccountButton";
+import { ResetPasswordButton } from "./ResetPasswordButton";
 import { EmployeeDetailTabs } from "./EmployeeDetailTabs";
 import { signAvatarUrls } from "@/lib/avatars";
 
@@ -58,7 +59,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
   if (!employee) notFound();
 
-  const { data: existingProfile } = await supabase.from("profiles").select("id").eq("employee_id", employee.id).maybeSingle();
+  const { data: existingProfile } = await supabase.from("profiles").select("id, email").eq("employee_id", employee.id).maybeSingle();
   const hasLoginAccount = !!existingProfile;
 
   // photo_url is a private-bucket storage path, not a fetchable URL.
@@ -223,6 +224,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
                   defaultEmail={employee.personal_email}
                 />
               )}
+              {hasLoginAccount && <ResetPasswordButton employeeId={employee.id} loginEmail={existingProfile?.email ?? null} />}
               <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
               <DeleteEmployeeButton employeeId={employee.id} />
             </>

@@ -185,6 +185,21 @@ export async function decideLeaveRequest(requestId: string, decision: "approved"
   revalidatePath("/dashboard");
 }
 
+// Removes a leave request entered by mistake. The RPC (migration 0101) puts the balance
+// back, drops the approval steps and any attendance placeholders the approval created.
+export async function deleteLeaveRequestAction(requestId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("delete_leave_request", { p_request_id: requestId });
+  if (error) return { error: error.message };
+
+  revalidatePath("/leave");
+  revalidatePath("/attendance");
+  revalidatePath("/dashboard");
+}
+
 export async function updateLeaveRequestAction(
   requestId: string,
   values: { leaveTypeId: string; startDate: string; endDate: string; totalDays: string; reason?: string }
