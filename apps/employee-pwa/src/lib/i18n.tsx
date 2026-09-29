@@ -13,6 +13,7 @@ import { MESSAGES, type Lang } from "@/lib/i18nMessages";
 // language changes.
 export const LANGS: { code: Lang; label: string }[] = [
   { code: "th", label: "ไทย" },
+  { code: "en", label: "English" },
   { code: "lo", label: "ລາວ" },
   { code: "my", label: "မြန်မာ" },
 ];
@@ -28,7 +29,7 @@ export function t(text: string): string {
 }
 
 function isLang(v: unknown): v is Lang {
-  return v === "th" || v === "lo" || v === "my";
+  return v === "th" || v === "en" || v === "lo" || v === "my";
 }
 
 interface LangContextValue {
