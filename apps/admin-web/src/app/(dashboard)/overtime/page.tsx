@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { signAvatarUrls } from "@/lib/avatars";
 import { getOtCutoffWindow, currentOtCutoffMonthKey, shiftOtCutoffMonthKey } from "@/lib/otCutoff";
+import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
 import { OtRow } from "./OtRow";
 import { AddBackdatedOvertimeForm } from "./AddBackdatedOvertimeForm";
 
@@ -29,7 +30,7 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, nickname")
+    .select("id, employee_code, first_name, last_name, nickname, late_deduct_from_prev_ot_since")
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
     .in("employment_status", ["active", "probation"])
@@ -66,6 +67,17 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
   for (const r of lateRows ?? []) {
     const code = (r.employees as unknown as { employee_code: string } | null)?.employee_code;
     if (code) lateMinutesByCode.set(code, (lateMinutesByCode.get(code) ?? 0) + (r.late_minutes ?? 0));
+  }
+
+  // Employees on the "deduct from the previous cycle" rule: replace their same-window lateness
+  // with what the payroll rule would take for this cycle.
+  for (const e of employees ?? []) {
+    const since = (e as { late_deduct_from_prev_ot_since?: string | null }).late_deduct_from_prev_ot_since;
+    if (!since || (selectedEmployee && selectedEmployee.id !== e.id)) continue;
+    lateMinutesByCode.set(
+      e.employee_code,
+      await lateMinutesFromPrevCycleRule(supabase, { orgId: user.orgId, employeeId: e.id, since, monthKey, capToOwnRun: true })
+    );
   }
 
   const signedByPath = await signAvatarUrls(

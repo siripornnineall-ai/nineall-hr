@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadPolicyConfig } from "@/lib/payroll/policy";
 import { generatePayslipBuffer } from "@/lib/pdf/generatePayslipBuffer";
 import { getOtCutoffWindow } from "@/lib/otCutoff";
+import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
 
 export async function createPayrollRunAction(formData: FormData) {
   const user = await requireUser();
@@ -130,7 +131,7 @@ export async function calculatePayrollRunAction(runId: string) {
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, social_security_exempt, departments(name), job_positions(title)"
+      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, social_security_exempt, late_deduct_from_prev_ot_since, departments(name), job_positions(title)"
     )
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
@@ -200,7 +201,16 @@ export async function calculatePayrollRunAction(runId: string) {
         .gte("work_date", otWindow.start)
         .lte("work_date", otWindow.end),
     ]);
-    const lateMinutesForOtDeduction = (lateInOtWindow ?? []).reduce((sum, a) => sum + (a.late_minutes ?? 0), 0);
+    // Per-employee rule (Kanin): lateness comes off the OT of the cycle just closed, counted
+    // from where the previous run stopped — see lib/lateDeduction.ts.
+    const lateMinutesForOtDeduction = emp.late_deduct_from_prev_ot_since
+      ? await lateMinutesFromPrevCycleRule(supabase, {
+          orgId: user.orgId,
+          employeeId: emp.id,
+          since: emp.late_deduct_from_prev_ot_since,
+          monthKey: period.period_start.slice(0, 7),
+        })
+      : (lateInOtWindow ?? []).reduce((sum, a) => sum + (a.late_minutes ?? 0), 0);
     const remainingScheduledWorkDays = (remainingShifts ?? []).length;
 
     const days: PayrollInputDay[] = (attendance ?? []).map((a) => ({

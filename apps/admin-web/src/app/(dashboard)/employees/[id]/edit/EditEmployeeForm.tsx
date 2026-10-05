@@ -43,6 +43,7 @@ interface EmployeeRow {
   attendance_exempt: boolean;
   tax_exempt: boolean;
   social_security_exempt: boolean;
+  late_deduct_from_prev_ot_since: string | null;
 }
 
 const initialState: UpdateEmployeeState = {};
@@ -186,6 +187,12 @@ export function EditEmployeeForm({
       <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
         <input type="checkbox" name="socialSecurityExempt" defaultChecked={employee.social_security_exempt} className="h-4 w-4 accent-primary" />
         ไม่ต้องหักประกันสังคม (ไม่ได้ขึ้นทะเบียนผู้ประกันตน เช่น เจ้าของกิจการ/ครอบครัว)
+      </label>
+
+      <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
+        <input type="checkbox" name="lateFromPrevOt" defaultChecked={!!employee.late_deduct_from_prev_ot_since} className="h-4 w-4 accent-primary" />
+        <input type="hidden" name="lateFromPrevOtSince" value={employee.late_deduct_from_prev_ot_since ?? ""} />
+        หักค่ามาสาย (ที่ไม่ได้ทด) จาก OT ของรอบก่อนที่ตัดไปแล้ว
       </label>
 
       <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
