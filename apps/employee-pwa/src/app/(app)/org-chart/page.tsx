@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { signAvatarUrls } from "@/lib/avatars";
@@ -9,16 +9,15 @@ import { signAvatarUrls } from "@/lib/avatars";
 interface OrgNode {
   id: string;
   name: string;
+  nickname: string | null;
   photoUrl: string | null;
   position: string | null;
   departmentName: string | null;
   managerId: string | null;
 }
 
-interface LayoutNode extends OrgNode {
-  children: LayoutNode[];
-  depth: number;
-  x: number;
+interface TreeNode extends OrgNode {
+  children: TreeNode[];
 }
 
 interface SecondaryLink {
@@ -26,58 +25,53 @@ interface SecondaryLink {
   managerId: string;
 }
 
-// Fixed card size + gaps rather than DOM measurement — deterministic layout, no measure-then-
-// reposition flash. Mirrors admin-web's org-chart layout (same algorithm, employee-pwa styling).
-const CARD_W = 176;
-const CARD_H = 92;
-const GAP_X = 16;
-const GAP_Y = 48;
+// Phone-friendly org chart (2026-10-06). The old picture-style chart was one wide canvas
+// (every card side by side, thousands of pixels across) that had to be panned in both
+// directions. This is a vertical list instead: each person is a row, people who manage others
+// fold open/closed, and children are indented under their manager. Searching or picking a
+// department switches to a flat list of matches.
 
-function buildTree(nodes: OrgNode[]): LayoutNode[] {
-  const byId = new Map<string, LayoutNode>();
-  for (const n of nodes) byId.set(n.id, { ...n, children: [], depth: 0, x: 0 });
+// Plain string comparison (not localeCompare): locale-aware collation can order Thai names
+// differently between server and browser, which would make the order jump after hydration.
+const byName = (a: { name: string }, b: { name: string }) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 
-  const roots: LayoutNode[] = [];
+function buildTree(nodes: OrgNode[]): TreeNode[] {
+  const byId = new Map<string, TreeNode>();
+  for (const n of nodes) byId.set(n.id, { ...n, children: [] });
+  const roots: TreeNode[] = [];
   for (const node of byId.values()) {
     const manager = node.managerId ? byId.get(node.managerId) : null;
-    if (manager) manager.children.push(node);
+    if (manager && manager.id !== node.id) manager.children.push(node);
     else roots.push(node);
   }
-
-  // Plain string comparison (not localeCompare) — locale-aware collation can order Thai names
-  // differently between server and browser ICU, which would make this layout non-deterministic.
-  function assignDepth(node: LayoutNode, depth: number) {
-    node.depth = depth;
-    node.children.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    for (const child of node.children) assignDepth(child, depth + 1);
-  }
-  roots.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  for (const root of roots) assignDepth(root, 0);
-
-  let nextLeafSlot = 0;
-  function assignX(node: LayoutNode): number {
-    if (node.children.length === 0) {
-      node.x = nextLeafSlot;
-      nextLeafSlot += 1;
-      return node.x;
-    }
-    const childXs = node.children.map(assignX);
-    node.x = childXs.reduce((sum, x) => sum + x, 0) / childXs.length;
-    return node.x;
-  }
-  for (const root of roots) assignX(root);
-
+  const sortRec = (list: TreeNode[]) => {
+    list.sort(byName);
+    for (const n of list) sortRec(n.children);
+  };
+  sortRec(roots);
   return roots;
 }
 
-function flatten(roots: LayoutNode[]): LayoutNode[] {
-  const out: LayoutNode[] = [];
-  function walk(node: LayoutNode) {
-    out.push(node);
-    for (const child of node.children) walk(child);
-  }
-  for (const root of roots) walk(root);
-  return out;
+function countDescendants(node: TreeNode): number {
+  return node.children.reduce((sum, c) => sum + 1 + countDescendants(c), 0);
+}
+
+function Avatar({ url, size }: { url: string | null; size: number }) {
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container ring-1 ring-primary/40"
+      style={{ width: size, height: size }}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: size * 0.55 }}>
+          person
+        </span>
+      )}
+    </span>
+  );
 }
 
 export default function OrgChartPage() {
@@ -87,16 +81,21 @@ export default function OrgChartPage() {
   const [secondaryLinks, setSecondaryLinks] = useState<SecondaryLink[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [deptFilter, setDeptFilter] = useState("");
+  const [query, setQuery] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // Which managers are folded open. null = "not touched yet" → the top two levels start open.
+  const [openIds, setOpenIds] = useState<Set<string> | null>(null);
 
   useEffect(() => {
     if (!profile) return;
     (async () => {
-      const [{ data }, { data: secondaryData }] = await Promise.all([
+      const [{ data }, { data: secondaryData }, { data: directory }] = await Promise.all([
         supabase.rpc("get_org_chart_nodes"),
         supabase.rpc("get_org_chart_secondary_managers"),
+        supabase.rpc("get_colleague_directory"),
       ]);
+      // The org-chart RPC has no nickname; the colleague directory does.
+      const nicknameById = new Map(((directory ?? []) as { employee_id: string; nickname: string | null }[]).map((d) => [d.employee_id, d.nickname]));
       const rows = (data ?? []) as {
         employee_id: string;
         first_name: string;
@@ -123,6 +122,7 @@ export default function OrgChartPage() {
         rows.map((r) => ({
           id: r.employee_id,
           name: `${r.first_name} ${r.last_name}`,
+          nickname: nicknameById.get(r.employee_id) || null,
           photoUrl: r.photo_url ? (urlByPath.get(r.photo_url) ?? null) : null,
           position: r.position_title,
           departmentName: r.department_name,
@@ -135,17 +135,47 @@ export default function OrgChartPage() {
   }, [profile, supabase]);
 
   const roots = useMemo(() => buildTree(nodes), [nodes]);
-  const allNodes = useMemo(() => flatten(roots), [roots]);
-  const nodeById = useMemo(() => new Map(allNodes.map((n) => [n.id, n])), [allNodes]);
+  const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const extraManagers = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const l of secondaryLinks) {
+      const name = nodeById.get(l.managerId)?.name;
+      if (!name) continue;
+      map.set(l.employeeId, [...(map.get(l.employeeId) ?? []), name]);
+    }
+    return map;
+  }, [secondaryLinks, nodeById]);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
-  }, [roots]);
+  // Default open set: roots and their direct reports' managers (first two levels).
+  const effectiveOpen = useMemo(() => {
+    if (openIds) return openIds;
+    const set = new Set<string>();
+    for (const r of roots) {
+      set.add(r.id);
+      for (const c of r.children) set.add(c.id);
+    }
+    return set;
+  }, [openIds, roots]);
 
-  function pixelPos(node: LayoutNode) {
-    return { left: node.x * (CARD_W + GAP_X), top: node.depth * (CARD_H + GAP_Y) };
+  function toggle(id: string) {
+    const next = new Set(effectiveOpen);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setOpenIds(next);
   }
+
+  const q = query.trim().toLowerCase();
+  const filtering = q !== "" || deptFilter !== "";
+  const matches = useMemo(() => {
+    if (!filtering) return [];
+    return nodes
+      .filter((n) => {
+        if (deptFilter && n.departmentName !== deptFilter) return false;
+        if (!q) return true;
+        return n.name.toLowerCase().includes(q) || (n.nickname ?? "").toLowerCase().includes(q) || (n.position ?? "").toLowerCase().includes(q);
+      })
+      .sort(byName);
+  }, [filtering, nodes, q, deptFilter]);
 
   if (!loaded) {
     return (
@@ -155,138 +185,117 @@ export default function OrgChartPage() {
     );
   }
 
-  const maxDepth = allNodes.length > 0 ? Math.max(...allNodes.map((n) => n.depth)) : 0;
-  const maxX = allNodes.length > 0 ? Math.max(...allNodes.map((n) => n.x)) : 0;
-  const width = (maxX + 1) * (CARD_W + GAP_X);
-  const height = (maxDepth + 1) * (CARD_H + GAP_Y);
+  function PersonRow({ node, managerName }: { node: OrgNode; managerName?: string | null }) {
+    const isSelf = node.id === profile?.employeeId;
+    const extra = extraManagers.get(node.id) ?? [];
+    return (
+      <Link href={isSelf ? "/profile" : `/colleagues/${node.id}`} className="flex min-w-0 flex-1 items-center gap-3 py-2 active:opacity-70">
+        <Avatar url={node.photoUrl} size={44} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold text-on-surface">
+            {node.nickname ? `${node.nickname} · ` : ""}
+            {node.name}
+            {isSelf && <span className="ml-1 text-xs font-normal text-primary">(คุณ)</span>}
+          </span>
+          <span className="block truncate text-xs text-on-surface-variant">
+            {node.position ?? "-"}
+            {node.departmentName ? ` · ${node.departmentName}` : ""}
+          </span>
+          {managerName && <span className="block truncate text-[11px] text-on-surface-variant">หัวหน้า: {managerName}</span>}
+          {extra.length > 0 && <span className="block truncate text-[11px] text-secondary">หัวหน้าเพิ่มเติม: {extra.join(", ")}</span>}
+        </span>
+      </Link>
+    );
+  }
+
+  function TreeRows({ list, level }: { list: TreeNode[]; level: number }) {
+    return (
+      <ul className={level > 0 ? "ml-5 border-l-2 border-outline-variant/70 pl-2" : ""}>
+        {list.map((node) => {
+          const hasChildren = node.children.length > 0;
+          const open = effectiveOpen.has(node.id);
+          return (
+            <li key={node.id}>
+              <div className="flex items-center">
+                <PersonRow node={node} />
+                {hasChildren && (
+                  <button
+                    onClick={() => toggle(node.id)}
+                    aria-expanded={open}
+                    aria-label={open ? "ย่อทีม" : "ขยายทีม"}
+                    className="ml-1 flex h-9 shrink-0 items-center gap-0.5 rounded-full bg-surface-container px-2.5 text-xs font-bold text-on-surface-variant active:bg-surface-variant"
+                  >
+                    {countDescendants(node)}
+                    <span className="material-symbols-outlined text-[18px]">{open ? "expand_less" : "expand_more"}</span>
+                  </button>
+                )}
+              </div>
+              {hasChildren && open && <TreeRows list={node.children} level={level + 1} />}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   return (
-    <div className="safe-top space-y-4 px-4 pb-6 pt-4">
+    <div className="safe-top space-y-3 px-4 pb-6 pt-4">
       <h1 className="text-lg font-bold text-primary">ผังองค์กร</h1>
 
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="ค้นหาชื่อ ชื่อเล่น หรือตำแหน่ง"
+        className="w-full rounded-xl border border-outline-variant bg-white px-3.5 py-2.5 text-sm"
+      />
+
       {departments.length > 0 && (
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-on-surface-variant">แผนก:</label>
-          <select
-            value={deptFilter}
-            onChange={(e) => setDeptFilter(e.target.value)}
-            className="h-9 flex-1 rounded-lg border border-outline-variant bg-white px-3 text-sm"
-          >
-            <option value="">ทั้งหมด</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={deptFilter}
+          onChange={(e) => setDeptFilter(e.target.value)}
+          aria-label="แผนก"
+          className="h-10 w-full rounded-xl border border-outline-variant bg-white px-3 text-sm"
+        >
+          <option value="">ทุกแผนก</option>
+          {departments.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
       )}
 
-      {secondaryLinks.length > 0 && (
-        <div className="flex items-center gap-3 text-[10px] text-on-surface-variant">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-0.5 w-5 bg-outline" /> หัวหน้าโดยตรง
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-secondary" /> หัวหน้าเพิ่มเติม
-          </span>
-        </div>
-      )}
-
-      {allNodes.length === 0 ? (
+      {nodes.length === 0 ? (
         <p className="text-center text-sm text-on-surface-variant">ยังไม่มีข้อมูลพนักงาน</p>
+      ) : filtering ? (
+        <div className="rounded-2xl bg-white px-4 py-1 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <p className="pt-2 text-xs text-on-surface-variant">พบ {matches.length} คน</p>
+          {matches.length === 0 && <p className="py-6 text-center text-sm text-on-surface-variant">ไม่พบพนักงานที่ค้นหา</p>}
+          <ul className="divide-y divide-outline-variant/60">
+            {matches.map((n) => (
+              <li key={n.id}>
+                <PersonRow node={n} managerName={n.managerId ? nodeById.get(n.managerId)?.name : null} />
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : (
-        <div ref={scrollRef} className="overflow-auto rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
-          <div className="relative" style={{ width, height }}>
-            <svg className="pointer-events-none absolute left-0 top-0" width={width} height={height}>
-              {allNodes.map((node) => {
-                if (!node.managerId) return null;
-                const manager = nodeById.get(node.managerId);
-                if (!manager) return null;
-                const mPos = pixelPos(manager);
-                const cPos = pixelPos(node);
-                const x1 = mPos.left + CARD_W / 2;
-                const y1 = mPos.top + CARD_H;
-                const x2 = cPos.left + CARD_W / 2;
-                const y2 = cPos.top;
-                const midY = (y1 + y2) / 2;
-                const dimmed = !!deptFilter && node.departmentName !== deptFilter && manager.departmentName !== deptFilter;
-                return (
-                  <path
-                    key={node.id}
-                    d={`M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`}
-                    fill="none"
-                    stroke={dimmed ? "var(--color-outline-variant)" : "var(--color-outline)"}
-                    strokeWidth={2}
-                  />
-                );
-              })}
-              {secondaryLinks.map((link) => {
-                const employee = nodeById.get(link.employeeId);
-                const manager = nodeById.get(link.managerId);
-                if (!employee || !manager) return null;
-                const mPos = pixelPos(manager);
-                const cPos = pixelPos(employee);
-                const x1 = mPos.left + CARD_W / 2;
-                const y1 = mPos.top + CARD_H / 2;
-                const x2 = cPos.left + CARD_W / 2;
-                const y2 = cPos.top + CARD_H / 2;
-                const dimmed = !!deptFilter && employee.departmentName !== deptFilter && manager.departmentName !== deptFilter;
-                return (
-                  <line
-                    key={`${link.employeeId}-${link.managerId}`}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke={dimmed ? "var(--color-outline-variant)" : "var(--color-secondary)"}
-                    strokeWidth={1.5}
-                    strokeDasharray="5 4"
-                    opacity={dimmed ? 0.35 : 0.7}
-                  />
-                );
-              })}
-            </svg>
+        <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+          <TreeRows list={roots} level={0} />
+        </div>
+      )}
 
-            {allNodes.map((node) => {
-              const pos = pixelPos(node);
-              const dimmed = !!deptFilter && node.departmentName !== deptFilter;
-              const isSelf = node.id === profile?.employeeId;
-              const extraManagerNames = secondaryLinks
-                .filter((l) => l.employeeId === node.id)
-                .map((l) => nodeById.get(l.managerId)?.name)
-                .filter((n): n is string => !!n);
-              return (
-                <Link
-                  key={node.id}
-                  href={isSelf ? "/profile" : `/colleagues/${node.id}`}
-                  className="absolute flex flex-col rounded-xl border border-outline-variant bg-white p-2.5 shadow-sm active:scale-95 transition-transform"
-                  style={{ left: pos.left, top: pos.top, width: CARD_W, height: CARD_H, opacity: dimmed ? 0.35 : 1 }}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container ring-1 ring-primary">
-                      {node.photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={node.photoUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">person</span>
-                      )}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-[11px] font-bold text-on-surface">{node.name}</p>
-                      <p className="truncate text-[10px] text-on-surface-variant">{node.position ?? "-"}</p>
-                    </div>
-                  </div>
-                  <p className="mt-auto truncate border-t border-outline-variant pt-1 text-[9px] text-on-surface-variant">
-                    {node.departmentName ?? "ไม่ระบุแผนก"}
-                  </p>
-                  {extraManagerNames.length > 0 && (
-                    <p className="truncate text-[9px] text-secondary">+ หัวหน้า: {extraManagerNames.join(", ")}</p>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
+      {!filtering && nodes.length > 0 && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => setOpenIds(new Set(nodes.filter((n) => nodes.some((c) => c.managerId === n.id)).map((n) => n.id)))}
+            className="flex-1 rounded-xl border border-outline-variant bg-white py-2 text-xs font-bold text-primary"
+          >
+            ขยายทั้งหมด
+          </button>
+          <button onClick={() => setOpenIds(new Set())} className="flex-1 rounded-xl border border-outline-variant bg-white py-2 text-xs font-bold text-on-surface-variant">
+            ย่อทั้งหมด
+          </button>
         </div>
       )}
     </div>
