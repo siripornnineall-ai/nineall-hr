@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
-import { decideHolidaySwapRequest } from "./actions";
+import { decideHolidaySwapRequest, deleteHolidaySwapRequestAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral"; label: string }> = {
   pending: { tone: "warning", label: "รออนุมัติ" },
@@ -29,6 +29,7 @@ const PERIOD_TH: Record<string, string> = { morning: "เช้า", afternoon: 
 
 export function HolidaySwapRow({ row }: { row: RowData }) {
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
 
@@ -40,6 +41,15 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
       } catch (e) {
         setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
       }
+    });
+  }
+
+  function confirmDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteHolidaySwapRequestAction(row.id);
+      if (result?.error) setError(result.error);
+      else setConfirmingDelete(false);
     });
   }
 
@@ -70,8 +80,9 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </td>
       <td className="px-4 py-3">
+        <div className="flex flex-wrap justify-end gap-2">
         {row.status === "pending" && (
-          <div className="flex justify-end gap-2">
+          <>
             <button onClick={() => decide("approved")} disabled={isPending} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">
               อนุมัติ
             </button>
@@ -82,8 +93,30 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
             >
               ปฏิเสธ
             </button>
-          </div>
+          </>
         )}
+          {confirmingDelete ? (
+            <>
+              <span className="self-center text-xs font-semibold text-status-danger">
+                {row.status === "approved" ? "ลบและคืนตารางวันหยุด/วันทำงาน?" : "ลบคำขอนี้?"}
+              </span>
+              <button onClick={confirmDelete} disabled={isPending} className="rounded-lg bg-status-danger px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">
+                {isPending ? "กำลังลบ..." : "ยืนยันลบ"}
+              </button>
+              <button onClick={() => setConfirmingDelete(false)} disabled={isPending} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-on-surface-variant">
+                ยกเลิก
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              disabled={isPending}
+              className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-bold text-status-danger hover:bg-status-danger/10 disabled:opacity-60"
+            >
+              ลบ
+            </button>
+          )}
+        </div>
         {error && <p className="mt-1 text-right text-xs font-semibold text-status-danger">{error}</p>}
       </td>
     </tr>

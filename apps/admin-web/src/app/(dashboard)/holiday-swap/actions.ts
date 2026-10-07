@@ -139,3 +139,18 @@ export async function decideHolidaySwapRequest(requestId: string, decision: "app
   revalidatePath("/holiday-swap");
   revalidatePath("/attendance");
 }
+
+// Removes a swap request outright (entered by mistake, wrong date, ...). For an approved one
+// the database function also puts back the schedule rows and day-off placeholders the swap
+// created — see migration 0104.
+export async function deleteHolidaySwapRequestAction(requestId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("delete_holiday_swap_request", { p_request_id: requestId });
+  if (error) return { error: error.message };
+
+  revalidatePath("/holiday-swap");
+  revalidatePath("/attendance");
+}
