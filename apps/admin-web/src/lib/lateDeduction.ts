@@ -61,6 +61,10 @@ export async function lateMinutesFromPrevCycleRule(
     }
   }
 
+  // Past cycles that are already approved/locked stop at the day they were calculated, so
+  // they don't soak up lateness that came later. A cycle still under review keeps counting
+  // up to today, exactly as a recalculation of its payroll would (reported 2026-10-12: the
+  // OT page showed no deduction for Kanin while the payroll would take 34 minutes).
   let upperInclusive = today;
   if (capToOwnRun) {
     const { data: ownPeriod } = await supabase
@@ -73,8 +77,9 @@ export async function lateMinutesFromPrevCycleRule(
     if (ownPeriod) {
       const { data: ownRun } = await supabase
         .from("payroll_runs")
-        .select("calculated_at")
+        .select("calculated_at, status")
         .eq("payroll_period_id", ownPeriod.id)
+        .in("status", ["approved", "paid", "locked"])
         .not("calculated_at", "is", null)
         .order("calculated_at", { ascending: false })
         .limit(1)
