@@ -22,8 +22,15 @@ async function grantDayOff(supabase: Awaited<ReturnType<typeof createClient>>, o
     { onConflict: "employee_id,work_date" }
   );
 
-  const { data: existing } = await supabase.from("attendance_records").select("clock_in_server_at").eq("employee_id", employeeId).eq("work_date", workDate).maybeSingle();
-  if (!existing?.clock_in_server_at) {
+  // An auto-filled work-from-home row (no device clock-in) is not a real clock-in — replace it.
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("clock_in_server_at, clock_in_device_at, status")
+    .eq("employee_id", employeeId)
+    .eq("work_date", workDate)
+    .maybeSingle();
+  const hasRealClockIn = !!existing?.clock_in_server_at && !(existing.status === "work_from_home" && !existing.clock_in_device_at);
+  if (!hasRealClockIn) {
     await supabase.from("attendance_records").upsert(
       {
         org_id: orgId,

@@ -112,13 +112,18 @@ export async function decideHolidaySwapRequest(requestId: string, decision: "app
       // runs then) — the per-employee monthly page never runs it at all. Leave approval
       // writes attendance_records directly at decision time; do the same here instead of
       // relying on that lazy sync.
+      // An auto-filled work-from-home row (employees.auto_wfh_no_clockin writes one at
+      // 00:05 with no device clock-in) is not a real clock-in: the swap turns that day into a
+      // day off, so it has to be replaced, not kept (reported 2026-10-12, นวพร).
       const { data: existingSubstitute } = await supabase
         .from("attendance_records")
-        .select("clock_in_server_at")
+        .select("clock_in_server_at, clock_in_device_at, status")
         .eq("employee_id", request.employee_id)
         .eq("work_date", request.substitute_date)
         .maybeSingle();
-      if (!existingSubstitute?.clock_in_server_at) {
+      const hasRealClockIn =
+        !!existingSubstitute?.clock_in_server_at && !(existingSubstitute.status === "work_from_home" && !existingSubstitute.clock_in_device_at);
+      if (!hasRealClockIn) {
         await supabase.from("attendance_records").upsert(
           {
             org_id: request.org_id,
