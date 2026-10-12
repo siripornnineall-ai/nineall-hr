@@ -42,7 +42,7 @@ export default async function EmployeeAttendanceDashboardPage({
 
   const { data: employee } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, photo_url, job_positions(title), departments(name)")
+    .select("id, employee_code, first_name, last_name, photo_url, hide_late_status, job_positions(title), departments(name)")
     .eq("org_id", user.orgId)
     .eq("id", employeeId)
     .maybeSingle();
@@ -193,7 +193,7 @@ export default async function EmployeeAttendanceDashboardPage({
                       clockOut: r.clock_out_server_at,
                       lateMinutes: r.late_minutes ?? 0,
                       otMinutes: r.ot_minutes ?? 0,
-                      status: r.status,
+                      status: r.status === "late" && employee.hide_late_status ? "on_time" : r.status,
                       statusDetail: r.status === "leave" ? leaveTypeForDate(r.work_date) : r.status === "holiday" ? (holidayNameByDate.get(r.work_date) ?? null) : null,
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,

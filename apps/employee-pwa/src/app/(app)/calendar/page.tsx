@@ -156,7 +156,7 @@ export default function CalendarPage() {
             const attendance = attendanceByDate.get(iso);
             const isToday = iso === todayIso;
             const isSelected = iso === selectedDate;
-            const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status] : undefined;
+            const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status === "late" && profile?.hideLateStatus ? "on_time" : attendance.status] : undefined;
             return (
               <button
                 key={idx}
@@ -211,7 +211,7 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">สถานะ</p>
-                    <p className="font-semibold text-on-surface">{STATUS_TH[attendance.status] ?? attendance.status}</p>
+                    <p className="font-semibold text-on-surface">{STATUS_TH[attendance.status === "late" && profile?.hideLateStatus ? "on_time" : attendance.status] ?? attendance.status}</p>
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">มาสาย</p>

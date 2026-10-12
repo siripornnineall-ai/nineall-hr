@@ -157,7 +157,7 @@ export default function HomePage() {
                 ? `${t("เข้างานวันนี้:")} ${new Date(stats.todayClockIn).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}`
                 : t("ยังไม่ลงเวลาเข้างานวันนี้")}
             </p>
-            {stats?.todayStatus && <p className="mt-0.5 text-sm font-bold text-status-success">{t(STATUS_TH[stats.todayStatus] ?? stats.todayStatus)}</p>}
+            {stats?.todayStatus && <p className="mt-0.5 text-sm font-bold text-status-success">{t(STATUS_TH[stats.todayStatus === "late" && profile?.hideLateStatus ? "on_time" : stats.todayStatus] ?? stats.todayStatus)}</p>}
           </div>
         </div>
 

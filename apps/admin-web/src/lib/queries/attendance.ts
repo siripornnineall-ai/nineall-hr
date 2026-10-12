@@ -239,7 +239,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
   const query = supabase
     .from("attendance_records")
     .select(
-      "id, work_date, employee_id, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees(employee_code, first_name, last_name, photo_url, manager_employee_id)"
+      "id, work_date, employee_id, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees(employee_code, first_name, last_name, photo_url, manager_employee_id, hide_late_status)"
     )
     .eq("org_id", orgId)
     .eq("work_date", workDate)
@@ -276,6 +276,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       last_name: string;
       photo_url: string | null;
       manager_employee_id: string | null;
+      hide_late_status: boolean | null;
     };
     const statusDetail = r.status === "leave" ? (leaveTypeNameByEmployee.get(r.employee_id) ?? null) : r.status === "holiday" ? (holiday?.name ?? null) : null;
     return {
@@ -287,7 +288,8 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       photoUrl: emp?.photo_url ? (signedByPath.get(emp.photo_url) ?? null) : null,
       clockIn: r.clock_in_server_at,
       clockOut: r.clock_out_server_at,
-      status: r.status,
+      // Ice / Kanin: shown as on time; the late minutes still drive the OT deduction.
+      status: r.status === "late" && emp?.hide_late_status ? "on_time" : r.status,
       statusDetail,
       lateMinutes: r.late_minutes,
       otMinutes: r.ot_minutes,
