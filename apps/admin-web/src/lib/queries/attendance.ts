@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signAvatarUrls } from "@/lib/avatars";
+import { explainDayLeave } from "@/lib/leaveDuration";
 
 // work_date is a plain YYYY-MM-DD with no time component, so parsing it as UTC midnight and
 // reading getUTCDay() back out is just calendar arithmetic — never affected by server/client
@@ -255,9 +256,9 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     // employee so the row can show "ลาป่วย"/"ลากิจ"/etc instead of just the bare status.
     supabase
       .from("leave_requests")
-      .select("employee_id, leave_types(name_th)")
+      .select("employee_id, unit, start_time, end_time, total_days, status, leave_types(name_th)")
       .eq("org_id", orgId)
-      .eq("status", "approved")
+      .in("status", ["approved", "pending"])
       .lte("start_date", workDate)
       .gte("end_date", workDate),
     // A day off that came from a swap (not the regular weekly day off) is labelled as such.
@@ -270,8 +271,22 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
   const workedHolidayBySwap = new Set((holidayWorkers ?? []).map((s) => s.employee_id));
 
   const leaveTypeNameByEmployee = new Map(
-    (leaveRows ?? []).map((l) => [l.employee_id, (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null])
+    (leaveRows ?? []).filter((l) => l.status === "approved").map((l) => [l.employee_id, (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null])
   );
+  // Every leave (pending or approved) on file for the day, per employee, to explain late / early-leave rows.
+  const leavesByEmployee = new Map<string, { typeName: string | null; unit: string | null; totalDays: number; startTime: string | null; endTime: string | null; status: string }[]>();
+  for (const l of leaveRows ?? []) {
+    const list = leavesByEmployee.get(l.employee_id) ?? [];
+    list.push({
+      typeName: (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null,
+      unit: l.unit as string | null,
+      totalDays: Number(l.total_days),
+      startTime: l.start_time as string | null,
+      endTime: l.end_time as string | null,
+      status: l.status as string,
+    });
+    leavesByEmployee.set(l.employee_id, list);
+  }
 
   const signedByPath = await signAvatarUrls(
     supabase,
@@ -296,7 +311,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
             ? (swapLabelByEmployee.get(r.employee_id) ?? null)
             : holiday && workedHolidayBySwap.has(r.employee_id)
               ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
-              : null;
+              : explainDayLeave(leavesByEmployee.get(r.employee_id) ?? [], r.status);
     return {
       id: r.id,
       workDate: r.work_date,

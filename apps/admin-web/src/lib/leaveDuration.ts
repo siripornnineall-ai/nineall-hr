@@ -29,3 +29,22 @@ export function formatLeaveDuration(unit: string | null | undefined, totalDays: 
 }
 
 // Display-only: stored total_days is not changed by this helper.
+
+const LEAVE_STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว" };
+
+/**
+ * Why a day that is not plain "on time" looks the way it does: the leave on file for that day,
+ * or, for someone who left early, an explicit "ไม่มีใบลา" (owner 2026-10-15: the Attendance
+ * page should say whether they took leave or really left early).
+ */
+export function explainDayLeave(
+  leaves: { typeName: string | null; unit: string | null; totalDays: number; startTime: string | null; endTime: string | null; status: string }[],
+  status: string
+): string | null {
+  if (leaves.length > 0) {
+    return leaves
+      .map((l) => `ลา: ${l.typeName ?? "-"} ${formatLeaveDuration(l.unit, l.totalDays, l.startTime, l.endTime)} (${LEAVE_STATUS_TH[l.status] ?? l.status})`)
+      .join(" · ");
+  }
+  return status === "early_leave" ? "ไม่มีใบลา" : null;
+}

@@ -10,6 +10,7 @@ import { EmployeeAttendanceRow } from "./EmployeeAttendanceRow";
 import { signAvatarUrls } from "@/lib/avatars";
 import { getOtCutoffWindow, currentOtCutoffMonthKey } from "@/lib/otCutoff";
 import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
+import { explainDayLeave } from "@/lib/leaveDuration";
 
 function parseMonth(month: string | undefined): { year: number; monthIndex: number } {
   if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -74,10 +75,10 @@ export default async function EmployeeAttendanceDashboardPage({
     // Attendance list (listAttendanceForDate), but this page never had it wired in at all.
     supabase
       .from("leave_requests")
-      .select("start_date, end_date, leave_types(name_th)")
+      .select("start_date, end_date, unit, start_time, end_time, total_days, status, leave_types(name_th)")
       .eq("org_id", user.orgId)
       .eq("employee_id", employeeId)
-      .eq("status", "approved")
+      .in("status", ["approved", "pending"])
       .lte("start_date", monthEnd)
       .gte("end_date", monthStart),
     supabase.from("company_holidays").select("holiday_date, name").eq("org_id", user.orgId).gte("holiday_date", monthStart).lte("holiday_date", monthEnd),
@@ -108,9 +109,21 @@ export default async function EmployeeAttendanceDashboardPage({
   const fmtCycleDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
 
   const holidayNameByDate = new Map((holidayRows ?? []).map((h) => [h.holiday_date, h.name]));
+  function leavesForDate(workDate: string) {
+    return (leaveRows ?? [])
+      .filter((l) => l.start_date <= workDate && l.end_date >= workDate)
+      .map((l) => ({
+        typeName: (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null,
+        unit: l.unit as string | null,
+        totalDays: Number(l.total_days),
+        startTime: l.start_time as string | null,
+        endTime: l.end_time as string | null,
+        status: l.status as string,
+      }));
+  }
   function leaveTypeForDate(workDate: string): string | null {
     for (const l of leaveRows ?? []) {
-      if (l.start_date <= workDate && l.end_date >= workDate) return (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null;
+      if (l.status === "approved" && l.start_date <= workDate && l.end_date >= workDate) return (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null;
     }
     return null;
   }
@@ -241,7 +254,7 @@ export default async function EmployeeAttendanceDashboardPage({
                               ? (swapLabelByDate.get(r.work_date) ?? null)
                               : workedHolidayBySwap.has(r.work_date)
                                 ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
-                                : null,
+                                : explainDayLeave(leavesForDate(r.work_date), r.status),
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,
                     }}
