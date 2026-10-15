@@ -65,16 +65,19 @@ export async function syncHolidayAttendance(orgId: string, workDate: string): Pr
   const { data: holiday } = await supabase.from("company_holidays").select("name").eq("org_id", orgId).eq("holiday_date", workDate).maybeSingle();
   if (!holiday) return null;
 
-  const [{ data: employees }, { data: existingRecords }, { data: assignments }] = await Promise.all([
+  const [{ data: employees }, { data: existingRecords }, { data: approvedSwaps }] = await Promise.all([
     // lte hire_date: an employee hired after this date wasn't on payroll yet — they never
     // "should have" a holiday record for it.
     supabase.from("employees").select("id").eq("org_id", orgId).is("deleted_at", null).in("employment_status", ["active", "probation"]).lte("hire_date", workDate),
     supabase.from("attendance_records").select("employee_id").eq("org_id", orgId).eq("work_date", workDate),
-    supabase.from("shift_assignments").select("employee_id, is_day_off").eq("org_id", orgId).eq("work_date", workDate),
+    supabase.from("holiday_swap_requests").select("employee_id").eq("org_id", orgId).eq("holiday_date", workDate).eq("status", "approved"),
   ]);
 
   const hasRecord = new Set((existingRecords ?? []).map((r) => r.employee_id));
-  const scheduledToWork = new Set((assignments ?? []).filter((a) => !a.is_day_off).map((a) => a.employee_id));
+  // Owner rule (2026-10-15): whoever did not clock in on a public holiday is simply off for
+  // it; only an approved swap means they were meant to work it. The shift schedule is not
+  // consulted — a 7-day schedule would otherwise hide the holiday for everyone on it.
+  const scheduledToWork = new Set((approvedSwaps ?? []).map((a) => a.employee_id));
 
   // Only employees with no record yet and no explicit override to work through the
   // holiday get marked — someone scheduled to work it (e.g. a swapped day off) keeps
@@ -245,7 +248,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     .eq("work_date", workDate)
     .order("clock_in_server_at", { ascending: true });
 
-  const [{ data, error }, { data: holiday }, { data: leaveRows }] = await Promise.all([
+  const [{ data, error }, { data: holiday }, { data: leaveRows }, { data: swapDayOffs }, { data: holidayWorkers }] = await Promise.all([
     query,
     supabase.from("company_holidays").select("name").eq("org_id", orgId).eq("holiday_date", workDate).maybeSingle(),
     // "ลา" alone doesn't say which kind — look up the approved leave covering this date per
@@ -257,8 +260,14 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       .eq("status", "approved")
       .lte("start_date", workDate)
       .gte("end_date", workDate),
+    // A day off that came from a swap (not the regular weekly day off) is labelled as such.
+    supabase.from("shift_assignments").select("employee_id, source").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true).in("source", ["holiday_swap", "day_off_swap"]),
+    // People who worked this public holiday because they swapped it for another day.
+    supabase.from("holiday_swap_requests").select("employee_id").eq("org_id", orgId).eq("holiday_date", workDate).eq("status", "approved"),
   ]);
   if (error) throw error;
+  const swapLabelByEmployee = new Map((swapDayOffs ?? []).map((s) => [s.employee_id, s.source === "holiday_swap" ? "สลับวันหยุดนักขัตฤกษ์" : "สลับวันหยุดประจำ"]));
+  const workedHolidayBySwap = new Set((holidayWorkers ?? []).map((s) => s.employee_id));
 
   const leaveTypeNameByEmployee = new Map(
     (leaveRows ?? []).map((l) => [l.employee_id, (l.leave_types as unknown as { name_th: string } | null)?.name_th ?? null])
@@ -278,7 +287,16 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       manager_employee_id: string | null;
       hide_late_status: boolean | null;
     };
-    const statusDetail = r.status === "leave" ? (leaveTypeNameByEmployee.get(r.employee_id) ?? null) : r.status === "holiday" ? (holiday?.name ?? null) : null;
+    const statusDetail =
+      r.status === "leave"
+        ? (leaveTypeNameByEmployee.get(r.employee_id) ?? null)
+        : r.status === "holiday"
+          ? (holiday?.name ?? null)
+          : r.status === "day_off"
+            ? (swapLabelByEmployee.get(r.employee_id) ?? null)
+            : holiday && workedHolidayBySwap.has(r.employee_id)
+              ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
+              : null;
     return {
       id: r.id,
       workDate: r.work_date,

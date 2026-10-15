@@ -8,6 +8,8 @@ import { Avatar } from "@/components/Avatar";
 import { AddBackdatedAttendanceForm } from "./AddBackdatedAttendanceForm";
 import { EmployeeAttendanceRow } from "./EmployeeAttendanceRow";
 import { signAvatarUrls } from "@/lib/avatars";
+import { getOtCutoffWindow, currentOtCutoffMonthKey } from "@/lib/otCutoff";
+import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
 
 function parseMonth(month: string | undefined): { year: number; monthIndex: number } {
   if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -42,7 +44,7 @@ export default async function EmployeeAttendanceDashboardPage({
 
   const { data: employee } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, photo_url, hide_late_status, job_positions(title), departments(name)")
+    .select("id, employee_code, first_name, last_name, photo_url, hide_late_status, late_deduct_from_prev_ot_since, job_positions(title), departments(name)")
     .eq("org_id", user.orgId)
     .eq("id", employeeId)
     .maybeSingle();
@@ -55,7 +57,11 @@ export default async function EmployeeAttendanceDashboardPage({
   const position = (employee.job_positions as unknown as { title: string } | null)?.title ?? null;
   const department = (employee.departments as unknown as { name: string } | null)?.name ?? null;
 
-  const [{ data: records }, { data: leaveRows }, { data: holidayRows }] = await Promise.all([
+  // Days off from the shift schedule and public holidays are written as attendance rows by a
+  // nightly job; run it for this month too so a day off that was scheduled late still shows.
+  await supabase.rpc("sync_scheduled_days_off_attendance", { p_from: monthStart, p_to: monthEnd, p_employee_id: employeeId });
+
+  const [{ data: records }, { data: leaveRows }, { data: holidayRows }, { data: swapDayOffRows }, { data: holidaySwapRows }] = await Promise.all([
     supabase
       .from("attendance_records")
       .select("id, work_date, status, clock_in_server_at, clock_out_server_at, late_minutes, ot_minutes, shift_id, work_location_id")
@@ -75,7 +81,31 @@ export default async function EmployeeAttendanceDashboardPage({
       .lte("start_date", monthEnd)
       .gte("end_date", monthStart),
     supabase.from("company_holidays").select("holiday_date, name").eq("org_id", user.orgId).gte("holiday_date", monthStart).lte("holiday_date", monthEnd),
+    supabase
+      .from("shift_assignments")
+      .select("work_date, source")
+      .eq("employee_id", employeeId)
+      .eq("is_day_off", true)
+      .in("source", ["holiday_swap", "day_off_swap"])
+      .gte("work_date", monthStart)
+      .lte("work_date", monthEnd),
+    supabase.from("holiday_swap_requests").select("holiday_date").eq("employee_id", employeeId).eq("status", "approved").gte("holiday_date", monthStart).lte("holiday_date", monthEnd),
   ]);
+  const swapLabelByDate = new Map((swapDayOffRows ?? []).map((r) => [r.work_date, r.source === "holiday_swap" ? "สลับวันหยุดนักขัตฤกษ์" : "สลับวันหยุดประจำ"]));
+  const workedHolidayBySwap = new Set((holidaySwapRows ?? []).map((r) => r.holiday_date));
+
+  // Net OT for the current 26th-25th cycle: approved OT minus the lateness that comes off it.
+  const otWindow = getOtCutoffWindow(currentOtCutoffMonthKey());
+  const [{ data: otRows }, { data: lateRows }] = await Promise.all([
+    supabase.from("overtime_requests").select("approved_hours, requested_hours").eq("employee_id", employeeId).eq("status", "approved").gte("work_date", otWindow.start).lte("work_date", otWindow.end),
+    supabase.from("attendance_records").select("late_minutes").eq("employee_id", employeeId).eq("status", "late").gt("late_minutes", 0).gte("work_date", otWindow.start).lte("work_date", otWindow.end),
+  ]);
+  const cycleOtHours = (otRows ?? []).reduce((sum, o) => sum + Number(o.approved_hours ?? o.requested_hours ?? 0), 0);
+  const cycleLateMinutes = employee.late_deduct_from_prev_ot_since
+    ? await lateMinutesFromPrevCycleRule(supabase, { orgId: user.orgId, employeeId, since: employee.late_deduct_from_prev_ot_since, monthKey: currentOtCutoffMonthKey(), capToOwnRun: true })
+    : (lateRows ?? []).reduce((sum, r) => sum + (r.late_minutes ?? 0), 0);
+  const cycleNetOtHours = Math.max(0, cycleOtHours - cycleLateMinutes / 60);
+  const fmtCycleDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
 
   const holidayNameByDate = new Map((holidayRows ?? []).map((h) => [h.holiday_date, h.name]));
   function leaveTypeForDate(workDate: string): string | null {
@@ -152,6 +182,14 @@ export default async function EmployeeAttendanceDashboardPage({
           <StatCard label="OT" value={`${totalOtHours.toFixed(1)} ชม.`} icon="timer" accent="primary" hint={holidayDays > 0 ? `วันหยุด ${holidayDays} วัน` : undefined} />
         </div>
 
+        <div className="rounded-xl border border-outline-variant bg-white px-4 py-3 text-sm shadow-sm">
+          <span className="font-bold text-on-surface">OT รอบนี้ ({fmtCycleDate(otWindow.start)} – {fmtCycleDate(otWindow.end)}):</span>{" "}
+          <span className="text-on-surface-variant">
+            OT อนุมัติ {cycleOtHours.toFixed(2)} ชม. − หักมาสาย {cycleLateMinutes} นาที ={" "}
+            <span className="font-bold text-on-surface">สุทธิ {cycleNetOtHours.toFixed(2)} ชม.</span>
+          </span>
+        </div>
+
         <AddBackdatedAttendanceForm
           employeeId={employee.id}
           shifts={shifts ?? []}
@@ -194,7 +232,16 @@ export default async function EmployeeAttendanceDashboardPage({
                       lateMinutes: r.late_minutes ?? 0,
                       otMinutes: r.ot_minutes ?? 0,
                       status: r.status === "late" && employee.hide_late_status ? "on_time" : r.status,
-                      statusDetail: r.status === "leave" ? leaveTypeForDate(r.work_date) : r.status === "holiday" ? (holidayNameByDate.get(r.work_date) ?? null) : null,
+                      statusDetail:
+                        r.status === "leave"
+                          ? leaveTypeForDate(r.work_date)
+                          : r.status === "holiday"
+                            ? (holidayNameByDate.get(r.work_date) ?? null)
+                            : r.status === "day_off"
+                              ? (swapLabelByDate.get(r.work_date) ?? null)
+                              : workedHolidayBySwap.has(r.work_date)
+                                ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
+                                : null,
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,
                     }}

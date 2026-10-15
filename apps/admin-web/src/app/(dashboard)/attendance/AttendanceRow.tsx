@@ -110,7 +110,10 @@ export function AttendanceRow({
       }
     });
   }
-  const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
+  const baseBadge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
+  // A day off that came from a swap says so ("สลับวันหยุดนักขัตฤกษ์") instead of "หยุดประจำ".
+  const swapDayOff = row.status === "day_off" && !!row.statusDetail?.startsWith("สลับ");
+  const badge = swapDayOff ? { ...baseBadge, label: row.statusDetail! } : baseBadge;
 
   function save() {
     setError(null);
@@ -206,7 +209,7 @@ export function AttendanceRow({
       </td>
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
-        {row.statusDetail && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
+        {row.statusDetail && !swapDayOff && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
       </td>
       <td className="px-4 py-3 text-right">
         {confirmingDelete ? (

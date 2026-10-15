@@ -77,7 +77,10 @@ export function EmployeeAttendanceRow({
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
+  const baseBadge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
+  // A day off that came from a swap says so ("สลับวันหยุดนักขัตฤกษ์") instead of "หยุดประจำ".
+  const swapDayOff = row.status === "day_off" && !!row.statusDetail?.startsWith("สลับ");
+  const badge = swapDayOff ? { ...baseBadge, label: row.statusDetail! } : baseBadge;
 
   function markDayOff() {
     setError(null);
@@ -178,7 +181,7 @@ export function EmployeeAttendanceRow({
       <td className="px-4 py-3">{row.otMinutes || "-"}</td>
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
-        {row.statusDetail && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
+        {row.statusDetail && !swapDayOff && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
       </td>
       <td className="px-4 py-3 text-right">
         {confirmingDelete ? (
