@@ -15,7 +15,9 @@ export function formatLeaveDuration(unit: string | null | undefined, totalDays: 
   const start = toMinutes(startTime);
   const end = toMinutes(endTime);
   if (unit === "hourly" && start != null && end != null && end > start) {
-    const minutes = end - start;
+    // The 12:00-13:00 lunch break is not leave time.
+    const lunchOverlap = Math.max(0, Math.min(end, 13 * 60) - Math.max(start, 12 * 60));
+    const minutes = end - start - lunchOverlap;
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     const words = h > 0 && m > 0 ? `${h} ${t("ชม.")} ${m} ${t("นาที")}` : h > 0 ? `${h} ${t("ชม.")}` : `${m} ${t("นาที")}`;
