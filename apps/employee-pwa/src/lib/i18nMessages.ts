@@ -4,6 +4,7 @@
 export type Lang = "th" | "en" | "lo" | "my";
 
 const lo: Record<string, string> = {
+  "นาที": "ນາທີ",
   // chat
   "แชท": "ແຊັດ",
   "แชทใหม่": "ແຊັດໃໝ່",
@@ -235,6 +236,7 @@ const lo: Record<string, string> = {
 };
 
 const my: Record<string, string> = {
+  "นาที": "မိနစ်",
   // chat
   "แชท": "ချက်",
   "แชทใหม่": "ချက်အသစ်",
@@ -466,6 +468,7 @@ const my: Record<string, string> = {
 };
 
 const en: Record<string, string> = {
+  "นาที": "min",
   // chat
   "แชท": "Chat",
   "แชทใหม่": "New chat",

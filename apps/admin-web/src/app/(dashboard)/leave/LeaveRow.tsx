@@ -19,6 +19,7 @@ interface LeaveRowData {
   startDate: string;
   endDate: string;
   totalDays: number;
+  durationLabel: string;
   status: string;
   approvalStage: string;
   managerName: string | null;
@@ -147,7 +148,7 @@ export function LeaveRow({ row, leaveTypes }: { row: LeaveRowData; leaveTypes: {
       <td className="px-4 py-3">
         {new Date(row.startDate).toLocaleDateString("th-TH")} - {new Date(row.endDate).toLocaleDateString("th-TH")}
       </td>
-      <td className="px-4 py-3">{row.totalDays} วัน</td>
+      <td className="px-4 py-3">{row.durationLabel}</td>
       <td className="max-w-[220px] truncate px-4 py-3" title={row.reason ?? ""}>
         {row.reason ?? "-"}
       </td>

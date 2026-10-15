@@ -1,5 +1,6 @@
 "use client";
 
+import { formatLeaveDuration } from "@/lib/leaveDuration";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -20,6 +21,9 @@ interface LeaveRequestRow {
   start_date: string;
   end_date: string;
   total_days: number;
+  unit: string | null;
+  start_time: string | null;
+  end_time: string | null;
   status: string;
   approval_stage: string | null;
   leave_types: { name_th: string } | null;
@@ -69,7 +73,7 @@ export default function LeavePage() {
         .order("effective_date", { ascending: false }),
       supabase
         .from("leave_requests")
-        .select("id, start_date, end_date, total_days, status, approval_stage, leave_types(name_th)")
+        .select("id, start_date, end_date, total_days, unit, start_time, end_time, status, approval_stage, leave_types(name_th)")
         .eq("employee_id", profile.employeeId)
         .order("created_at", { ascending: false })
         .limit(20),
@@ -344,7 +348,7 @@ export default function LeavePage() {
               <div>
                 <p className="font-semibold text-on-surface">{t(r.leave_types?.name_th ?? "-")}</p>
                 <p className="text-xs text-on-surface-variant">
-                  {r.start_date} - {r.end_date} ({r.total_days} {t("วัน")})
+                  {r.start_date} - {r.end_date} ({formatLeaveDuration(r.unit, r.total_days, r.start_time, r.end_time)})
                 </p>
               </div>
               <span className={clsx("shrink-0 text-xs font-bold", STATUS_CLASS[r.status])}>{t(statusLabel(r.status, r.approval_stage))}</span>

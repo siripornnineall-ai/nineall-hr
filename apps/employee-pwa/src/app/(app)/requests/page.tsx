@@ -1,5 +1,6 @@
 "use client";
 
+import { formatLeaveDuration } from "@/lib/leaveDuration";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
@@ -42,7 +43,7 @@ export default function RequestsPage() {
     const [{ data: leave }, { data: ot }] = await Promise.all([
       supabase
         .from("leave_requests")
-        .select("id, start_date, end_date, total_days, status, approval_stage, created_at, leave_types(name_th)")
+        .select("id, start_date, end_date, total_days, unit, start_time, end_time, status, approval_stage, created_at, leave_types(name_th)")
         .eq("employee_id", profile.employeeId)
         .order("created_at", { ascending: false })
         .limit(30),
@@ -58,7 +59,7 @@ export default function RequestsPage() {
       id: r.id,
       kind: "leave",
       title: (r.leave_types as unknown as { name_th: string } | null)?.name_th ?? t("ลางาน"),
-      detail: `${r.start_date} - ${r.end_date} (${r.total_days} ${t("วัน")})`,
+      detail: `${r.start_date} - ${r.end_date} (${formatLeaveDuration(r.unit as string | null, Number(r.total_days), r.start_time as string | null, r.end_time as string | null)})`,
       status: r.status,
       stage: r.approval_stage,
       createdAt: r.created_at,

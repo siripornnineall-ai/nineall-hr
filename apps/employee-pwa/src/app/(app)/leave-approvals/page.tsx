@@ -1,5 +1,6 @@
 "use client";
 
+import { formatLeaveDuration } from "@/lib/leaveDuration";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
@@ -23,6 +24,7 @@ interface LeaveRow {
   startDate: string;
   endDate: string;
   totalDays: number;
+  durationLabel: string;
   reason: string | null;
   stage: "manager" | "hr";
   managerName: string | null;
@@ -63,7 +65,7 @@ export default function LeaveApprovalsPage() {
       const { data } = await supabase
         .from("leave_requests")
         .select(
-          "id, start_date, end_date, total_days, reason, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, manager_employee_id), leave_types(name_th)"
+          "id, start_date, end_date, total_days, unit, start_time, end_time, reason, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, manager_employee_id), leave_types(name_th)"
         )
         .eq("org_id", profile.orgId)
         .eq("status", "pending")
@@ -99,6 +101,7 @@ export default function LeaveApprovalsPage() {
             startDate: r.start_date,
             endDate: r.end_date,
             totalDays: Number(r.total_days),
+            durationLabel: formatLeaveDuration(r.unit as string | null, Number(r.total_days), r.start_time as string | null, r.end_time as string | null),
             reason: r.reason,
             stage: r.approval_stage === "manager" ? "manager" : "hr",
             managerName: managerId ? (nameById.get(managerId) ?? null) : null,
@@ -114,7 +117,7 @@ export default function LeaveApprovalsPage() {
     const [{ data: managerFlag }, { data: queue }] = await Promise.all([supabase.rpc("is_line_manager"), supabase.rpc("get_manager_leave_queue")]);
     setIsLineManager(managerFlag === true);
     setRows(
-      ((queue ?? []) as { id: string; employee_code: string; employee_name: string; nickname: string | null; leave_type_name: string; start_date: string; end_date: string; total_days: number; reason: string | null }[]).map(
+      ((queue ?? []) as { id: string; employee_code: string; employee_name: string; nickname: string | null; leave_type_name: string; start_date: string; end_date: string; unit: string | null; start_time: string | null; end_time: string | null; total_days: number; reason: string | null }[]).map(
         (r) => ({
           id: r.id,
           employeeName: r.nickname ? `${r.nickname} (${r.employee_name})` : r.employee_name,
@@ -123,6 +126,7 @@ export default function LeaveApprovalsPage() {
           startDate: r.start_date,
           endDate: r.end_date,
           totalDays: Number(r.total_days),
+          durationLabel: formatLeaveDuration(r.unit, Number(r.total_days), r.start_time, r.end_time),
           reason: r.reason,
           stage: "manager" as const,
           managerName: null,
@@ -189,7 +193,7 @@ export default function LeaveApprovalsPage() {
         <p className="mt-1 text-sm text-on-surface">{r.leaveTypeName}</p>
         <p className="text-xs text-on-surface-variant">
           {formatThai(r.startDate)}
-          {r.endDate !== r.startDate && ` - ${formatThai(r.endDate)}`} ({r.totalDays} วัน)
+          {r.endDate !== r.startDate && ` - ${formatThai(r.endDate)}`} ({r.durationLabel})
         </p>
         {r.reason && <p className="mt-1 text-xs text-on-surface-variant">เหตุผล: {r.reason}</p>}
 

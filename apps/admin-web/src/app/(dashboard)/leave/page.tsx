@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { formatLeaveDuration } from "@/lib/leaveDuration";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { signAvatarUrls } from "@/lib/avatars";
@@ -20,7 +21,7 @@ export default async function LeavePage() {
     supabase
       .from("leave_requests")
       .select(
-        "id, start_date, end_date, total_days, unit, status, reason, created_at, leave_type_id, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url, manager_employee_id), leave_types(name_th)"
+        "id, start_date, end_date, total_days, unit, start_time, end_time, status, reason, created_at, leave_type_id, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url, manager_employee_id), leave_types(name_th)"
       )
       .eq("org_id", user.orgId)
       .neq("approval_stage", "manager")
@@ -74,6 +75,7 @@ export default async function LeavePage() {
       startDate: r.start_date,
       endDate: r.end_date,
       totalDays: Number(r.total_days),
+      durationLabel: formatLeaveDuration(r.unit as string | null, Number(r.total_days), r.start_time as string | null, r.end_time as string | null),
       status: r.status,
       approvalStage: (r.approval_stage as string | null) ?? "hr",
       managerName: managerId ? (managerNameById.get(managerId) ?? null) : null,
