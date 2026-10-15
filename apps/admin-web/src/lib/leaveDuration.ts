@@ -25,3 +25,5 @@ export function formatLeaveDuration(unit: string | null | undefined, totalDays: 
   }
   return `${totalDays} วัน`;
 }
+
+// Display-only: stored total_days is not changed by this helper.
