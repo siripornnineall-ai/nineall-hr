@@ -16,6 +16,7 @@ interface OvertimeRow {
   approved_hours: number | null;
   rate_multiplier: number;
   status: string;
+  source: string | null;
 }
 
 // Mirrors the org's currently configured policy_settings.ot_rate (normal/holiday
@@ -49,6 +50,8 @@ export default function OvertimePage() {
   const supabase = useMemo(() => createClient(), []);
   const [requests, setRequests] = useState<OvertimeRow[]>([]);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
+  // Lateness (minutes) that has not been made up, in the current 26th-25th OT cycle — it comes off OT.
+  const [lateMinutesCycle, setLateMinutesCycle] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [historyYear, setHistoryYear] = useState(() => new Date().getFullYear());
 
@@ -63,16 +66,26 @@ export default function OvertimePage() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const [{ data: reqs }, { data: holidays }] = await Promise.all([
+    const cycle = getOtCutoffWindow(currentOtCutoffMonthKey());
+    const [{ data: reqs }, { data: holidays }, { data: lateRows }] = await Promise.all([
       supabase
         .from("overtime_requests")
-        .select("id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status")
+        .select("id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status, source")
         .eq("employee_id", profile.employeeId)
         .gte("work_date", `${historyYear}-01-01`)
         .lte("work_date", `${historyYear}-12-31`)
         .order("work_date", { ascending: false }),
       supabase.from("company_holidays").select("holiday_date").eq("org_id", profile.orgId),
+      supabase
+        .from("attendance_records")
+        .select("late_minutes")
+        .eq("employee_id", profile.employeeId)
+        .eq("status", "late")
+        .gt("late_minutes", 0)
+        .gte("work_date", cycle.start)
+        .lte("work_date", cycle.end),
     ]);
+    setLateMinutesCycle((lateRows ?? []).reduce((sum, r) => sum + (r.late_minutes ?? 0), 0));
     setRequests(reqs ?? []);
     setHolidayDates(new Set((holidays ?? []).map((h) => h.holiday_date)));
     setLoaded(true);
@@ -99,6 +112,8 @@ export default function OvertimePage() {
   const approvedHoursThisMonth = requests
     .filter((r) => r.status === "approved" && r.work_date >= otWindow.start && r.work_date <= otWindow.end)
     .reduce((sum, r) => sum + Number(r.approved_hours ?? 0), 0);
+  const roundedApproved = Math.round(approvedHoursThisMonth * 100) / 100;
+  const netHoursThisMonth = Math.max(0, Math.round((approvedHoursThisMonth - lateMinutesCycle / 60) * 100) / 100);
 
   async function handleSubmit() {
     setError(null);
@@ -143,7 +158,15 @@ export default function OvertimePage() {
 
       <div className="rounded-2xl bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
         <p className="text-xs text-on-surface-variant">{t("ชั่วโมง OT ที่อนุมัติแล้วเดือนนี้")}</p>
-        <p className="mt-1 text-xl font-bold text-primary">{approvedHoursThisMonth} {t("ชม.")}</p>
+        <p className="mt-1 text-xl font-bold text-primary">{lateMinutesCycle > 0 ? netHoursThisMonth : roundedApproved} {t("ชม.")}</p>
+        {lateMinutesCycle > 0 && (
+          <p className="mt-1 text-xs text-on-surface-variant">
+            OT {roundedApproved} {t("ชม.")} − {t("หักมาสาย")} {lateMinutesCycle} {t("นาที")}
+          </p>
+        )}
+        <p className="mt-0.5 text-[11px] text-on-surface-variant">
+          {otWindow.start} – {otWindow.end}
+        </p>
       </div>
 
       <div className="space-y-3 rounded-2xl bg-white p-5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
@@ -222,7 +245,10 @@ export default function OvertimePage() {
           {requests.map((r) => (
             <div key={r.id} className="flex items-center justify-between rounded-2xl bg-white p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
               <div>
-                <p className="font-semibold text-on-surface">{new Date(r.work_date).toLocaleDateString("th-TH")}</p>
+                <p className="font-semibold text-on-surface">
+                  {new Date(r.work_date).toLocaleDateString("th-TH")}
+                  {r.source === "auto_clock_out" && <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">{t("ตัดอัตโนมัติ")}</span>}
+                </p>
                 <p className="text-xs text-on-surface-variant">
                   {r.start_time} - {r.end_time} ({r.requested_hours} {t("ชม.")} x{r.rate_multiplier})
                 </p>

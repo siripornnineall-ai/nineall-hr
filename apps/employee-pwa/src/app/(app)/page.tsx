@@ -11,6 +11,7 @@ import { AnnouncementBanner } from "./AnnouncementBanner";
 import { BirthdayBanner } from "./BirthdayBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useT } from "@/lib/i18n";
+import { currentOtCutoffMonthKey, getOtCutoffWindow } from "@/lib/otCutoff";
 
 interface HomeStats {
   leaveDaysRemaining: number;
@@ -63,20 +64,24 @@ export default function HomePage() {
     if (!profile) return;
     const today = new Date().toISOString().slice(0, 10);
     const year = new Date().getFullYear();
-    const monthStart = `${year}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    // OT counts per the payroll cutoff (26th to 25th), net of un-made-up lateness.
+    const otCycle = getOtCutoffWindow(currentOtCutoffMonthKey());
 
-    const [balances, ot, leaveReq, otReq, todayAttendance] = await Promise.all([
+    const [balances, ot, leaveReq, otReq, todayAttendance, lateCycle] = await Promise.all([
       supabase.from("leave_balances").select("entitled_days, carried_over_days, used_days, pending_days, leave_types(code)").eq("employee_id", profile.employeeId).eq("year", year),
-      supabase.from("overtime_requests").select("approved_hours").eq("employee_id", profile.employeeId).eq("status", "approved").gte("work_date", monthStart),
+      supabase.from("overtime_requests").select("approved_hours").eq("employee_id", profile.employeeId).eq("status", "approved").gte("work_date", otCycle.start).lte("work_date", otCycle.end),
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", profile.employeeId).eq("status", "pending"),
       supabase.from("overtime_requests").select("id", { count: "exact", head: true }).eq("employee_id", profile.employeeId).eq("status", "pending"),
       supabase.from("attendance_records").select("status, clock_in_server_at").eq("employee_id", profile.employeeId).eq("work_date", today).maybeSingle(),
+      supabase.from("attendance_records").select("late_minutes").eq("employee_id", profile.employeeId).eq("status", "late").gt("late_minutes", 0).gte("work_date", otCycle.start).lte("work_date", otCycle.end),
     ]);
 
     const leaveDaysRemaining = (balances.data ?? [])
       .filter((b) => countsTowardLeaveQuota((b.leave_types as unknown as { code: string } | null)?.code))
       .reduce((sum, b) => sum + Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days), 0);
-    const otHours = (ot.data ?? []).reduce((sum, o) => sum + Number(o.approved_hours ?? 0), 0);
+    const otGross = (ot.data ?? []).reduce((sum, o) => sum + Number(o.approved_hours ?? 0), 0);
+    const lateMinutes = (lateCycle.data ?? []).reduce((sum, r) => sum + (r.late_minutes ?? 0), 0);
+    const otHours = Math.max(0, Math.round((otGross - lateMinutes / 60) * 100) / 100);
 
     setStats({
       leaveDaysRemaining: Math.round(leaveDaysRemaining * 100) / 100,

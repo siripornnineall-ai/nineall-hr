@@ -54,16 +54,32 @@ export default function AttendancePage() {
   const [alreadyClockedIn, setAlreadyClockedIn] = useState(false);
   const [alreadyClockedOut, setAlreadyClockedOut] = useState(false);
   const [checkedToday, setCheckedToday] = useState(false);
+  // Clock-out is locked for 3 hours after clock-in (set 2026-10-19 against phones that glitch and
+  // punch in-and-out at once). The database enforces it; this just tells the employee when it
+  // opens. Days with partial leave are exempt, same as in clock_out().
+  const [clockInAt, setClockInAt] = useState<Date | null>(null);
+  const [partialLeaveToday, setPartialLeaveToday] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 20_000);
+    return () => clearInterval(id);
+  }, []);
 
   const checkTodayStatus = useCallback(async () => {
     if (!profile) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const { data } = await supabase
-      .from("attendance_records")
-      .select("clock_in_server_at, clock_out_server_at")
-      .eq("employee_id", profile.employeeId)
-      .eq("work_date", today)
-      .maybeSingle();
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+    const [{ data }, { data: partialLeave }] = await Promise.all([
+      supabase.from("attendance_records").select("clock_in_server_at, clock_out_server_at").eq("employee_id", profile.employeeId).eq("work_date", today).maybeSingle(),
+      supabase
+        .from("leave_requests")
+        .select("id, unit, total_days")
+        .eq("employee_id", profile.employeeId)
+        .in("status", ["pending", "approved"])
+        .lte("start_date", today)
+        .gte("end_date", today),
+    ]);
+    setClockInAt(data?.clock_in_server_at ? new Date(data.clock_in_server_at) : null);
+    setPartialLeaveToday((partialLeave ?? []).some((l) => l.unit !== "full_day" || Number(l.total_days) < 1));
     setAlreadyClockedIn(Boolean(data?.clock_in_server_at));
     setAlreadyClockedOut(Boolean(data?.clock_out_server_at));
     setCheckedToday(true);
@@ -138,6 +154,9 @@ export default function AttendancePage() {
   }
 
   const busy = phase === "requesting_location" || phase === "submitting";
+  const unlockAt = alreadyClockedIn && clockInAt && !partialLeaveToday ? new Date(clockInAt.getTime() + 3 * 60 * 60 * 1000) : null;
+  const locked = !!unlockAt && now < unlockAt.getTime();
+  const unlockLabel = unlockAt ? unlockAt.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }) : "";
   const title = alreadyClockedIn ? t("ลงเวลาออกงาน") : t("ลงเวลาเข้างาน");
 
   return (
@@ -151,12 +170,17 @@ export default function AttendancePage() {
 
       <p className="mt-4 text-center text-xs text-on-surface-variant">{t("*ระบบจะบันทึกพิกัด GPS เพื่อยืนยันตำแหน่งการลงเวลา")}</p>
 
+      {locked && (
+        <p className="mt-2 text-center text-sm font-semibold text-status-warning">
+          {t("ลงเวลาเข้างานแล้ว ต้องรออย่างน้อย 3 ชั่วโมงถึงจะลงเวลาออกงานได้")} ({t("ออกงานได้ตั้งแต่")} {unlockLabel} {t("น.")})
+        </p>
+      )}
       {message && phase === "error" && <p className="mt-2 text-center text-sm font-semibold text-status-danger">{message}</p>}
       {message && phase === "done" && <p className="mt-2 text-center text-sm font-semibold text-status-success">{message}</p>}
 
       <button
         onClick={handlePunch}
-        disabled={busy || phase === "done"}
+        disabled={busy || phase === "done" || locked}
         className="mt-4 flex h-16 w-full items-center justify-center gap-2.5 rounded-2xl bg-primary font-bold text-white disabled:opacity-60"
       >
         {busy ? (
