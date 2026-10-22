@@ -47,7 +47,9 @@ export async function listEmployees(orgId: string, filters: EmployeeListFilters)
     );
   }
   if (filters.departmentId) query = query.eq("department_id", filters.departmentId);
+  // Resigned / terminated people are out of the system: hidden unless that status is picked.
   if (filters.status) query = query.eq("employment_status", filters.status);
+  else query = query.not("employment_status", "in", "(resigned,terminated)");
 
   const { data, count, error } = await query;
   if (error) throw error;

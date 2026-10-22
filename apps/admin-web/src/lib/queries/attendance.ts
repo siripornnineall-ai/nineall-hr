@@ -243,10 +243,11 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
   const query = supabase
     .from("attendance_records")
     .select(
-      "id, work_date, employee_id, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees(employee_code, first_name, last_name, photo_url, manager_employee_id, hide_late_status)"
+      "id, work_date, employee_id, clock_in_server_at, clock_out_server_at, status, late_minutes, ot_minutes, clock_in_within_geofence, clock_in_selfie_path, needs_review, shift_id, work_location_id, employees!inner(employee_code, first_name, last_name, photo_url, manager_employee_id, hide_late_status)"
     )
     .eq("org_id", orgId)
     .eq("work_date", workDate)
+    .not("employees.employment_status", "in", "(resigned,terminated)")
     .order("clock_in_server_at", { ascending: true });
 
   const [{ data, error }, { data: holiday }, { data: leaveRows }, { data: swapDayOffs }, { data: holidayWorkers }] = await Promise.all([

@@ -21,10 +21,11 @@ export default async function LeavePage() {
     supabase
       .from("leave_requests")
       .select(
-        "id, start_date, end_date, total_days, unit, start_time, end_time, status, reason, created_at, leave_type_id, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey(employee_code, first_name, last_name, photo_url, manager_employee_id), leave_types(name_th)"
+        "id, start_date, end_date, total_days, unit, start_time, end_time, status, reason, created_at, leave_type_id, approval_stage, manager_decided_by, manager_decision, manager_comment, employees!leave_requests_employee_id_fkey!inner(employee_code, first_name, last_name, photo_url, manager_employee_id), leave_types(name_th)"
       )
       .eq("org_id", user.orgId)
       .neq("approval_stage", "manager")
+      .not("employees.employment_status", "in", "(resigned,terminated)")
       .order("created_at", { ascending: false })
       .limit(50),
     supabase.from("leave_types").select("id, name_th").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),

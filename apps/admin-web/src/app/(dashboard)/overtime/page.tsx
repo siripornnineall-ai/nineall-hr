@@ -44,9 +44,10 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
   let query = supabase
     .from("overtime_requests")
     .select(
-      "id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status, reason, task_description, source, employees(employee_code, first_name, last_name, photo_url)"
+      "id, work_date, start_time, end_time, requested_hours, approved_hours, rate_multiplier, status, reason, task_description, source, employees!inner(employee_code, first_name, last_name, photo_url)"
     )
     .eq("org_id", user.orgId)
+    .not("employees.employment_status", "in", "(resigned,terminated)")
     .gte("work_date", start)
     .lte("work_date", end);
   if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
