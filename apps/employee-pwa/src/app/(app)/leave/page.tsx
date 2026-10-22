@@ -11,6 +11,8 @@ import { t, useT } from "@/lib/i18n";
 interface LeaveType {
   id: string;
   name_th: string;
+  code: string;
+  notice_days_required: number;
   allow_half_day: boolean;
   allow_hourly: boolean;
   requires_attachment: boolean;
@@ -66,10 +68,10 @@ export default function LeavePage() {
   const load = useCallback(async () => {
     if (!profile) return;
     const [{ data: types }, { data: policies }, { data: reqs }] = await Promise.all([
-      supabase.from("leave_types").select("id, name_th").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
+      supabase.from("leave_types").select("id, name_th, code").eq("org_id", profile.orgId).eq("is_active", true).order("sort_order"),
       supabase
         .from("leave_policies")
-        .select("leave_type_id, allow_half_day, allow_hourly, requires_attachment, attachment_required_after_days, effective_date")
+        .select("leave_type_id, allow_half_day, allow_hourly, requires_attachment, attachment_required_after_days, notice_days_required, effective_date")
         .order("effective_date", { ascending: false }),
       supabase
         .from("leave_requests")
@@ -80,7 +82,7 @@ export default function LeavePage() {
     ]);
     const latestPolicyByType = new Map<
       string,
-      { allow_half_day: boolean; allow_hourly: boolean; requires_attachment: boolean; attachment_required_after_days: number }
+      { allow_half_day: boolean; allow_hourly: boolean; requires_attachment: boolean; attachment_required_after_days: number; notice_days_required: number }
     >();
     for (const p of policies ?? []) {
       if (!latestPolicyByType.has(p.leave_type_id)) latestPolicyByType.set(p.leave_type_id, p);
@@ -91,6 +93,8 @@ export default function LeavePage() {
       allow_hourly: latestPolicyByType.get(t.id)?.allow_hourly ?? false,
       requires_attachment: latestPolicyByType.get(t.id)?.requires_attachment ?? false,
       attachment_required_after_days: latestPolicyByType.get(t.id)?.attachment_required_after_days ?? 0,
+      // Only ลากิจ and ลาพักร้อน are locked to advance notice (the database enforces the same rule).
+      notice_days_required: t.code === "PERSONAL" || t.code === "VACATION" ? (latestPolicyByType.get(t.id)?.notice_days_required ?? 0) : 0,
     }));
     setLeaveTypes(typesWithPolicy);
     setRequests((reqs ?? []) as unknown as LeaveRequestRow[]);
@@ -98,6 +102,14 @@ export default function LeavePage() {
   }, [profile, supabase]);
 
   const selectedLeaveType = leaveTypes.find((t) => t.id === selectedType) ?? null;
+  // Earliest start date allowed for the chosen type: today (Bangkok) + the notice days.
+  const noticeDays = selectedLeaveType?.notice_days_required ?? 0;
+  const earliestStart = (() => {
+    const base = new Date(`${new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date())}T00:00:00Z`);
+    base.setUTCDate(base.getUTCDate() + noticeDays);
+    return base.toISOString().slice(0, 10);
+  })();
+  const noticeViolated = noticeDays > 0 && !!startDate && startDate < earliestStart;
 
   useEffect(() => {
     load();
@@ -137,6 +149,10 @@ export default function LeavePage() {
     setError(null);
     setSuccess(null);
     const totalDays = computeTotalDays();
+    if (noticeViolated) {
+      setError(`${t(selectedLeaveType?.name_th ?? "")} ${t("ต้องขอล่วงหน้าอย่างน้อย")} ${noticeDays} ${t("วัน")}`);
+      return;
+    }
     if (!selectedType || !startDate || totalDays <= 0 || !reason) {
       setError(t("กรุณากรอกข้อมูลให้ครบถ้วน"));
       return;
@@ -230,6 +246,12 @@ export default function LeavePage() {
           </div>
         </div>
 
+        {noticeDays > 0 && (
+          <p className="rounded-xl bg-status-warning/10 px-3 py-2 text-xs font-semibold text-status-warning">
+            {t(selectedLeaveType?.name_th ?? "")} {t("ต้องขอล่วงหน้าอย่างน้อย")} {noticeDays} {t("วัน")} ({t("ลาได้ตั้งแต่")} {earliestStart})
+          </p>
+        )}
+
         {(selectedLeaveType?.allow_half_day || selectedLeaveType?.allow_hourly) && (
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("ช่วงเวลาลา")}</label>
@@ -250,7 +272,7 @@ export default function LeavePage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่เริ่ม")}</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
+              <input type="date" min={noticeDays > 0 ? earliestStart : undefined} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่สิ้นสุด")}</label>
@@ -263,7 +285,7 @@ export default function LeavePage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่ลา")}</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
+              <input type="date" min={noticeDays > 0 ? earliestStart : undefined} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("ช่วง")}</label>
@@ -279,7 +301,7 @@ export default function LeavePage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่ลา")}</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
+              <input type="date" min={noticeDays > 0 ? earliestStart : undefined} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -332,7 +354,7 @@ export default function LeavePage() {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || noticeViolated}
           className="h-12 w-full rounded-2xl bg-primary font-bold text-white disabled:opacity-60"
         >
           {uploadingAttachment ? t("กำลังอัปโหลดเอกสาร...") : submitting ? t("กำลังส่ง...") : t("ส่งคำขอลา")}
