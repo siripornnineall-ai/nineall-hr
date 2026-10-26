@@ -23,3 +23,15 @@ export function shiftOtCutoffMonthKey(monthKey: string, delta: number): string {
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+
+// Staff flagged ot_calendar_month (Burmese / Lao, owner 2026-10-26) have OT counted over the
+// calendar month instead of the 26th-25th cycle. Same monthKey meaning: "2026-10" is October
+// 1-31 for them and 26 Sep - 25 Oct for everyone else, so both belong to the same payroll month.
+export function getOtWindowFor(calendarMonth: boolean, monthKey: string): { start: string; end: string } {
+  if (!calendarMonth) return getOtCutoffWindow(monthKey);
+  const [y, m] = monthKey.split("-").map(Number);
+  return {
+    start: new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10),
+    end: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10),
+  };
+}

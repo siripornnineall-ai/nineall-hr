@@ -8,7 +8,7 @@ import { Avatar } from "@/components/Avatar";
 import { AddBackdatedAttendanceForm } from "./AddBackdatedAttendanceForm";
 import { EmployeeAttendanceRow } from "./EmployeeAttendanceRow";
 import { signAvatarUrls } from "@/lib/avatars";
-import { getOtCutoffWindow, currentOtCutoffMonthKey } from "@/lib/otCutoff";
+import { getOtWindowFor, currentOtCutoffMonthKey } from "@/lib/otCutoff";
 import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
 import { explainDayLeave } from "@/lib/leaveDuration";
 
@@ -45,7 +45,7 @@ export default async function EmployeeAttendanceDashboardPage({
 
   const { data: employee } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, photo_url, hide_late_status, late_deduct_from_prev_ot_since, job_positions(title), departments(name)")
+    .select("id, employee_code, first_name, last_name, photo_url, hide_late_status, late_deduct_from_prev_ot_since, ot_calendar_month, job_positions(title), departments(name)")
     .eq("org_id", user.orgId)
     .eq("id", employeeId)
     .maybeSingle();
@@ -96,7 +96,7 @@ export default async function EmployeeAttendanceDashboardPage({
   const workedHolidayBySwap = new Set((holidaySwapRows ?? []).map((r) => r.holiday_date));
 
   // Net OT for the current 26th-25th cycle: approved OT minus the lateness that comes off it.
-  const otWindow = getOtCutoffWindow(currentOtCutoffMonthKey());
+  const otWindow = getOtWindowFor(!!employee.ot_calendar_month, currentOtCutoffMonthKey());
   const [{ data: otRows }, { data: lateRows }] = await Promise.all([
     supabase.from("overtime_requests").select("approved_hours, requested_hours").eq("employee_id", employeeId).eq("status", "approved").gte("work_date", otWindow.start).lte("work_date", otWindow.end),
     supabase.from("attendance_records").select("late_minutes").eq("employee_id", employeeId).eq("status", "late").gt("late_minutes", 0).gte("work_date", otWindow.start).lte("work_date", otWindow.end),

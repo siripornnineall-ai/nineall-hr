@@ -11,7 +11,7 @@ import { AnnouncementBanner } from "./AnnouncementBanner";
 import { BirthdayBanner } from "./BirthdayBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useT } from "@/lib/i18n";
-import { currentOtCutoffMonthKey, getOtCutoffWindow } from "@/lib/otCutoff";
+import { currentOtCutoffMonthKey, getOtWindowFor } from "@/lib/otCutoff";
 
 interface HomeStats {
   leaveDaysRemaining: number;
@@ -65,7 +65,7 @@ export default function HomePage() {
     const today = new Date().toISOString().slice(0, 10);
     const year = new Date().getFullYear();
     // OT counts per the payroll cutoff (26th to 25th), net of un-made-up lateness.
-    const otCycle = getOtCutoffWindow(currentOtCutoffMonthKey());
+    const otCycle = getOtWindowFor(profile.otCalendarMonth, currentOtCutoffMonthKey());
 
     const [balances, ot, leaveReq, otReq, todayAttendance, lateCycle] = await Promise.all([
       supabase.from("leave_balances").select("entitled_days, carried_over_days, used_days, pending_days, leave_types(code)").eq("employee_id", profile.employeeId).eq("year", year),

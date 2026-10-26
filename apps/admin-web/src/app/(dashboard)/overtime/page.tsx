@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
 import { signAvatarUrls } from "@/lib/avatars";
-import { getOtCutoffWindow, currentOtCutoffMonthKey, shiftOtCutoffMonthKey } from "@/lib/otCutoff";
+import { getOtCutoffWindow, getOtWindowFor, currentOtCutoffMonthKey, shiftOtCutoffMonthKey } from "@/lib/otCutoff";
 import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
 import { OtRow } from "./OtRow";
 import { AddBackdatedOvertimeForm } from "./AddBackdatedOvertimeForm";
@@ -14,8 +14,9 @@ function parseMonthKey(month: string | undefined): string {
 
 function formatCutoffLabel(monthKey: string): string {
   const { start, end } = getOtCutoffWindow(monthKey);
+  const cal = getOtWindowFor(true, monthKey);
   const fmt = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  return `${fmt(start)} – ${fmt(end)}`;
+  return `${fmt(start)} – ${fmt(end)} (พม่า/ลาว: ${fmt(cal.start)} – ${fmt(cal.end)})`;
 }
 
 export default async function OvertimePage({ searchParams }: { searchParams: Promise<{ month?: string; employeeId?: string }> }) {
@@ -24,13 +25,17 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
   const supabase = await createClient();
 
   const monthKey = parseMonthKey(monthParam);
-  const { start, end } = getOtCutoffWindow(monthKey);
+  // Two windows: 26th-25th for most staff, the calendar month for staff flagged ot_calendar_month.
+  const cycleWin = getOtCutoffWindow(monthKey);
+  const calWin = getOtWindowFor(true, monthKey);
+  const start = cycleWin.start < calWin.start ? cycleWin.start : calWin.start;
+  const end = cycleWin.end > calWin.end ? cycleWin.end : calWin.end;
   const prevMonthKey = shiftOtCutoffMonthKey(monthKey, -1);
   const nextMonthKey = shiftOtCutoffMonthKey(monthKey, 1);
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, nickname, late_deduct_from_prev_ot_since")
+    .select("id, employee_code, first_name, last_name, nickname, late_deduct_from_prev_ot_since, ot_calendar_month")
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
     .in("employment_status", ["active", "probation"])
@@ -51,19 +56,26 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
     .gte("work_date", start)
     .lte("work_date", end);
   if (selectedEmployee) query = query.eq("employee_id", selectedEmployee.id);
-  const { data } = await query.order("work_date", { ascending: false });
+  const { data: dataAll } = await query.order("work_date", { ascending: false });
+  const calendarCodes = new Set((employees ?? []).filter((e) => (e as { ot_calendar_month?: boolean }).ot_calendar_month).map((e) => e.employee_code));
+  const inWindow = (code: string | undefined, date: string) => {
+    const w = code && calendarCodes.has(code) ? calWin : cycleWin;
+    return date >= w.start && date <= w.end;
+  };
+  const data = (dataAll ?? []).filter((r) => inWindow((r.employees as unknown as { employee_code: string } | null)?.employee_code, r.work_date as string));
 
   // Uncompensated late minutes in the same window — company rule: they come off OT.
   let lateQuery = supabase
     .from("attendance_records")
-    .select("late_minutes, employees!inner(employee_code)")
+    .select("late_minutes, work_date, employees!inner(employee_code)")
     .eq("org_id", user.orgId)
     .eq("status", "late")
     .gt("late_minutes", 0)
     .gte("work_date", start)
     .lte("work_date", end);
   if (selectedEmployee) lateQuery = lateQuery.eq("employee_id", selectedEmployee.id);
-  const { data: lateRows } = await lateQuery;
+  const { data: lateRowsAll } = await lateQuery;
+  const lateRows = (lateRowsAll ?? []).filter((r) => inWindow((r.employees as unknown as { employee_code: string } | null)?.employee_code, r.work_date as string));
   const lateMinutesByCode = new Map<string, number>();
   for (const r of lateRows ?? []) {
     const code = (r.employees as unknown as { employee_code: string } | null)?.employee_code;

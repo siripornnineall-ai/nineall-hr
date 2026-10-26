@@ -421,6 +421,7 @@ export async function updateEmployeeAction(
       attendance_exempt: formData.get("attendanceExempt") === "on",
       tax_exempt: formData.get("taxExempt") === "on",
       social_security_exempt: formData.get("socialSecurityExempt") === "on",
+      ot_calendar_month: formData.get("otCalendarMonth") === "on",
       // Late minutes come off the previous OT cycle (kept date = when the rule started).
       late_deduct_from_prev_ot_since:
         formData.get("lateFromPrevOt") === "on"

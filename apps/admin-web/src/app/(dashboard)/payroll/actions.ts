@@ -8,7 +8,7 @@ import { requireRole, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { loadPolicyConfig } from "@/lib/payroll/policy";
 import { generatePayslipBuffer } from "@/lib/pdf/generatePayslipBuffer";
-import { getOtCutoffWindow } from "@/lib/otCutoff";
+import { getOtWindowFor } from "@/lib/otCutoff";
 import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
 
 export async function createPayrollRunAction(formData: FormData) {
@@ -131,7 +131,7 @@ export async function calculatePayrollRunAction(runId: string) {
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, social_security_exempt, late_deduct_from_prev_ot_since, departments(name), job_positions(title)"
+      "id, employee_code, first_name, last_name, employment_type, hire_date, resignation_date, employment_status, attendance_exempt, tax_exempt, social_security_exempt, late_deduct_from_prev_ot_since, ot_calendar_month, departments(name), job_positions(title)"
     )
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
@@ -153,7 +153,8 @@ export async function calculatePayrollRunAction(runId: string) {
       .maybeSingle();
     if (!comp) return null; // no compensation on file yet — surfaced in the UI as "missing data"
 
-    const otWindow = getOtCutoffWindow(period.period_start.slice(0, 7));
+    // OT window: 26th-25th, or the calendar month for staff flagged ot_calendar_month.
+    const otWindow = getOtWindowFor(!!emp.ot_calendar_month, period.period_start.slice(0, 7));
     // Only daily-wage employees get a forward projection — monthly/contract already get
     // full pay regardless of remaining days, and hourly/part-time have no reliable
     // schedule-based hours to project. Only queried when the period genuinely still has

@@ -44,6 +44,7 @@ interface EmployeeRow {
   tax_exempt: boolean;
   social_security_exempt: boolean;
   late_deduct_from_prev_ot_since: string | null;
+  ot_calendar_month: boolean;
 }
 
 const initialState: UpdateEmployeeState = {};
@@ -193,6 +194,11 @@ export function EditEmployeeForm({
         <input type="checkbox" name="lateFromPrevOt" defaultChecked={!!employee.late_deduct_from_prev_ot_since} className="h-4 w-4 accent-primary" />
         <input type="hidden" name="lateFromPrevOtSince" value={employee.late_deduct_from_prev_ot_since ?? ""} />
         หักค่ามาสาย (ที่ไม่ได้ทด) จาก OT ของรอบก่อนที่ตัดไปแล้ว
+      </label>
+
+      <label className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm font-semibold">
+        <input type="checkbox" name="otCalendarMonth" defaultChecked={employee.ot_calendar_month} className="h-4 w-4 accent-primary" />
+        นับ OT ตามเดือนปฏิทิน (วันที่ 1 ถึงสิ้นเดือน) แทนรอบ 26 ถึง 25 (ใช้กับพนักงานพม่า/ลาว)
       </label>
 
       <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">

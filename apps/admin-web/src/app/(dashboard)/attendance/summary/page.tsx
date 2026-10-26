@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/Topbar";
-import { getOtCutoffWindow, currentOtCutoffMonthKey, shiftOtCutoffMonthKey } from "@/lib/otCutoff";
+import { getOtCutoffWindow, getOtWindowFor, currentOtCutoffMonthKey, shiftOtCutoffMonthKey } from "@/lib/otCutoff";
 import { ExportCsvButton } from "./ExportCsvButton";
 
 // Month summary for payroll (owner 2026-10-26): per employee, how many days worked, how many hours,
@@ -74,12 +74,18 @@ export default async function AttendanceSummaryPage({ searchParams }: { searchPa
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, nickname, hire_date, departments(name)")
+    .select("id, employee_code, first_name, last_name, nickname, hire_date, ot_calendar_month, departments(name)")
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
     .in("employment_status", ["active", "probation"])
     .lte("hire_date", end)
     .order("employee_code");
+
+  // OT window per person: 26th-25th, or the calendar month for staff flagged ot_calendar_month.
+  const otCycle = getOtCutoffWindow(monthKey);
+  const otCal = getOtWindowFor(true, monthKey);
+  const otFetchStart = otCycle.start < otCal.start ? otCycle.start : otCal.start;
+  const otFetchEnd = otCycle.end > otCal.end ? otCycle.end : otCal.end;
 
   const [attendance, assignments, leaves, ot] = await Promise.all([
     fetchAll<{ employee_id: string; work_date: string; status: string; worked_minutes: number | null; late_minutes: number | null; early_leave_minutes: number | null }>((from, to) =>
@@ -100,8 +106,8 @@ export default async function AttendanceSummaryPage({ searchParams }: { searchPa
         .gte("end_date", start)
         .range(from, to)
     ),
-    fetchAll<{ employee_id: string; approved_hours: number | null; requested_hours: number }>((from, to) =>
-      supabase.from("overtime_requests").select("employee_id, approved_hours, requested_hours").eq("org_id", user.orgId).eq("status", "approved").gte("work_date", start).lte("work_date", end).range(from, to)
+    fetchAll<{ employee_id: string; work_date: string; approved_hours: number | null; requested_hours: number }>((from, to) =>
+      supabase.from("overtime_requests").select("employee_id, work_date, approved_hours, requested_hours").eq("org_id", user.orgId).eq("status", "approved").gte("work_date", otFetchStart).lte("work_date", otFetchEnd).range(from, to)
     ),
   ]);
 
@@ -156,7 +162,8 @@ export default async function AttendanceSummaryPage({ searchParams }: { searchPa
     const leaveDaysTotal = Math.round(lines.reduce((s, l) => s + l.days, 0) * 100) / 100;
     const hourlyMinutesTotal = lines.reduce((s, l) => s + l.minutes, 0);
     const hourlyDaysTotal = Math.round(lines.filter((l) => l.unit === "hourly").reduce((s, l) => s + l.days, 0) * 100) / 100;
-    const otHours = ot.filter((o) => o.employee_id === e.id).reduce((s, o) => s + Number(o.approved_hours ?? o.requested_hours ?? 0), 0);
+    const otWin = e.ot_calendar_month ? otCal : otCycle;
+    const otHours = ot.filter((o) => o.employee_id === e.id && o.work_date >= otWin.start && o.work_date <= otWin.end).reduce((s, o) => s + Number(o.approved_hours ?? o.requested_hours ?? 0), 0);
 
     return {
       id: e.id,
@@ -217,7 +224,7 @@ export default async function AttendanceSummaryPage({ searchParams }: { searchPa
         </div>
 
         <p className="text-xs text-on-surface-variant">
-          ชั่วโมงทำงาน = เวลาลงเวลาจริงหักพักเที่ยง · ลารายชั่วโมงไม่นับช่วงพัก 12:00-13:00 และแปลงเป็นวันตามความยาวกะ · ใบลาที่ข้ามช่วงนี้นับเฉพาะวันที่อยู่ในช่วง · คนที่ลาออกไม่แสดง
+          ชั่วโมงทำงาน = เวลาลงเวลาจริงหักพักเที่ยง · ลารายชั่วโมงไม่นับช่วงพัก 12:00-13:00 และแปลงเป็นวันตามความยาวกะ · ใบลาที่ข้ามช่วงนี้นับเฉพาะวันที่อยู่ในช่วง · คนที่ลาออกไม่แสดง · OT: พนักงานทั่วไปนับรอบ 26 ถึง 25 ของเดือนนี้ ({fmtDate(otCycle.start)} – {fmtDate(otCycle.end)}) ส่วนพม่า/ลาวนับ 1 ถึงสิ้นเดือน ({fmtDate(otCal.start)} – {fmtDate(otCal.end)})
         </p>
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">

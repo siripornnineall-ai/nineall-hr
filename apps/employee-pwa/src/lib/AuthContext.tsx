@@ -16,6 +16,7 @@ export interface EmployeeProfile {
   photoUrl: string | null;
   jobTitle: string | null;
   hideLateStatus: boolean;
+  otCalendarMonth: boolean;
 }
 
 interface AuthContextValue {
@@ -37,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function loadProfile(userId: string) {
     const { data } = await supabase
       .from("profiles")
-      .select("id, org_id, employee_id, role, full_name, must_change_password, employees(employee_code, photo_url, hide_late_status, job_positions(title))")
+      .select("id, org_id, employee_id, role, full_name, must_change_password, employees(employee_code, photo_url, hide_late_status, ot_calendar_month, job_positions(title))")
       .eq("id", userId)
       .maybeSingle();
 
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
-    const employee = data.employees as unknown as { employee_code: string; photo_url: string | null; hide_late_status: boolean | null; job_positions: { title: string } | null } | null;
+    const employee = data.employees as unknown as { employee_code: string; photo_url: string | null; hide_late_status: boolean | null; ot_calendar_month: boolean | null; job_positions: { title: string } | null } | null;
 
     // photo_url is a private-bucket storage path, not a fetchable URL — resolve it to a
     // short-lived signed URL here so every consumer of `profile.photoUrl` can drop it
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       photoUrl,
       jobTitle: employee?.job_positions?.title ?? null,
       hideLateStatus: !!employee?.hide_late_status,
+      otCalendarMonth: !!employee?.ot_calendar_month,
     });
   }
 

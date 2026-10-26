@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
-import { currentOtCutoffMonthKey, getOtCutoffWindow } from "@/lib/otCutoff";
+import { currentOtCutoffMonthKey, getOtWindowFor } from "@/lib/otCutoff";
 import { t, useT } from "@/lib/i18n";
 
 interface OvertimeRow {
@@ -66,7 +66,7 @@ export default function OvertimePage() {
 
   const load = useCallback(async () => {
     if (!profile) return;
-    const cycle = getOtCutoffWindow(currentOtCutoffMonthKey());
+    const cycle = getOtWindowFor(profile.otCalendarMonth, currentOtCutoffMonthKey());
     const [{ data: reqs }, { data: holidays }, { data: lateRows }] = await Promise.all([
       supabase
         .from("overtime_requests")
@@ -108,7 +108,7 @@ export default function OvertimePage() {
   // "This month" here means the same OT cutoff window payroll actually pays out on (26th
   // of the prior month through the 25th), not the calendar month — otherwise this figure
   // wouldn't match what shows up on the payslip.
-  const otWindow = getOtCutoffWindow(currentOtCutoffMonthKey());
+  const otWindow = getOtWindowFor(!!profile?.otCalendarMonth, currentOtCutoffMonthKey());
   const approvedHoursThisMonth = requests
     .filter((r) => r.status === "approved" && r.work_date >= otWindow.start && r.work_date <= otWindow.end)
     .reduce((sum, r) => sum + Number(r.approved_hours ?? 0), 0);
