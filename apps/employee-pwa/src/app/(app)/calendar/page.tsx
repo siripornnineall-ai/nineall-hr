@@ -68,6 +68,7 @@ export default function CalendarPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [leaveRanges, setLeaveRanges] = useState<LeaveRange[]>([]);
   const [attendanceDays, setAttendanceDays] = useState<AttendanceDay[]>([]);
+  const [coveredLate, setCoveredLate] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -98,6 +99,13 @@ export default function CalendarPage() {
     setHolidays(h ?? []);
     setLeaveRanges((l ?? []) as unknown as LeaveRange[]);
     setAttendanceDays(a ?? []);
+    // Late days covered by approved OT show as on time (staff on that rule only).
+    if (profile.hideLateStatus) {
+      const { data: covered } = await supabase.rpc("late_covered_dates", { p_employee_id: profile.employeeId, p_from: toIso(monthStart), p_to: toIso(monthEnd) });
+      setCoveredLate(new Set((covered ?? []) as string[]));
+    } else {
+      setCoveredLate(new Set());
+    }
   }, [profile, supabase, viewDate]);
 
   useEffect(() => {
@@ -156,7 +164,7 @@ export default function CalendarPage() {
             const attendance = attendanceByDate.get(iso);
             const isToday = iso === todayIso;
             const isSelected = iso === selectedDate;
-            const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status === "late" && profile?.hideLateStatus ? "on_time" : attendance.status] : undefined;
+            const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status === "late" && coveredLate.has(attendance.work_date) ? "on_time" : attendance.status] : undefined;
             return (
               <button
                 key={idx}
@@ -211,7 +219,7 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">สถานะ</p>
-                    <p className="font-semibold text-on-surface">{STATUS_TH[attendance.status === "late" && profile?.hideLateStatus ? "on_time" : attendance.status] ?? attendance.status}</p>
+                    <p className="font-semibold text-on-surface">{STATUS_TH[attendance.status === "late" && coveredLate.has(attendance.work_date) ? "on_time" : attendance.status] ?? attendance.status}</p>
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">มาสาย</p>

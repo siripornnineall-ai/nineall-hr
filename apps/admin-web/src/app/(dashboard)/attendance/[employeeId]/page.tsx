@@ -108,6 +108,12 @@ export default async function EmployeeAttendanceDashboardPage({
   const cycleNetOtHours = Math.max(0, cycleOtHours - cycleLateMinutes / 60);
   const fmtCycleDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
 
+  // Late days covered by OT show as on time for staff on that rule; uncovered ones stay "late".
+  const coveredLate = new Set<string>();
+  if (employee.hide_late_status) {
+    const { data: covered } = await supabase.rpc("late_covered_dates", { p_employee_id: employeeId, p_from: monthStart, p_to: monthEnd });
+    for (const d of (covered ?? []) as string[]) coveredLate.add(d);
+  }
   const holidayNameByDate = new Map((holidayRows ?? []).map((h) => [h.holiday_date, h.name]));
   function leavesForDate(workDate: string) {
     return (leaveRows ?? [])
@@ -244,7 +250,7 @@ export default async function EmployeeAttendanceDashboardPage({
                       clockOut: r.clock_out_server_at,
                       lateMinutes: r.late_minutes ?? 0,
                       otMinutes: r.ot_minutes ?? 0,
-                      status: r.status === "late" && employee.hide_late_status ? "on_time" : r.status,
+                      status: r.status === "late" && coveredLate.has(r.work_date) ? "on_time" : r.status,
                       statusDetail:
                         r.status === "leave"
                           ? leaveTypeForDate(r.work_date)

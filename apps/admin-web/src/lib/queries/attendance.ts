@@ -294,6 +294,18 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
   );
 
+  // Staff on the "late shown as on time when OT covers it" rule (hide_late_status): ask the database
+  // which of their late days are actually covered by approved OT; the rest show as late.
+  const coveredLateEmployees = new Set<string>();
+  await Promise.all(
+    (data ?? [])
+      .filter((r) => r.status === "late" && (r.employees as unknown as { hide_late_status: boolean | null } | null)?.hide_late_status)
+      .map(async (r) => {
+        const { data: dates } = await supabase.rpc("late_covered_dates", { p_employee_id: r.employee_id, p_from: workDate, p_to: workDate });
+        if ((dates ?? []).length > 0) coveredLateEmployees.add(r.employee_id);
+      })
+  );
+
   const rows: AttendanceRow[] = (data ?? []).map((r) => {
     const emp = r.employees as unknown as {
       employee_code: string;
@@ -323,7 +335,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       clockIn: r.clock_in_server_at,
       clockOut: r.clock_out_server_at,
       // Ice / Kanin: shown as on time; the late minutes still drive the OT deduction.
-      status: r.status === "late" && emp?.hide_late_status ? "on_time" : r.status,
+      status: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? "on_time" : r.status,
       statusDetail,
       lateMinutes: r.late_minutes,
       otMinutes: r.ot_minutes,

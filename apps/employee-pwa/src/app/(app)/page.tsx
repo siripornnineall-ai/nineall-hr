@@ -18,6 +18,7 @@ interface HomeStats {
   otHoursThisMonth: number;
   pendingRequests: number;
   todayStatus: string | null;
+  todayLateCovered: boolean;
   todayClockIn: string | null;
 }
 
@@ -76,6 +77,13 @@ export default function HomePage() {
       supabase.from("attendance_records").select("late_minutes").eq("employee_id", profile.employeeId).eq("status", "late").gt("late_minutes", 0).gte("work_date", otCycle.start).lte("work_date", otCycle.end),
     ]);
 
+    // "Late" is shown as on time only when approved OT covers it (staff on that rule).
+    let todayLateCovered = false;
+    if (profile.hideLateStatus && todayAttendance.data?.status === "late") {
+      const { data: covered } = await supabase.rpc("late_covered_dates", { p_employee_id: profile.employeeId, p_from: today, p_to: today });
+      todayLateCovered = (covered ?? []).length > 0;
+    }
+
     const leaveDaysRemaining = (balances.data ?? [])
       .filter((b) => countsTowardLeaveQuota((b.leave_types as unknown as { code: string } | null)?.code))
       .reduce((sum, b) => sum + Number(b.entitled_days) + Number(b.carried_over_days) - Number(b.used_days) - Number(b.pending_days), 0);
@@ -88,6 +96,7 @@ export default function HomePage() {
       otHoursThisMonth: otHours,
       pendingRequests: (leaveReq.count ?? 0) + (otReq.count ?? 0),
       todayStatus: todayAttendance.data?.status ?? null,
+      todayLateCovered,
       todayClockIn: todayAttendance.data?.clock_in_server_at ?? null,
     });
   }, [profile, supabase]);
@@ -162,7 +171,7 @@ export default function HomePage() {
                 ? `${t("เข้างานวันนี้:")} ${new Date(stats.todayClockIn).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })}`
                 : t("ยังไม่ลงเวลาเข้างานวันนี้")}
             </p>
-            {stats?.todayStatus && <p className="mt-0.5 text-sm font-bold text-status-success">{t(STATUS_TH[stats.todayStatus === "late" && profile?.hideLateStatus ? "on_time" : stats.todayStatus] ?? stats.todayStatus)}</p>}
+            {stats?.todayStatus && <p className="mt-0.5 text-sm font-bold text-status-success">{t(STATUS_TH[stats.todayStatus === "late" && stats.todayLateCovered ? "on_time" : stats.todayStatus] ?? stats.todayStatus)}</p>}
           </div>
         </div>
 
