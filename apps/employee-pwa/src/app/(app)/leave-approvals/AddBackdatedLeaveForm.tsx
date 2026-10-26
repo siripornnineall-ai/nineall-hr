@@ -77,9 +77,19 @@ export function AddBackdatedLeaveForm({ orgId, onSaved }: { orgId: string; onSav
   function computeHourlyHours(): number {
     const [sh, sm] = hourlyStart.split(":").map(Number);
     const [eh, em] = hourlyEnd.split(":").map(Number);
-    const hours = eh + em / 60 - (sh + sm / 60);
-    return hours > 0 ? hours : 0;
+    const start = sh + sm / 60;
+    const end = eh + em / 60;
+    // The 12:00-13:00 lunch break is not leave time.
+    const lunchOverlap = Math.max(0, Math.min(end, 13) - Math.max(start, 12));
+    const hours = end - start - lunchOverlap;
+    return hours > 0 ? Math.round(hours * 100) / 100 : 0;
   }
+
+  // Derived on every render: the old code recomputed it inside the time inputs' onChange from
+  // the PREVIOUS time (state had not updated yet), so changing 09:00-12:00 to 17:00-18:00 left
+  // the day count at 0 and the form refused to save (reported 2026-10-26). The database sets the
+  // final figure from the shift length anyway; this is the value shown and sent.
+  const effectiveTotalDays = unit === "hourly" ? String(Math.round((computeHourlyHours() / 8) * 100) / 100) : unit === "half_day" ? "0.5" : totalDays;
 
   function changeUnit(next: Unit) {
     setUnit(next);
@@ -107,7 +117,7 @@ export function AddBackdatedLeaveForm({ orgId, onSaved }: { orgId: string; onSav
     if (!leaveTypeId || !startDate) return setError("กรุณากรอกข้อมูลให้ครบถ้วน");
     const effectiveEndDate = unit === "full_day" ? endDate : startDate;
     if (unit === "full_day" && (!endDate || endDate < startDate)) return setError("วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มลา");
-    const totalDaysNum = Number(totalDays);
+    const totalDaysNum = Number(effectiveTotalDays);
     if (!Number.isFinite(totalDaysNum) || totalDaysNum <= 0) return setError("จำนวนวันลาไม่ถูกต้อง");
 
     const startTime = unit === "half_day" ? (halfDayPeriod === "morning" ? "08:00" : "13:00") : unit === "hourly" ? hourlyStart : null;
@@ -242,7 +252,6 @@ export function AddBackdatedLeaveForm({ orgId, onSaved }: { orgId: string; onSav
                 value={hourlyStart}
                 onChange={(e) => {
                   setHourlyStart(e.target.value);
-                  setTotalDays(String(Math.round((computeHourlyHours() / 8) * 100) / 100));
                 }}
                 className="mt-1 h-10 w-full rounded-lg border border-outline-variant px-3 text-sm"
               />
@@ -254,7 +263,6 @@ export function AddBackdatedLeaveForm({ orgId, onSaved }: { orgId: string; onSav
                 value={hourlyEnd}
                 onChange={(e) => {
                   setHourlyEnd(e.target.value);
-                  setTotalDays(String(Math.round((computeHourlyHours() / 8) * 100) / 100));
                 }}
                 className="mt-1 h-10 w-full rounded-lg border border-outline-variant px-3 text-sm"
               />
@@ -269,7 +277,7 @@ export function AddBackdatedLeaveForm({ orgId, onSaved }: { orgId: string; onSav
           type="number"
           step="0.5"
           min="0.01"
-          value={totalDays}
+          value={effectiveTotalDays}
           onChange={(e) => setTotalDays(e.target.value)}
           disabled={unit !== "full_day"}
           className="mt-1 h-10 w-full rounded-lg border border-outline-variant px-3 text-sm disabled:bg-surface-container-low disabled:text-on-surface-variant"
