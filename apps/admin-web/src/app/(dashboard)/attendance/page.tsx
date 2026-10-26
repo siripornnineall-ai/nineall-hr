@@ -62,6 +62,10 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
           <button type="submit" className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-white">
             ดูข้อมูล
           </button>
+          <Link href="/attendance/summary" className="flex h-10 items-center gap-1 rounded-lg border border-primary px-4 text-sm font-bold text-primary hover:bg-primary/5">
+            <span className="material-symbols-outlined text-[18px]">calculate</span>
+            สรุปวันทำงานรายเดือน
+          </Link>
         </form>
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm">
