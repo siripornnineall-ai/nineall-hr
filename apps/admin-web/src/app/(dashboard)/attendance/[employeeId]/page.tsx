@@ -155,11 +155,11 @@ export default async function EmployeeAttendanceDashboardPage({
   const rows = records ?? [];
   const count = (statuses: string[]) => rows.filter((r) => statuses.includes(r.status)).length;
   const workedDays = count(["on_time", "late", "work_from_home", "off_site", "early_leave"]);
-  const lateDays = count(["late"]);
+  const lateDays = rows.filter((r) => r.status === "late" && !coveredLate.has(r.work_date)).length;
   const leaveDays = count(["leave"]);
   const absentDays = count(["absent"]);
   const holidayDays = count(["holiday"]);
-  const totalLateMinutes = rows.reduce((sum, r) => sum + (r.late_minutes ?? 0), 0);
+  const totalLateMinutes = rows.reduce((sum, r) => sum + (r.status === "late" && coveredLate.has(r.work_date) ? 0 : (r.late_minutes ?? 0)), 0);
   const totalOtHours = rows.reduce((sum, r) => sum + (r.ot_minutes ?? 0), 0) / 60;
 
   const monthLabel = new Date(Date.UTC(year, monthIndex, 1)).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -248,7 +248,7 @@ export default async function EmployeeAttendanceDashboardPage({
                       workDateLabel: new Date(r.work_date).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }),
                       clockIn: r.clock_in_server_at,
                       clockOut: r.clock_out_server_at,
-                      lateMinutes: r.late_minutes ?? 0,
+                      lateMinutes: r.status === "late" && coveredLate.has(r.work_date) ? 0 : (r.late_minutes ?? 0),
                       otMinutes: r.ot_minutes ?? 0,
                       status: r.status === "late" && coveredLate.has(r.work_date) ? "on_time" : r.status,
                       statusDetail:
@@ -260,7 +260,9 @@ export default async function EmployeeAttendanceDashboardPage({
                               ? (swapLabelByDate.get(r.work_date) ?? null)
                               : workedHolidayBySwap.has(r.work_date)
                                 ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
-                                : explainDayLeave(leavesForDate(r.work_date), r.status),
+                                : r.status === "late" && coveredLate.has(r.work_date)
+                                  ? "หักจาก OT แล้ว"
+                                  : explainDayLeave(leavesForDate(r.work_date), r.status),
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,
                     }}

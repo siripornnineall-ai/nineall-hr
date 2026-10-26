@@ -223,7 +223,7 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">มาสาย</p>
-                    <p className="font-semibold text-on-surface">{attendance.late_minutes > 0 ? `${attendance.late_minutes} นาที` : "-"}</p>
+                    <p className="font-semibold text-on-surface">{attendance.late_minutes > 0 && !(attendance.status === "late" && coveredLate.has(attendance.work_date)) ? `${attendance.late_minutes} นาที` : "-"}</p>
                   </div>
                 </div>
               ) : (

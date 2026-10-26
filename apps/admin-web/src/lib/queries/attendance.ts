@@ -324,7 +324,9 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
             ? (swapLabelByEmployee.get(r.employee_id) ?? null)
             : holiday && workedHolidayBySwap.has(r.employee_id)
               ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
-              : explainDayLeave(leavesByEmployee.get(r.employee_id) ?? [], r.status);
+              : r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id)
+                ? "หักจาก OT แล้ว"
+                : explainDayLeave(leavesByEmployee.get(r.employee_id) ?? [], r.status);
     return {
       id: r.id,
       workDate: r.work_date,
@@ -337,7 +339,8 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       // Ice / Kanin: shown as on time; the late minutes still drive the OT deduction.
       status: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? "on_time" : r.status,
       statusDetail,
-      lateMinutes: r.late_minutes,
+      // Late minutes taken off OT are not shown (the number only confused: owner 2026-10-26).
+      lateMinutes: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? 0 : r.late_minutes,
       otMinutes: r.ot_minutes,
       withinGeofence: r.clock_in_within_geofence,
       selfiePath: r.clock_in_selfie_path,
