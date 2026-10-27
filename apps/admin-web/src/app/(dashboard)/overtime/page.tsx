@@ -203,13 +203,9 @@ export default async function OvertimePage({ searchParams }: { searchParams: Pro
                     <span className="font-semibold text-on-surface">{t.employeeName}</span>
                     <span className="ml-2 text-xs text-on-surface-variant">{t.employeeCode}</span>
                     {t.pendingCount > 0 && <span className="ml-2 text-xs font-semibold text-status-warning">(รออนุมัติอีก {t.pendingCount} รายการ)</span>}
-                    {t.lateMinutes > 0 && (
-                      <span className="ml-2 text-xs font-semibold text-status-danger">หักมาสาย {t.lateMinutes} นาที</span>
-                    )}
                   </div>
                   <span className="font-bold text-on-surface">
                     {t.netHours} ชม.
-                    {t.lateMinutes > 0 && <span className="ml-1 text-xs font-normal text-on-surface-variant">(OT {t.approvedHours})</span>}
                   </span>
                 </div>
               ))}

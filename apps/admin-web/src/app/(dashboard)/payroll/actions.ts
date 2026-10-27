@@ -263,7 +263,8 @@ export async function calculatePayrollRunAction(runId: string) {
       })),
       unpaidLeaveDays,
       lateMinutesForOtDeduction,
-      hideLateDeductionNote: !!emp.late_deduct_from_prev_ot_since,
+      // Admin side shows no lateness wording on the OT line for anyone (owner 2026-10-27); amounts are unchanged.
+      hideLateDeductionNote: true,
       recurringEarnings: [
         comp.position_allowance ? { label: "ค่าตำแหน่ง", amountSatang: bahtToSatang(Number(comp.position_allowance)) } : null,
         comp.transport_allowance ? { label: "ค่าเดินทาง", amountSatang: bahtToSatang(Number(comp.transport_allowance)) } : null,
