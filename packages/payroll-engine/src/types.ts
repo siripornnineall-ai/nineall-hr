@@ -138,6 +138,11 @@ export interface PayrollEmployeeInput {
    * OT rate, capped at the OT amount.
    */
   lateMinutesForOtDeduction?: number;
+  /**
+   * Owner 2026-10-27: for staff whose OT is not paid out (HR / Content, on the previous-cycle rule) the
+   * payslip must not mention lateness at all, so the OT line is labelled plainly. Amounts are unchanged.
+   */
+  hideLateDeductionNote?: boolean;
   policy: PayrollPolicyConfig;
 }
 

@@ -152,7 +152,7 @@ export function calculatePayrollForEmployee(input: PayrollEmployeeInput): Payrol
 
   if (grossOtHours > 0) {
     earnings.push({
-      label: otLateDeductedMinutes > 0 ? `ค่าล่วงเวลา (OT) ${grossOtHours} ชม. หักมาสาย ${otLateDeductedMinutes} นาที` : "ค่าล่วงเวลา (OT)",
+      label: otLateDeductedMinutes > 0 && !input.hideLateDeductionNote ? `ค่าล่วงเวลา (OT) ${grossOtHours} ชม. หักมาสาย ${otLateDeductedMinutes} นาที` : "ค่าล่วงเวลา (OT)",
       quantity: otHours,
       amountSatang: otAmountSatang,
     });

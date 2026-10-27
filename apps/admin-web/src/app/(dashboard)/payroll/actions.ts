@@ -263,6 +263,7 @@ export async function calculatePayrollRunAction(runId: string) {
       })),
       unpaidLeaveDays,
       lateMinutesForOtDeduction,
+      hideLateDeductionNote: !!emp.late_deduct_from_prev_ot_since,
       recurringEarnings: [
         comp.position_allowance ? { label: "ค่าตำแหน่ง", amountSatang: bahtToSatang(Number(comp.position_allowance)) } : null,
         comp.transport_allowance ? { label: "ค่าเดินทาง", amountSatang: bahtToSatang(Number(comp.transport_allowance)) } : null,
