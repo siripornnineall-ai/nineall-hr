@@ -1,5 +1,7 @@
 "use client";
 
+import { PasswordInput } from "@/components/PasswordInput";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/AuthContext";
@@ -449,8 +451,7 @@ export default function ProfilePage() {
 
             {openSection === "password" && (
               <div className="space-y-3">
-                <input
-                  type="password"
+                <PasswordInput
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder={t("รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)")}

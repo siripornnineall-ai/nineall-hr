@@ -1,5 +1,7 @@
 "use client";
 
+import { PasswordInput } from "@/components/PasswordInput";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -45,8 +47,7 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <input
-        type="password"
+      <PasswordInput
         autoComplete="new-password"
         required
         minLength={8}
@@ -55,8 +56,7 @@ export function ResetPasswordForm() {
         placeholder="รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)"
         className="h-12 w-full rounded-lg border border-outline-variant px-4 text-sm outline-none focus:border-primary"
       />
-      <input
-        type="password"
+      <PasswordInput
         autoComplete="new-password"
         required
         minLength={8}
