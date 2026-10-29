@@ -83,7 +83,7 @@ export async function grantLeaveBalancesForEmployee(
   hireDate: string,
   year: number
 ) {
-  const { data: leaveTypes } = await supabase.from("leave_types").select("id").eq("org_id", orgId).eq("is_active", true);
+  const { data: leaveTypes } = await supabase.from("leave_types").select("id, code").eq("org_id", orgId).eq("is_active", true);
   if (!leaveTypes || leaveTypes.length === 0) return;
 
   const { data: policyRows } = await supabase
@@ -136,10 +136,11 @@ export async function grantLeaveBalancesForEmployee(
     }
 
     // Available from day one, prorated by join month for the year they joined;
-    // full entitlement for any year fully worked.
+    // full entitlement for any year fully worked. Personal leave is never prorated
+    // (owner 2026-10-29): everyone gets the full yearly days from the start.
     const daysPerYear = tiers[0].days_per_year;
     let entitled = daysPerYear;
-    if (hireYear === year) {
+    if (hireYear === year && t.code !== "PERSONAL") {
       const monthsRemainingInYear = 13 - hireMonth;
       entitled = Math.round(((daysPerYear * monthsRemainingInYear) / 12) * 100) / 100;
     } else if (hireYear > year) {
