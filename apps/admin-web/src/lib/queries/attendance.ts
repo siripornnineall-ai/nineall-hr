@@ -294,15 +294,29 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     (data ?? []).map((r) => (r.employees as unknown as { photo_url: string | null } | null)?.photo_url)
   );
 
-  // Staff on the "late shown as on time when OT covers it" rule (hide_late_status): ask the database
-  // which of their late days are actually covered by approved OT; the rest show as late.
+  // Staff on the "late shown as on time when the time after the shift covers it" rule (hide_late_status): ask the
+  // database which of their late days are covered and which days' spare time paid for it (and, for a day whose
+  // spare time was used, which late days it paid for); the rest show as late.
   const coveredLateEmployees = new Set<string>();
+  const coverNoteByEmployee = new Map<string, string>();
+  const fmtDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
   await Promise.all(
     (data ?? [])
-      .filter((r) => r.status === "late" && (r.employees as unknown as { hide_late_status: boolean | null } | null)?.hide_late_status)
+      .filter((r) => (r.employees as unknown as { hide_late_status: boolean | null } | null)?.hide_late_status)
       .map(async (r) => {
-        const { data: dates } = await supabase.rpc("late_covered_dates", { p_employee_id: r.employee_id, p_from: workDate, p_to: workDate });
-        if ((dates ?? []).length > 0) coveredLateEmployees.add(r.employee_id);
+        const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: r.employee_id, p_from: workDate, p_to: workDate });
+        const rowsD = (details ?? []) as { late_date: string; source_date: string; minutes_used: number }[];
+        const own = rowsD.filter((d) => d.late_date === workDate);
+        const used = rowsD.filter((d) => d.source_date === workDate);
+        const parts: string[] = [];
+        if (r.status === "late" && own.length > 0) {
+          coveredLateEmployees.add(r.employee_id);
+          parts.push(`สาย ${r.late_minutes} นาที หักจากเวลาอยู่ทด: ${own.map((d) => `${fmtDay(d.source_date)} (${d.minutes_used} น.)`).join(", ")}`);
+        }
+        if (used.length > 0) {
+          parts.push(`ใช้เวลาอยู่ทดหักสายวันอื่นไป ${used.reduce((s, d) => s + d.minutes_used, 0)} นาที: ${used.map((d) => `สาย ${fmtDay(d.late_date)} (${d.minutes_used} น.)`).join(", ")}`);
+        }
+        if (parts.length > 0) coverNoteByEmployee.set(r.employee_id, parts.join(" · "));
       })
   );
 
@@ -324,8 +338,8 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
             ? (swapLabelByEmployee.get(r.employee_id) ?? null)
             : holiday && workedHolidayBySwap.has(r.employee_id)
               ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
-              : r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id)
-                ? "หักจาก OT แล้ว"
+              : emp?.hide_late_status && coverNoteByEmployee.has(r.employee_id)
+                ? coverNoteByEmployee.get(r.employee_id)!
                 : explainDayLeave(leavesByEmployee.get(r.employee_id) ?? [], r.status);
     return {
       id: r.id,

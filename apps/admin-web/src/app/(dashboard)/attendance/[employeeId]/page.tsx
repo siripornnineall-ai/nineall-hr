@@ -109,11 +109,32 @@ export default async function EmployeeAttendanceDashboardPage({
   const fmtCycleDate = (d: string) => new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
 
   // Late days covered by OT show as on time for staff on that rule; uncovered ones stay "late".
+  // For each covered late day: which days' time after the shift end paid for it, and how many minutes (and the
+  // other way round for the days whose spare time was used), so nobody has to guess where the minutes went.
   const coveredLate = new Set<string>();
+  const lateSources = new Map<string, { date: string; minutes: number }[]>();
+  const spareUses = new Map<string, { date: string; minutes: number }[]>();
   if (employee.hide_late_status) {
-    const { data: covered } = await supabase.rpc("late_covered_dates", { p_employee_id: employeeId, p_from: monthStart, p_to: monthEnd });
-    for (const d of (covered ?? []) as string[]) coveredLate.add(d);
+    const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: employeeId, p_from: monthStart, p_to: monthEnd });
+    for (const d of (details ?? []) as { late_date: string; source_date: string; minutes_used: number }[]) {
+      if (d.late_date >= monthStart && d.late_date <= monthEnd) {
+        coveredLate.add(d.late_date);
+        lateSources.set(d.late_date, [...(lateSources.get(d.late_date) ?? []), { date: d.source_date, minutes: d.minutes_used }]);
+      }
+      if (d.source_date >= monthStart && d.source_date <= monthEnd) {
+        spareUses.set(d.source_date, [...(spareUses.get(d.source_date) ?? []), { date: d.late_date, minutes: d.minutes_used }]);
+      }
+    }
   }
+  const fmtDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
+  const coverNote = (workDate: string, lateMinutes: number): string | null => {
+    const src = lateSources.get(workDate);
+    const uses = spareUses.get(workDate);
+    const parts: string[] = [];
+    if (src) parts.push(`สาย ${lateMinutes} นาที หักจากเวลาอยู่ทด: ${src.map((s) => `${fmtDay(s.date)} (${s.minutes} น.)`).join(", ")}`);
+    if (uses) parts.push(`ใช้เวลาอยู่ทดหักสายวันอื่นไป ${uses.reduce((sum, u) => sum + u.minutes, 0)} นาที: ${uses.map((u) => `สาย ${fmtDay(u.date)} (${u.minutes} น.)`).join(", ")}`);
+    return parts.length ? parts.join(" · ") : null;
+  };
   const holidayNameByDate = new Map((holidayRows ?? []).map((h) => [h.holiday_date, h.name]));
   function leavesForDate(workDate: string) {
     return (leaveRows ?? [])
@@ -260,8 +281,8 @@ export default async function EmployeeAttendanceDashboardPage({
                               ? (swapLabelByDate.get(r.work_date) ?? null)
                               : workedHolidayBySwap.has(r.work_date)
                                 ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
-                                : r.status === "late" && coveredLate.has(r.work_date)
-                                  ? "หักจาก OT แล้ว"
+                                : (r.status === "late" && coveredLate.has(r.work_date)) || spareUses.has(r.work_date)
+                                  ? coverNote(r.work_date, r.late_minutes ?? 0)
                                   : explainDayLeave(leavesForDate(r.work_date), r.status),
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,

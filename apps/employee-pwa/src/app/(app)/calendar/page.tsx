@@ -69,6 +69,8 @@ export default function CalendarPage() {
   const [leaveRanges, setLeaveRanges] = useState<LeaveRange[]>([]);
   const [attendanceDays, setAttendanceDays] = useState<AttendanceDay[]>([]);
   const [coveredLate, setCoveredLate] = useState<Set<string>>(new Set());
+  // Covered late days: which days' time after the shift paid for them; and the days whose time was used.
+  const [coverDetails, setCoverDetails] = useState<{ late_date: string; source_date: string; minutes_used: number }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -99,12 +101,15 @@ export default function CalendarPage() {
     setHolidays(h ?? []);
     setLeaveRanges((l ?? []) as unknown as LeaveRange[]);
     setAttendanceDays(a ?? []);
-    // Late days covered by approved OT show as on time (staff on that rule only).
+    // Late days covered by the time stayed after the shift show as on time (staff on that rule only).
     if (profile.hideLateStatus) {
-      const { data: covered } = await supabase.rpc("late_covered_dates", { p_employee_id: profile.employeeId, p_from: toIso(monthStart), p_to: toIso(monthEnd) });
-      setCoveredLate(new Set((covered ?? []) as string[]));
+      const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: profile.employeeId, p_from: toIso(monthStart), p_to: toIso(monthEnd) });
+      const list = (details ?? []) as { late_date: string; source_date: string; minutes_used: number }[];
+      setCoverDetails(list);
+      setCoveredLate(new Set(list.filter((d) => d.late_date >= toIso(monthStart) && d.late_date <= toIso(monthEnd)).map((d) => d.late_date)));
     } else {
       setCoveredLate(new Set());
+      setCoverDetails([]);
     }
   }, [profile, supabase, viewDate]);
 
@@ -229,6 +234,26 @@ export default function CalendarPage() {
               ) : (
                 !holidayName && !leaveName && <p className="mt-2 text-sm text-on-surface-variant">ไม่มีข้อมูลการลงเวลาวันนี้</p>
               )}
+              {(() => {
+                const fmtDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
+                const own = coverDetails.filter((d) => d.late_date === selectedDate);
+                const used = coverDetails.filter((d) => d.source_date === selectedDate);
+                if (own.length === 0 && used.length === 0) return null;
+                return (
+                  <div className="mt-3 space-y-1 rounded-xl bg-surface-container-low p-3 text-xs text-on-surface-variant">
+                    {own.length > 0 && attendance && (
+                      <p>
+                        สาย {attendance.late_minutes} นาที หักจากเวลาอยู่ทด: {own.map((d) => `${fmtDay(d.source_date)} (${d.minutes_used} นาที)`).join(", ")}
+                      </p>
+                    )}
+                    {used.length > 0 && (
+                      <p>
+                        ใช้เวลาอยู่ทดหักสายวันอื่นไป {used.reduce((s, d) => s + d.minutes_used, 0)} นาที: {used.map((d) => `สาย ${fmtDay(d.late_date)} (${d.minutes_used} นาที)`).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
