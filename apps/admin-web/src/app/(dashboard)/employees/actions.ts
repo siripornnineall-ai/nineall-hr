@@ -72,10 +72,12 @@ async function countActiveDirectReports(supabase: Awaited<ReturnType<typeof crea
   return count ?? 0;
 }
 
-// Prorates by join month, except leave types with a min-service requirement (annual
-// leave): those grant nothing until the employee reaches that tenure, then the full
-// yearly entitlement (not prorated) — matches how Thai annual leave is actually meant
-// to work, distinct from leave types available from day one.
+// Sick, personal and vacation leave are granted by completed months of service in the
+// database (leave_entitlement_days / sync_leave_entitlements, which also runs daily).
+const SERVICE_BASED_LEAVE_CODES = ["SICK", "PERSONAL", "VACATION"];
+
+// Other leave types: prorated by join month, except types with a min-service requirement:
+// those grant nothing until the employee reaches that tenure, then the full yearly entitlement.
 export async function grantLeaveBalancesForEmployee(
   supabase: Awaited<ReturnType<typeof createClient>>,
   employeeId: string,
@@ -121,6 +123,10 @@ export async function grantLeaveBalancesForEmployee(
     const tiers = tiersByType.get(t.id);
     if (!tiers || tiers.length === 0) continue;
 
+    // Sick, personal and vacation leave follow completed months of service
+    // (sync_leave_entitlements, migration 0125); everything else is handled below.
+    if (SERVICE_BASED_LEAVE_CODES.includes(t.code)) continue;
+
     const gatedTiers = tiers.filter((x) => x.min_service_months > 0);
     if (gatedTiers.length > 0) {
       // Tenure-gated (e.g. annual leave's 1/2-3/4-6/7+ year brackets): grant the
@@ -136,11 +142,10 @@ export async function grantLeaveBalancesForEmployee(
     }
 
     // Available from day one, prorated by join month for the year they joined;
-    // full entitlement for any year fully worked. Personal leave is never prorated
-    // (owner 2026-10-29): everyone gets the full yearly days from the start.
+    // full entitlement for any year fully worked.
     const daysPerYear = tiers[0].days_per_year;
     let entitled = daysPerYear;
-    if (hireYear === year && t.code !== "PERSONAL") {
+    if (hireYear === year) {
       const monthsRemainingInYear = 13 - hireMonth;
       entitled = Math.round(((daysPerYear * monthsRemainingInYear) / 12) * 100) / 100;
     } else if (hireYear > year) {
@@ -149,11 +154,13 @@ export async function grantLeaveBalancesForEmployee(
     rows.push({ employee_id: employeeId, leave_type_id: t.id, year, entitled_days: entitled });
   }
 
-  if (rows.length === 0) return;
   // Only entitled_days is set on conflict — used_days/pending_days (managed by the
   // leave request approval flow) and carried_over_days (a separate manual concern)
   // are left untouched for rows that already exist.
-  await supabase.from("leave_balances").upsert(rows, { onConflict: "employee_id,leave_type_id,year" });
+  if (rows.length > 0) {
+    await supabase.from("leave_balances").upsert(rows, { onConflict: "employee_id,leave_type_id,year" });
+  }
+  await supabase.rpc("sync_leave_entitlements", { p_employee_id: employeeId });
 }
 
 export async function syncLeaveBalancesAction(): Promise<{ error?: string; grantedCount?: number }> {
