@@ -74,7 +74,7 @@ export default async function AttendanceSummaryPage({ searchParams }: { searchPa
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, employee_code, first_name, last_name, nickname, hire_date, ot_calendar_month, departments(name)")
+    .select("id, employee_code, first_name, last_name, nickname, hire_date, ot_calendar_month, hide_late_status, departments(name)")
     .eq("org_id", user.orgId)
     .is("deleted_at", null)
     .in("employment_status", ["active", "probation"])
@@ -114,12 +114,26 @@ export default async function AttendanceSummaryPage({ searchParams }: { searchPa
   const toMin = (t: string | null) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null);
   const dayCount = (a: string, b: string) => Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86400000) + 1;
 
+  // Late days already covered by OT (HR / Content staff on the previous-cycle rule) are not shown as late.
+  const covered = new Map<string, Set<string>>();
+  await Promise.all(
+    (employees ?? [])
+      .filter((e) => e.hide_late_status)
+      .map(async (e) => {
+        const { data } = await supabase.rpc("late_covered_dates", { p_employee_id: e.id, p_from: start, p_to: end });
+        covered.set(e.id, new Set((data ?? []) as unknown as string[]));
+      })
+  );
+
   const rows = (employees ?? []).map((e) => {
     const att = attendance.filter((a) => a.employee_id === e.id);
     const count = (pred: (s: string) => boolean) => att.filter((a) => pred(a.status)).length;
     const workedDays = count((s) => WORKED_STATUSES.has(s));
     const workedMinutes = att.filter((a) => WORKED_STATUSES.has(a.status)).reduce((sum, a) => sum + (a.worked_minutes ?? 0), 0);
-    const lateMinutes = att.reduce((sum, a) => sum + (a.status === "late" || (a.late_minutes ?? 0) > 0 ? (a.late_minutes ?? 0) : 0), 0);
+    const lateMinutes = att.reduce(
+      (sum, a) => sum + ((a.status === "late" || (a.late_minutes ?? 0) > 0) && !(a.status === "late" && covered.get(e.id)?.has(a.work_date)) ? (a.late_minutes ?? 0) : 0),
+      0
+    );
     const earlyMinutes = att.reduce((sum, a) => sum + (a.early_leave_minutes ?? 0), 0);
     const scheduledDays = assignments.filter((a) => a.employee_id === e.id && !a.is_day_off).length;
 
