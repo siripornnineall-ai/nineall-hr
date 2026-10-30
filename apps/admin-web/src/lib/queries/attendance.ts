@@ -305,13 +305,14 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       .filter((r) => (r.employees as unknown as { hide_late_status: boolean | null } | null)?.hide_late_status)
       .map(async (r) => {
         const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: r.employee_id, p_from: workDate, p_to: workDate });
-        const rowsD = (details ?? []) as { late_date: string; source_date: string; minutes_used: number; is_wfh: boolean }[];
+        const rowsD = (details ?? []) as { late_date: string; source_date: string | null; minutes_used: number; is_wfh: boolean }[];
         const own = rowsD.filter((d) => d.late_date === workDate);
         const used = rowsD.filter((d) => d.source_date === workDate);
         const parts: string[] = [];
         if (r.status === "late" && own.length > 0) {
           coveredLateEmployees.add(r.employee_id);
-          parts.push(`สาย ${r.late_minutes} นาที หักจาก${own.every((d) => d.is_wfh) ? " WFH" : "เวลาอยู่ทด"}: ${own.map((d) => `${d.is_wfh ? "WFH " : ""}${fmtDay(d.source_date)} (${d.minutes_used} น.)`).join(", ")}`);
+          if (own.every((d) => d.source_date === null)) parts.push(`สาย ${r.late_minutes} นาที หักจาก OT`);
+          else parts.push(`สาย ${r.late_minutes} นาที หักจาก${own.every((d) => d.is_wfh) ? " WFH" : "เวลาอยู่ทด"}: ${own.map((d) => `${d.is_wfh ? "WFH " : ""}${d.source_date ? fmtDay(d.source_date) : "OT"} (${d.minutes_used} น.)`).join(", ")}`);
         }
         if (used.length > 0) {
           parts.push(`${used.every((d) => d.is_wfh) ? "WFH ชดเวลามาสายวันอื่น" : "ใช้เวลาอยู่ทดหักสายวันอื่นไป"} ${used.reduce((s, d) => s + d.minutes_used, 0)} นาที: ${used.map((d) => `สาย ${fmtDay(d.late_date)} (${d.minutes_used} น.)`).join(", ")}`);

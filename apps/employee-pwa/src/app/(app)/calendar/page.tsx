@@ -70,7 +70,7 @@ export default function CalendarPage() {
   const [attendanceDays, setAttendanceDays] = useState<AttendanceDay[]>([]);
   const [coveredLate, setCoveredLate] = useState<Set<string>>(new Set());
   // Covered late days: which days' time after the shift paid for them; and the days whose time was used.
-  const [coverDetails, setCoverDetails] = useState<{ late_date: string; source_date: string; minutes_used: number; is_wfh: boolean }[]>([]);
+  const [coverDetails, setCoverDetails] = useState<{ late_date: string; source_date: string | null; minutes_used: number; is_wfh: boolean }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -104,7 +104,7 @@ export default function CalendarPage() {
     // Late days covered by the time stayed after the shift show as on time (staff on that rule only).
     if (profile.hideLateStatus) {
       const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: profile.employeeId, p_from: toIso(monthStart), p_to: toIso(monthEnd) });
-      const list = (details ?? []) as { late_date: string; source_date: string; minutes_used: number; is_wfh: boolean }[];
+      const list = (details ?? []) as { late_date: string; source_date: string | null; minutes_used: number; is_wfh: boolean }[];
       setCoverDetails(list);
       setCoveredLate(new Set(list.filter((d) => d.late_date >= toIso(monthStart) && d.late_date <= toIso(monthEnd)).map((d) => d.late_date)));
     } else {
@@ -241,9 +241,10 @@ export default function CalendarPage() {
                 if (own.length === 0 && used.length === 0) return null;
                 return (
                   <div className="mt-3 space-y-1 rounded-xl bg-surface-container-low p-3 text-xs text-on-surface-variant">
-                    {own.length > 0 && attendance && (
+                    {own.length > 0 && attendance && own.every((d) => d.source_date === null) && <p>สาย {attendance.late_minutes} นาที หักจาก OT</p>}
+                    {own.length > 0 && attendance && !own.every((d) => d.source_date === null) && (
                       <p>
-                        สาย {attendance.late_minutes} นาที หักจาก{own.every((d) => d.is_wfh) ? " WFH" : "เวลาอยู่ทด"}: {own.map((d) => `${d.is_wfh ? "WFH " : ""}${fmtDay(d.source_date)} (${d.minutes_used} นาที)`).join(", ")}
+                        สาย {attendance.late_minutes} นาที หักจาก{own.every((d) => d.is_wfh) ? " WFH" : "เวลาอยู่ทด"}: {own.map((d) => `${d.is_wfh ? "WFH " : ""}${d.source_date ? fmtDay(d.source_date) : "OT"} (${d.minutes_used} นาที)`).join(", ")}
                       </p>
                     )}
                     {used.length > 0 && (
