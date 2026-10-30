@@ -70,7 +70,7 @@ export default function CalendarPage() {
   const [attendanceDays, setAttendanceDays] = useState<AttendanceDay[]>([]);
   const [coveredLate, setCoveredLate] = useState<Set<string>>(new Set());
   // Covered late days: which days' time after the shift paid for them; and the days whose time was used.
-  const [coverDetails, setCoverDetails] = useState<{ late_date: string; source_date: string; minutes_used: number }[]>([]);
+  const [coverDetails, setCoverDetails] = useState<{ late_date: string; source_date: string; minutes_used: number; is_wfh: boolean }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -104,7 +104,7 @@ export default function CalendarPage() {
     // Late days covered by the time stayed after the shift show as on time (staff on that rule only).
     if (profile.hideLateStatus) {
       const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: profile.employeeId, p_from: toIso(monthStart), p_to: toIso(monthEnd) });
-      const list = (details ?? []) as { late_date: string; source_date: string; minutes_used: number }[];
+      const list = (details ?? []) as { late_date: string; source_date: string; minutes_used: number; is_wfh: boolean }[];
       setCoverDetails(list);
       setCoveredLate(new Set(list.filter((d) => d.late_date >= toIso(monthStart) && d.late_date <= toIso(monthEnd)).map((d) => d.late_date)));
     } else {
@@ -243,12 +243,12 @@ export default function CalendarPage() {
                   <div className="mt-3 space-y-1 rounded-xl bg-surface-container-low p-3 text-xs text-on-surface-variant">
                     {own.length > 0 && attendance && (
                       <p>
-                        สาย {attendance.late_minutes} นาที หักจากเวลาอยู่ทด: {own.map((d) => `${fmtDay(d.source_date)} (${d.minutes_used} นาที)`).join(", ")}
+                        สาย {attendance.late_minutes} นาที หักจาก{own.every((d) => d.is_wfh) ? " WFH" : "เวลาอยู่ทด"}: {own.map((d) => `${d.is_wfh ? "WFH " : ""}${fmtDay(d.source_date)} (${d.minutes_used} นาที)`).join(", ")}
                       </p>
                     )}
                     {used.length > 0 && (
                       <p>
-                        ใช้เวลาอยู่ทดหักสายวันอื่นไป {used.reduce((s, d) => s + d.minutes_used, 0)} นาที: {used.map((d) => `สาย ${fmtDay(d.late_date)} (${d.minutes_used} นาที)`).join(", ")}
+                        {used.every((d) => d.is_wfh) ? "WFH ชดเวลามาสายวันอื่น" : "ใช้เวลาอยู่ทดหักสายวันอื่นไป"} {used.reduce((s, d) => s + d.minutes_used, 0)} นาที: {used.map((d) => `สาย ${fmtDay(d.late_date)} (${d.minutes_used} นาที)`).join(", ")}
                       </p>
                     )}
                   </div>

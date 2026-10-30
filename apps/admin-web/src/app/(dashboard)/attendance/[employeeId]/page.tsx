@@ -112,17 +112,17 @@ export default async function EmployeeAttendanceDashboardPage({
   // For each covered late day: which days' time after the shift end paid for it, and how many minutes (and the
   // other way round for the days whose spare time was used), so nobody has to guess where the minutes went.
   const coveredLate = new Set<string>();
-  const lateSources = new Map<string, { date: string; minutes: number }[]>();
-  const spareUses = new Map<string, { date: string; minutes: number }[]>();
+  const lateSources = new Map<string, { date: string; minutes: number; wfh: boolean }[]>();
+  const spareUses = new Map<string, { date: string; minutes: number; wfh: boolean }[]>();
   if (employee.hide_late_status) {
     const { data: details } = await supabase.rpc("late_cover_details", { p_employee_id: employeeId, p_from: monthStart, p_to: monthEnd });
-    for (const d of (details ?? []) as { late_date: string; source_date: string; minutes_used: number }[]) {
+    for (const d of (details ?? []) as { late_date: string; source_date: string; minutes_used: number; is_wfh: boolean }[]) {
       if (d.late_date >= monthStart && d.late_date <= monthEnd) {
         coveredLate.add(d.late_date);
-        lateSources.set(d.late_date, [...(lateSources.get(d.late_date) ?? []), { date: d.source_date, minutes: d.minutes_used }]);
+        lateSources.set(d.late_date, [...(lateSources.get(d.late_date) ?? []), { date: d.source_date, minutes: d.minutes_used, wfh: d.is_wfh }]);
       }
       if (d.source_date >= monthStart && d.source_date <= monthEnd) {
-        spareUses.set(d.source_date, [...(spareUses.get(d.source_date) ?? []), { date: d.late_date, minutes: d.minutes_used }]);
+        spareUses.set(d.source_date, [...(spareUses.get(d.source_date) ?? []), { date: d.late_date, minutes: d.minutes_used, wfh: d.is_wfh }]);
       }
     }
   }
@@ -131,8 +131,8 @@ export default async function EmployeeAttendanceDashboardPage({
     const src = lateSources.get(workDate);
     const uses = spareUses.get(workDate);
     const parts: string[] = [];
-    if (src) parts.push(`สาย ${lateMinutes} นาที หักจากเวลาอยู่ทด: ${src.map((s) => `${fmtDay(s.date)} (${s.minutes} น.)`).join(", ")}`);
-    if (uses) parts.push(`ใช้เวลาอยู่ทดหักสายวันอื่นไป ${uses.reduce((sum, u) => sum + u.minutes, 0)} นาที: ${uses.map((u) => `สาย ${fmtDay(u.date)} (${u.minutes} น.)`).join(", ")}`);
+    if (src) parts.push(`สาย ${lateMinutes} นาที หักจาก${src.every((s) => s.wfh) ? " WFH" : "เวลาอยู่ทด"}: ${src.map((s) => `${s.wfh ? "WFH " : ""}${fmtDay(s.date)} (${s.minutes} น.)`).join(", ")}`);
+    if (uses) parts.push(`${uses.every((u) => u.wfh) ? "WFH ชดเวลามาสายวันอื่น" : "ใช้เวลาอยู่ทดหักสายวันอื่นไป"} ${uses.reduce((sum, u) => sum + u.minutes, 0)} นาที: ${uses.map((u) => `สาย ${fmtDay(u.date)} (${u.minutes} น.)`).join(", ")}`);
     return parts.length ? parts.join(" · ") : null;
   };
   const holidayNameByDate = new Map((holidayRows ?? []).map((h) => [h.holiday_date, h.name]));
@@ -278,7 +278,7 @@ export default async function EmployeeAttendanceDashboardPage({
                           : r.status === "holiday"
                             ? (holidayNameByDate.get(r.work_date) ?? null)
                             : r.status === "day_off"
-                              ? (swapLabelByDate.get(r.work_date) ?? null)
+                              ? ([swapLabelByDate.get(r.work_date), spareUses.has(r.work_date) ? coverNote(r.work_date, 0) : null].filter(Boolean).join(" · ") || null)
                               : workedHolidayBySwap.has(r.work_date)
                                 ? "มาทำงานวันนักขัตฤกษ์ (สลับหยุดวันอื่น)"
                                 : (r.status === "late" && coveredLate.has(r.work_date)) || spareUses.has(r.work_date)
