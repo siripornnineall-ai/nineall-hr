@@ -98,7 +98,11 @@ async function autoFillLeaveAttendance(
 
   for (const workDate of workDates) {
     if (offsiteStatus) {
-      if (unit === "full_day") {
+      if (unit === "full_day" && startTime && endTime) {
+        // Full-day WFH/off-site with the clock-in / clock-out times typed on the request: use them as they are
+        // (also on a day with no shift, e.g. a day off).
+        await fillOffsiteAttendanceForDate(supabase, orgId, employeeId, workDate, offsiteStatus, startTime.slice(0, 5), endTime.slice(0, 5));
+      } else if (unit === "full_day") {
         // Full-day WFH/off-site uses the employee's actual assigned shift for that date.
         const { data: assignment } = await supabase
           .from("shift_assignments")
@@ -263,6 +267,18 @@ export async function createBackdatedLeaveAction(values: {
   const { data: employee } = await supabase.from("employees").select("org_id").eq("id", values.employeeId).eq("org_id", user.orgId).single();
   if (!employee) return { error: "ไม่พบพนักงาน" };
 
+  // Clock-in / clock-out times on a full-day request only make sense for WFH and off-site work.
+  let fullDayStart: string | null = null;
+  let fullDayEnd: string | null = null;
+  if (unit === "full_day" && (values.startTime || values.endTime)) {
+    const { data: lt } = await supabase.from("leave_types").select("code").eq("id", values.leaveTypeId).single();
+    if (lt && OFFSITE_LEAVE_STATUS[lt.code]) {
+      if (!values.startTime || !values.endTime || values.endTime <= values.startTime) return { error: "กรุณาระบุเวลาเข้า-ออกงานให้ถูกต้อง (เวลาออกต้องหลังเวลาเข้า)" };
+      fullDayStart = values.startTime;
+      fullDayEnd = values.endTime;
+    }
+  }
+
   const { data: request, error: insertError } = await supabase
     .from("leave_requests")
     .insert({
@@ -271,8 +287,8 @@ export async function createBackdatedLeaveAction(values: {
       leave_type_id: values.leaveTypeId,
       start_date: values.startDate,
       end_date: unit === "full_day" ? values.endDate : values.startDate,
-      start_time: unit === "full_day" ? null : (values.startTime ?? null),
-      end_time: unit === "full_day" ? null : (values.endTime ?? null),
+      start_time: unit === "full_day" ? fullDayStart : (values.startTime ?? null),
+      end_time: unit === "full_day" ? fullDayEnd : (values.endTime ?? null),
       total_days: totalDays,
       unit,
       reason: values.reason || "บันทึกย้อนหลังโดยแอดมิน",
@@ -301,8 +317,8 @@ export async function createBackdatedLeaveAction(values: {
     values.startDate,
     requestEndDate,
     unit,
-    values.startTime ?? null,
-    values.endTime ?? null
+    unit === "full_day" ? fullDayStart : (values.startTime ?? null),
+    unit === "full_day" ? fullDayEnd : (values.endTime ?? null)
   );
 
   revalidatePath("/leave");

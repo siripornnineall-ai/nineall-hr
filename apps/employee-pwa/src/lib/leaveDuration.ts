@@ -27,5 +27,7 @@ export function formatLeaveDuration(unit: string | null | undefined, totalDays: 
     const period = start != null && start >= 12 * 60 ? t("บ่าย") : t("เช้า");
     return `${t("ครึ่งวัน")} (${period})`;
   }
+  // Full-day WFH / off-site requests can carry the clock-in / clock-out times the person worked.
+  if (unit === "full_day" && start != null && end != null && end > start) return `${totalDays} ${t("วัน")} (${hhmm(startTime!)}-${hhmm(endTime!)})`;
   return `${totalDays} ${t("วัน")}`;
 }

@@ -28,7 +28,7 @@ export default async function LeavePage() {
       .not("employees.employment_status", "in", "(resigned,terminated)")
       .order("created_at", { ascending: false })
       .limit(50),
-    supabase.from("leave_types").select("id, name_th").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),
+    supabase.from("leave_types").select("id, name_th, code").eq("org_id", user.orgId).eq("is_active", true).order("sort_order"),
     supabase
       .from("employees")
       .select("id, employee_code, first_name, last_name")

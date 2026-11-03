@@ -15,6 +15,7 @@ interface EmployeeOption {
 interface LeaveTypeOption {
   id: string;
   name_th: string;
+  code?: string;
 }
 
 type Unit = "full_day" | "half_day" | "hourly";
@@ -45,6 +46,9 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
   const [hourlyStart, setHourlyStart] = useState("09:00");
   const [hourlyEnd, setHourlyEnd] = useState("12:00");
   const [totalDays, setTotalDays] = useState("1");
+  // Optional clock-in / clock-out times for a full-day WFH or off-site request (blank = the shift's times).
+  const [clockStart, setClockStart] = useState("");
+  const [clockEnd, setClockEnd] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -66,6 +70,9 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
   // final figure from the shift length anyway; this is the value shown and sent.
   const effectiveTotalDays = unit === "hourly" ? String(Math.round((computeHourlyHours() / 8) * 100) / 100) : unit === "half_day" ? "0.5" : totalDays;
 
+  const selectedCode = leaveTypes.find((t) => t.id === leaveTypeId)?.code;
+  const isRemoteType = selectedCode === "WFH" || selectedCode === "OFFSITE";
+
   function changeUnit(next: Unit) {
     setUnit(next);
     if (next === "half_day") setTotalDays("0.5");
@@ -81,6 +88,8 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
     setEndDate("");
     setHourlyStart("09:00");
     setHourlyEnd("12:00");
+    setClockStart("");
+    setClockEnd("");
     setTotalDays("1");
     setReason("");
     setError(null);
@@ -88,6 +97,11 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
 
   function submit() {
     setError(null);
+    const useClock = unit === "full_day" && isRemoteType && (clockStart || clockEnd);
+    if (useClock && (!clockStart || !clockEnd || clockEnd <= clockStart)) {
+      setError("กรุณาระบุเวลาเข้า-ออกงานให้ครบ และเวลาออกต้องหลังเวลาเข้า (หรือเว้นว่างทั้งสองช่องเพื่อใช้เวลาตามกะ)");
+      return;
+    }
     startTransition(async () => {
       const result = await createBackdatedLeaveAction({
         employeeId,
@@ -95,8 +109,8 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
         unit,
         startDate,
         endDate,
-        startTime: unit === "half_day" ? (halfDayPeriod === "morning" ? "08:00" : "13:00") : unit === "hourly" ? hourlyStart : undefined,
-        endTime: unit === "half_day" ? (halfDayPeriod === "morning" ? "12:00" : "17:00") : unit === "hourly" ? hourlyEnd : undefined,
+        startTime: unit === "half_day" ? (halfDayPeriod === "morning" ? "08:00" : "13:00") : unit === "hourly" ? hourlyStart : useClock ? clockStart : undefined,
+        endTime: unit === "half_day" ? (halfDayPeriod === "morning" ? "12:00" : "17:00") : unit === "hourly" ? hourlyEnd : useClock ? clockEnd : undefined,
         totalDays: effectiveTotalDays,
         reason,
       });
@@ -168,6 +182,19 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <DateField label="วันที่เริ่มลา" name="backdatedStartDate" required value={startDate} onChange={setStartDate} />
           <DateField label="วันที่สิ้นสุด" name="backdatedEndDate" required value={endDate} onChange={setEndDate} />
+        </div>
+      )}
+
+      {unit === "full_day" && isRemoteType && (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-on-surface-variant">เวลาเข้างาน (เว้นว่าง = ตามกะ)</label>
+            <input type="time" value={clockStart} onChange={(e) => setClockStart(e.target.value)} className="h-10 w-full rounded-lg border border-outline-variant px-3 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-on-surface-variant">เวลาออกงาน (เว้นว่าง = ตามกะ)</label>
+            <input type="time" value={clockEnd} onChange={(e) => setClockEnd(e.target.value)} className="h-10 w-full rounded-lg border border-outline-variant px-3 text-sm" />
+          </div>
         </div>
       )}
 

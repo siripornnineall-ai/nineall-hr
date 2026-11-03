@@ -58,6 +58,9 @@ export default function LeavePage() {
   const [endDate, setEndDate] = useState("");
   const [hourlyStart, setHourlyStart] = useState("09:00");
   const [hourlyEnd, setHourlyEnd] = useState("12:00");
+  // Optional clock-in / clock-out times for a full-day WFH or off-site request (blank = the shift's times).
+  const [clockStart, setClockStart] = useState("");
+  const [clockEnd, setClockEnd] = useState("");
   const [reason, setReason] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -161,6 +164,12 @@ export default function LeavePage() {
       setError(t("กรุณาระบุวันที่สิ้นสุดให้ถูกต้อง"));
       return;
     }
+    const isRemoteType = selectedLeaveType?.code === "WFH" || selectedLeaveType?.code === "OFFSITE";
+    const useClock = unit === "full_day" && isRemoteType && (!!clockStart || !!clockEnd);
+    if (useClock && (!clockStart || !clockEnd || clockEnd <= clockStart)) {
+      setError(t("กรุณาระบุเวลาเข้า-ออกงานให้ครบ และเวลาออกต้องหลังเวลาเข้า"));
+      return;
+    }
     if (unit === "hourly" && computeHourlyHours() <= 0) {
       setError(t("กรุณาระบุเวลาเริ่ม-สิ้นสุดให้ถูกต้อง"));
       return;
@@ -193,8 +202,8 @@ export default function LeavePage() {
       leave_type_id: selectedType,
       start_date: startDate,
       end_date: isSingleDay ? startDate : endDate,
-      start_time: unit === "half_day" ? (halfDayPeriod === "morning" ? "08:00" : "13:00") : unit === "hourly" ? hourlyStart : null,
-      end_time: unit === "half_day" ? (halfDayPeriod === "morning" ? "12:00" : "17:00") : unit === "hourly" ? hourlyEnd : null,
+      start_time: unit === "half_day" ? (halfDayPeriod === "morning" ? "08:00" : "13:00") : unit === "hourly" ? hourlyStart : useClock ? clockStart : null,
+      end_time: unit === "half_day" ? (halfDayPeriod === "morning" ? "12:00" : "17:00") : unit === "hourly" ? hourlyEnd : useClock ? clockEnd : null,
       unit,
       total_days: totalDays,
       reason,
@@ -208,6 +217,8 @@ export default function LeavePage() {
     }
     setStartDate("");
     setEndDate("");
+    setClockStart("");
+    setClockEnd("");
     setReason("");
     setAttachmentFile(null);
     setSuccess(t("ส่งคำขอลาเรียบร้อยแล้ว"));
@@ -277,6 +288,16 @@ export default function LeavePage() {
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("วันที่สิ้นสุด")}</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
+            </div>
+          </div>
+        )}
+
+        {unit === "full_day" && (selectedLeaveType?.code === "WFH" || selectedLeaveType?.code === "OFFSITE") && (
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-on-surface-variant">{t("เวลาเข้า-ออกงาน (ไม่ใส่ = ตามกะ)")}</label>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="time" value={clockStart} onChange={(e) => setClockStart(e.target.value)} aria-label={t("เวลาเข้างาน")} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
+              <input type="time" value={clockEnd} onChange={(e) => setClockEnd(e.target.value)} aria-label={t("เวลาออกงาน")} className="w-full rounded-xl border border-outline-variant px-3 py-2.5 text-sm" />
             </div>
           </div>
         )}
