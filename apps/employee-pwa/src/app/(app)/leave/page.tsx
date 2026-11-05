@@ -7,6 +7,7 @@ import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { t, useT } from "@/lib/i18n";
+import { countsTowardLeaveQuota } from "@/lib/leaveTypes";
 
 interface LeaveType {
   id: string;
@@ -31,6 +32,14 @@ interface LeaveRequestRow {
   leave_types: { name_th: string } | null;
 }
 
+interface BalanceRow {
+  leave_type_id: string;
+  entitled_days: number;
+  carried_over_days: number;
+  used_days: number;
+  pending_days: number;
+}
+
 const STATUS_TH: Record<string, string> = { pending: t("รออนุมัติ"), approved: t("อนุมัติแล้ว"), rejected: t("ปฏิเสธ"), cancelled: t("ยกเลิก") };
 // Leave is approved in two steps (หัวหน้า -> HR); while pending, say whose turn it is.
 function statusLabel(status: string, stage: string | null): string {
@@ -51,6 +60,8 @@ export default function LeavePage() {
   const supabase = useMemo(() => createClient(), []);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [requests, setRequests] = useState<LeaveRequestRow[]>([]);
+  const [balances, setBalances] = useState<BalanceRow[]>([]);
+  const [balancesLoaded, setBalancesLoaded] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [unit, setUnit] = useState<"full_day" | "half_day" | "hourly">("full_day");
   const [halfDayPeriod, setHalfDayPeriod] = useState<"morning" | "afternoon">("morning");
@@ -104,6 +115,32 @@ export default function LeavePage() {
     setSelectedType((current) => current ?? typesWithPolicy[0]?.id ?? null);
   }, [profile, supabase]);
 
+  // Days left per leave type for the year of the chosen start date (the database checks against that year),
+  // so the person sees how much can still be taken before sending a request that would go over.
+  const balanceYear = startDate ? Number(startDate.slice(0, 4)) : new Date().getFullYear();
+  const loadBalances = useCallback(async () => {
+    if (!profile) return;
+    const { data } = await supabase
+      .from("leave_balances")
+      .select("leave_type_id, entitled_days, carried_over_days, used_days, pending_days")
+      .eq("employee_id", profile.employeeId)
+      .eq("year", balanceYear);
+    setBalances((data ?? []) as BalanceRow[]);
+    setBalancesLoaded(true);
+  }, [profile, supabase, balanceYear]);
+  useEffect(() => {
+    loadBalances();
+  }, [loadBalances]);
+
+  function balanceInfo(typeId: string) {
+    const b = balances.find((x) => x.leave_type_id === typeId);
+    if (!b) return null;
+    const total = Number(b.entitled_days) + Number(b.carried_over_days);
+    const used = Number(b.used_days);
+    const pending = Number(b.pending_days);
+    return { total, used, pending, remaining: Math.round((total - used - pending) * 100) / 100 };
+  }
+
   const selectedLeaveType = leaveTypes.find((t) => t.id === selectedType) ?? null;
   // Earliest start date allowed for the chosen type: today (Bangkok) + the notice days.
   const noticeDays = selectedLeaveType?.notice_days_required ?? 0;
@@ -113,6 +150,10 @@ export default function LeavePage() {
     return base.toISOString().slice(0, 10);
   })();
   const noticeViolated = noticeDays > 0 && !!startDate && startDate < earliestStart;
+  const quotaSelected = !!selectedLeaveType && countsTowardLeaveQuota(selectedLeaveType.code);
+  const selectedBalance = selectedLeaveType ? balanceInfo(selectedLeaveType.id) : null;
+  const requestedDays = computeTotalDays();
+  const overBalance = quotaSelected && balancesLoaded && requestedDays > 0 && requestedDays > (selectedBalance?.remaining ?? 0);
 
   useEffect(() => {
     load();
@@ -223,6 +264,7 @@ export default function LeavePage() {
     setAttachmentFile(null);
     setSuccess(t("ส่งคำขอลาเรียบร้อยแล้ว"));
     load();
+    loadBalances();
   }
 
   return (
@@ -252,10 +294,43 @@ export default function LeavePage() {
                 )}
               >
                 {t(lt.name_th)}
+                {countsTowardLeaveQuota(lt.code) && balancesLoaded && (
+                  <span className="ml-1 text-[11px] font-normal opacity-80">· {t("เหลือ")} {balanceInfo(lt.id)?.remaining ?? 0}</span>
+                )}
               </button>
             ))}
           </div>
         </div>
+
+        {quotaSelected && balancesLoaded && (
+          <div
+            className={clsx(
+              "rounded-xl px-3 py-2.5 text-sm",
+              overBalance ? "bg-status-danger/10 text-status-danger" : "bg-surface-container-low text-on-surface-variant"
+            )}
+          >
+            {selectedBalance ? (
+              <>
+                <p className="font-semibold">
+                  {t(selectedLeaveType?.name_th ?? "")}: {t("ลาได้อีก")} {selectedBalance.remaining} {t("วัน")}
+                </p>
+                <p className="text-xs">
+                  {t("สิทธิ์ทั้งปี")} {Math.round(selectedBalance.total * 100) / 100} {t("วัน")} · {t("ใช้ไปแล้ว")} {Math.round(selectedBalance.used * 100) / 100} {t("วัน")}
+                  {selectedBalance.pending > 0 ? ` · ${t("รออนุมัติ")} ${Math.round(selectedBalance.pending * 100) / 100} ${t("วัน")}` : ""}
+                </p>
+              </>
+            ) : (
+              <p className="font-semibold">
+                {t(selectedLeaveType?.name_th ?? "")}: {t("ยังไม่มีสิทธิ์ลาประเภทนี้")}
+              </p>
+            )}
+            {overBalance && (
+              <p className="mt-1 text-xs font-semibold">
+                {t("คำขอนี้")} {requestedDays} {t("วัน")} {t("เกินวันลาคงเหลือ — ส่งคำขอไม่ได้ กรุณาลดจำนวนวัน หรือติดต่อ HR")}
+              </p>
+            )}
+          </div>
+        )}
 
         {noticeDays > 0 && (
           <p className="rounded-xl bg-status-warning/10 px-3 py-2 text-xs font-semibold text-status-warning">
@@ -375,7 +450,7 @@ export default function LeavePage() {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || noticeViolated}
+          disabled={submitting || noticeViolated || overBalance}
           className="h-12 w-full rounded-2xl bg-primary font-bold text-white disabled:opacity-60"
         >
           {uploadingAttachment ? t("กำลังอัปโหลดเอกสาร...") : submitting ? t("กำลังส่ง...") : t("ส่งคำขอลา")}
