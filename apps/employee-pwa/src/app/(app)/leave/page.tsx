@@ -395,7 +395,7 @@ export default function LeavePage() {
 
         {unit === "half_day" && (
 
-          <p className="rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface-variant">{t("ครึ่งวัน = ทำงาน 4 ชม. ติดกัน ไม่มีพักเที่ยง (หักลา 0.5 วัน) · ลาเช้า: เข้างาน 13:00 ออก 17:00 · ลาบ่าย: ทำงานตามเวลาเข้างานปกติครบ 4 ชม. เช่น 9:00–13:00 แล้วกลับได้เลย")}</p>
+          <p className="rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface-variant">{t("ครึ่งวัน หักลา 0.5 วัน · ลาเช้า: เข้างาน 13:00 ออกตามเวลาเลิกงานปกติ (เช่น 13:00–18:00) · ลาบ่าย: ทำงาน 4 ชม. ติดกันนับจากเวลาเข้างานปกติ ไม่มีพักเที่ยง (เช่น 9:00–13:00) แล้วกลับได้เลย")}</p>
 
         )}
 

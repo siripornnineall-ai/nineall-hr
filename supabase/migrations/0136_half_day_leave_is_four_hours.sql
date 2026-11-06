@@ -5,7 +5,7 @@
 -- were charged 0.5 day.
 -- Now, from 2026-11-07 on:
 --   * afternoon leave: work 4 h straight from the shift start (09:00-13:00; 08:30-12:30), no lunch break;
---   * morning leave:   work 13:00-17:00 (4 h), leaving 17:00;
+--   * morning leave:   work 13:00 until the normal shift end (owner changed this the same day; 13:00-18:00);
 -- Lateness / early-leave are judged against that window. Earlier dates keep the old window so history and the
 -- current payroll cutoff are not re-judged. Leave balance deduction (0.5 day) is unchanged.
 
@@ -36,7 +36,6 @@ begin
 
   if coalesce(v_morning_off, false) then
     v_start := greatest(v_start, time '13:00');
-    if v_four_hour_rule then v_end := least(v_end, time '17:00'); end if;
   end if;
   if coalesce(v_afternoon_off, false) then
     if v_four_hour_rule and p_shift_end > p_shift_start then
