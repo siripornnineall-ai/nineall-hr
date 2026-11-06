@@ -211,6 +211,13 @@ export function AddBackdatedLeaveForm({ employees, leaveTypes }: { employees: Em
         </div>
       )}
 
+      {unit === "half_day" && (
+
+        <p className="rounded-lg bg-surface-container px-3 py-2 text-xs text-on-surface-variant">ครึ่งวัน = ทำงาน 4 ชม. ติดกัน ไม่มีพักเที่ยง (หักลา 0.5 วัน) · ลาเช้า: เข้างาน 13:00 ออก 17:00 · ลาบ่าย: ทำงานตามเวลาเข้างานปกติครบ 4 ชม. เช่น 9:00–13:00 แล้วกลับได้เลย</p>
+
+      )}
+
+
       {unit === "hourly" && (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <DateField label="วันที่ลา" name="backdatedStartDate" required value={startDate} onChange={setStartDate} />
