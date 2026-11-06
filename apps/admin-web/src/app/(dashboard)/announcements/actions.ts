@@ -35,6 +35,7 @@ export async function createAnnouncementAction(_prev: AnnouncementActionState, f
   return {};
 }
 
+// Edits the title/text of an already published announcement in place (target and expiry are not changed here).
 export async function updateAnnouncementAction(_prev: AnnouncementActionState, formData: FormData): Promise<AnnouncementActionState> {
   const user = await requireUser();
   requireRole(user, ["super_admin", "hr"]);
