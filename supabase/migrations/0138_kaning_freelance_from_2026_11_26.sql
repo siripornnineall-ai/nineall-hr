@@ -2,7 +2,7 @@
 -- comes in on Saturdays only (owner 2026-11-06).
 --   * employment_type 'contract' = freelancer: the daily leave sync no longer gives sick/personal/vacation.
 --   * schedule from 26 Nov: Saturdays are work days (same shift/location as her weekdays), all other days off.
---   * a one-shot pg_cron job (00:10 Bangkok on 26 Nov) switches her employment_type to 'contract' and closes her
+--   * a one-shot pg_cron job (00:10 Bangkok on 26 Nov) switches her employment_type to 'contract', turns on social_security_exempt and closes her
 --     2026 sick/personal/vacation balances (entitlement = used + pending, nothing left to take), then unschedules itself.
 -- Her pay basis / per-Saturday amount (employee_compensation) is NOT changed here: the owner has not given it yet.
 
@@ -62,7 +62,7 @@ update shift_assignments
    and not is_work_from_home and not is_off_site;
 
 select cron.schedule('freelance-switch-90031', '10 17 25 11 *', $job$
-  update employees set employment_type = 'contract', updated_at = now()
+  update employees set employment_type = 'contract', social_security_exempt = true, updated_at = now()
    where id = 'c3e7535d-7f20-4202-aba3-2e61bc8ecba2' and deleted_at is null;
   update leave_balances b
      set entitled_days = greatest(0, b.used_days + b.pending_days - b.carried_over_days)
