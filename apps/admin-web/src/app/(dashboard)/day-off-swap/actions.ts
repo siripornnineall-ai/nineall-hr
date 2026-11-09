@@ -170,3 +170,107 @@ export async function decideDayOffSwapRequest(requestId: string, decision: "appr
   revalidatePath("/day-off-swap");
   revalidatePath("/attendance");
 }
+
+// Removes a day-off swap request outright (entered by mistake, wrong date, ...). For an approved one the database
+// function also puts back the schedule rows and day-off placeholders the swap created — see migration 0139.
+export async function deleteDayOffSwapRequestAction(requestId: string): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("delete_day_off_swap_request", { p_request_id: requestId });
+  if (error) return { error: error.message };
+
+  revalidatePath("/day-off-swap");
+  revalidatePath("/attendance");
+}
+
+export interface SwapEditInput {
+  firstDate: string; // original day off that is worked instead ("" = no original date: a plain day-off request)
+  substituteDate: string;
+  unit: "full_day" | "half_day";
+  period: "morning" | "afternoon" | null;
+  reason: string;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// HR edit of a day-off swap request. A pending or rejected request is just updated. An approved one has already
+// changed the schedule, so the database first puts that back and reopens the request (reopen_day_off_swap_request,
+// migration 0139); then the fields are updated and the request is approved again, which applies the new dates through
+// the normal approval code above.
+export async function updateDayOffSwapRequestAction(requestId: string, input: SwapEditInput): Promise<{ error?: string } | void> {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+
+  const { data: current } = await supabase
+    .from("day_off_swap_requests")
+    .select("id, employee_id, status")
+    .eq("id", requestId)
+    .eq("org_id", user.orgId)
+    .maybeSingle();
+  if (!current) return { error: "ไม่พบคำขอนี้" };
+
+  const originalDate = input.firstDate || null;
+  if ((originalDate && !ISO_DATE.test(originalDate)) || !ISO_DATE.test(input.substituteDate)) return { error: "กรุณาเลือกวันที่ให้ครบ" };
+  if (originalDate && originalDate === input.substituteDate) return { error: "วันหยุดเดิมและวันหยุดใหม่ต้องไม่ใช่วันเดียวกัน" };
+  const unit = originalDate ? input.unit : "full_day";
+  if (unit === "half_day" && input.period !== "morning" && input.period !== "afternoon") return { error: "กรุณาเลือกช่วงครึ่งวัน (เช้า/บ่าย)" };
+  const period = unit === "half_day" ? input.period : null;
+
+  const { data: holiday } = await supabase
+    .from("company_holidays")
+    .select("holiday_date")
+    .eq("org_id", user.orgId)
+    .eq("holiday_date", input.substituteDate)
+    .maybeSingle();
+  if (holiday) return { error: "วันที่เลือกเป็นวันหยุดนักขัตฤกษ์ กรุณาเลือกวันอื่น หรือใช้หน้าสลับวันหยุดนักขัตฤกษ์แทน" };
+
+  // A half-day request only occupies its own half on both dates; a full-day one occupies both halves.
+  const { data: others } = await supabase
+    .from("day_off_swap_requests")
+    .select("original_date, substitute_date, unit, period")
+    .eq("employee_id", current.employee_id)
+    .neq("id", requestId)
+    .in("status", ["pending", "approved"]);
+  const periodsOverlap = (a: string | null, b: string | null) => a === null || b === null || a === b;
+  const dates = [originalDate, input.substituteDate].filter((d): d is string => !!d);
+  const clash = (others ?? []).some(
+    (o) =>
+      dates.some((d) => o.original_date === d || o.substitute_date === d) && periodsOverlap(o.unit === "half_day" ? o.period : null, period)
+  );
+  if (clash) return { error: "วันที่เลือกมีคำขอสลับวันหยุดอื่นของพนักงานคนนี้อยู่แล้ว กรุณาเลือกวันอื่น" };
+
+  const wasApproved = current.status === "approved";
+  if (wasApproved) {
+    const { error: reopenError } = await supabase.rpc("reopen_day_off_swap_request", { p_request_id: requestId });
+    if (reopenError) return { error: reopenError.message };
+  }
+
+  const { error: updateError } = await supabase
+    .from("day_off_swap_requests")
+    .update({
+      original_date: originalDate,
+      substitute_date: input.substituteDate,
+      unit,
+      period,
+      reason: input.reason.trim() || null,
+    })
+    .eq("id", requestId)
+    .eq("org_id", user.orgId);
+  if (updateError) {
+    return { error: wasApproved ? `${updateError.message} (คำขอถูกเปลี่ยนเป็นรออนุมัติ กรุณาอนุมัติใหม่)` : updateError.message };
+  }
+
+  if (wasApproved) {
+    try {
+      await decideDayOffSwapRequest(requestId, "approved");
+    } catch (e) {
+      return { error: `บันทึกการแก้ไขแล้ว แต่อนุมัติใหม่ไม่สำเร็จ (คำขอเป็นรออนุมัติ กรุณากดอนุมัติ): ${e instanceof Error ? e.message : ""}` };
+    }
+  }
+
+  revalidatePath("/day-off-swap");
+  revalidatePath("/attendance");
+}

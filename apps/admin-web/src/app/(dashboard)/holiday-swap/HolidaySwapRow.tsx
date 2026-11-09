@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
-import { decideHolidaySwapRequest, deleteHolidaySwapRequestAction } from "./actions";
+import { SwapEditForm } from "@/components/SwapEditForm";
+import { decideHolidaySwapRequest, deleteHolidaySwapRequestAction, updateHolidaySwapRequestAction } from "./actions";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "neutral"; label: string }> = {
   pending: { tone: "warning", label: "รออนุมัติ" },
@@ -30,6 +31,7 @@ const PERIOD_TH: Record<string, string> = { morning: "เช้า", afternoon: 
 export function HolidaySwapRow({ row }: { row: RowData }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
   const badge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
 
@@ -54,6 +56,7 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
   }
 
   return (
+    <>
     <tr>
       <td className="px-4 py-3 font-semibold">
         <div className="flex items-center gap-2">
@@ -108,6 +111,14 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
               </button>
             </>
           ) : (
+            <>
+            <button
+              onClick={() => setEditing(true)}
+              disabled={isPending || editing}
+              className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/10 disabled:opacity-60"
+            >
+              แก้ไข
+            </button>
             <button
               onClick={() => setConfirmingDelete(true)}
               disabled={isPending}
@@ -115,10 +126,36 @@ export function HolidaySwapRow({ row }: { row: RowData }) {
             >
               ลบ
             </button>
+            </>
           )}
         </div>
         {error && <p className="mt-1 text-right text-xs font-semibold text-status-danger">{error}</p>}
       </td>
     </tr>
+    {editing && (
+      <tr>
+        <td colSpan={6} className="px-4 pb-4">
+          <SwapEditForm
+            firstLabel="วันหยุดนักขัตฤกษ์ที่ทำงาน"
+            substituteLabel="วันหยุดชดเชย"
+            approved={row.status === "approved"}
+            initial={{
+              firstDate: row.holidayDate,
+              substituteDate: row.substituteDate,
+              unit: row.unit === "half_day" ? "half_day" : "full_day",
+              period: row.period === "morning" || row.period === "afternoon" ? row.period : null,
+              reason: row.reason ?? "",
+            }}
+            onSave={async (v) => {
+              const result = await updateHolidaySwapRequestAction(row.id, v);
+              if (!result?.error) setEditing(false);
+              return result;
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
