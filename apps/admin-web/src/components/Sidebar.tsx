@@ -19,6 +19,7 @@ const NAV_ITEMS: { href: string; label: string; icon: string; roles?: UserRole[]
   { href: "/schedule", label: "ตารางกะประจำ", icon: "calendar_view_week", roles: ["super_admin", "hr"] },
   { href: "/org-chart", label: "ผังองค์กร", icon: "account_tree" },
   { href: "/reviews", label: "ประเมินผลงาน", icon: "military_tech" },
+  { href: "/goals", label: "เป้าหมาย & KPI", icon: "flag" },
   { href: "/payroll", label: "Payroll", icon: "payments", roles: ["super_admin", "hr"] },
   { href: "/reports", label: "รายงานสรุป", icon: "assessment", roles: ["super_admin", "hr"] },
   { href: "/announcements", label: "ประกาศ", icon: "campaign" },
