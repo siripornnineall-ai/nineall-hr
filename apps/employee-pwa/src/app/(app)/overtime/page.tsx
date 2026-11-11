@@ -51,7 +51,8 @@ export default function OvertimePage() {
   const [requests, setRequests] = useState<OvertimeRow[]>([]);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
   // Lateness (minutes) that has not been made up, in the current 26th-25th OT cycle — it comes off OT.
-  const [lateMinutesCycle, setLateMinutesCycle] = useState(0);
+  const [lateDaysCycle, setLateDaysCycle] = useState<{ date: string; minutes: number }[]>([]);
+  const lateMinutesCycle = lateDaysCycle.reduce((sum, d) => sum + d.minutes, 0);
   const [loaded, setLoaded] = useState(false);
   const [historyYear, setHistoryYear] = useState(() => new Date().getFullYear());
 
@@ -78,14 +79,22 @@ export default function OvertimePage() {
       supabase.from("company_holidays").select("holiday_date").eq("org_id", profile.orgId),
       supabase
         .from("attendance_records")
-        .select("late_minutes")
+        .select("work_date, late_minutes, clock_out_server_at")
         .eq("employee_id", profile.employeeId)
         .eq("status", "late")
         .gt("late_minutes", 0)
         .gte("work_date", cycle.start)
         .lte("work_date", cycle.end),
     ]);
-    setLateMinutesCycle((lateRows ?? []).reduce((sum, r) => sum + (r.late_minutes ?? 0), 0));
+    // Today's lateness is not final until the person clocks out: staying after 18:00 makes it up (and a stay of 30+ min
+    // becomes OT), so a day that is still open is not deducted yet.
+    const todayBkk = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+    setLateDaysCycle(
+      (lateRows ?? [])
+        .filter((r) => !(r.work_date === todayBkk && !r.clock_out_server_at))
+        .map((r) => ({ date: r.work_date as string, minutes: (r.late_minutes ?? 0) as number }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+    );
     setRequests(reqs ?? []);
     setHolidayDates(new Set((holidays ?? []).map((h) => h.holiday_date)));
     setLoaded(true);
@@ -162,6 +171,13 @@ export default function OvertimePage() {
         {lateMinutesCycle > 0 && (
           <p className="mt-1 text-xs text-on-surface-variant">
             OT {roundedApproved} {t("ชม.")} − {t("หักมาสาย")} {lateMinutesCycle} {t("นาที")}
+          </p>
+        )}
+        {lateMinutesCycle > 0 && (
+          <p className="mt-0.5 text-[11px] text-on-surface-variant">
+            {lateDaysCycle
+              .map((d) => `${new Date(`${d.date}T00:00:00`).toLocaleDateString("th-TH", { day: "numeric", month: "short" })} ${d.minutes} ${t("นาที")}`)
+              .join(" · ")}
           </p>
         )}
         <p className="mt-0.5 text-[11px] text-on-surface-variant">
