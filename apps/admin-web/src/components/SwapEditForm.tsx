@@ -21,6 +21,7 @@ interface Props {
 }
 
 // Inline editor for a day-off swap / holiday swap request (HR / super admin). Used by both admin swap pages.
+// (touched 2026-11-12 only to trigger a new admin-web deploy after a transient Google Fonts build failure)
 export function SwapEditForm({ firstLabel, firstOptional, substituteLabel, initial, approved, onSave, onCancel }: Props) {
   const [values, setValues] = useState<SwapEditValues>(initial);
   const [error, setError] = useState<string | null>(null);
