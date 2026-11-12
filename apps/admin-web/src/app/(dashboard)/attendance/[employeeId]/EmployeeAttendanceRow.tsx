@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/Badge";
 import { deleteAttendanceRecordAction, markDayOffAction, updateAttendanceTimeAction } from "../actions";
+import { halfDayBadge } from "@/lib/leaveDuration";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "info" | "holiday" | "neutral"; label: string }> = {
   on_time: { tone: "success", label: "ตรงเวลา" },
@@ -55,6 +56,7 @@ interface RowData {
   otMinutes: number;
   status: string;
   statusDetail: string | null;
+  halfDayLabel?: string | null;
   shiftId: string | null;
   workLocationId: string | null;
 }
@@ -80,7 +82,7 @@ export function EmployeeAttendanceRow({
   const baseBadge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
   // A day off that came from a swap says so ("สลับวันหยุดนักขัตฤกษ์") instead of "หยุดประจำ".
   const swapDayOff = row.status === "day_off" && !!row.statusDetail?.startsWith("สลับ");
-  const badge = swapDayOff ? { ...baseBadge, label: row.statusDetail! } : baseBadge;
+  const badge = swapDayOff ? { ...baseBadge, label: row.statusDetail! } : (halfDayBadge(row.status, row.halfDayLabel) ?? baseBadge);
 
   function markDayOff() {
     setError(null);

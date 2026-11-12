@@ -35,6 +35,30 @@ export function formatLeaveDuration(unit: string | null | undefined, totalDays: 
 const LEAVE_STATUS_TH: Record<string, string> = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว" };
 
 /**
+ * "ลาครึ่งวันเช้า" / "ลาครึ่งวันบ่าย" for a day with APPROVED half-day leave (owner 2026-11-12), so the
+ * Attendance pages show the half-day leave as the status instead of "ตรงเวลา" / "ออกก่อน".
+ */
+export function halfDayLeaveLabel(
+  leaves: { unit: string | null; totalDays: number; startTime: string | null; status: string }[]
+): string | null {
+  const half = leaves.find((l) => l.status === "approved" && (l.unit === "half_day" || (l.unit === "full_day" && l.totalDays < 1)));
+  if (!half) return null;
+  const start = toMinutes(half.startTime);
+  return start != null && start >= 12 * 60 ? "ลาครึ่งวันบ่าย" : "ลาครึ่งวันเช้า";
+}
+
+/** Badge for a worked day that also had approved half-day leave; lateness outside the leave still shows. */
+export function halfDayBadge(
+  status: string,
+  halfDayLabel: string | null | undefined
+): { tone: "info" | "warning"; label: string } | null {
+  if (!halfDayLabel || !["on_time", "late", "early_leave"].includes(status)) return null;
+  if (status === "late") return { tone: "warning", label: `${halfDayLabel} · มาสาย` };
+  if (status === "early_leave") return { tone: "warning", label: `${halfDayLabel} · ออกก่อน` };
+  return { tone: "info", label: halfDayLabel };
+}
+
+/**
  * Why a day that is not plain "on time" looks the way it does: the leave on file for that day,
  * or, for someone who left early, an explicit "ไม่มีใบลา" (owner 2026-10-15: the Attendance
  * page should say whether they took leave or really left early).

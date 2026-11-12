@@ -10,7 +10,7 @@ import { EmployeeAttendanceRow } from "./EmployeeAttendanceRow";
 import { signAvatarUrls } from "@/lib/avatars";
 import { getOtWindowFor, currentOtCutoffMonthKey } from "@/lib/otCutoff";
 import { lateMinutesFromPrevCycleRule } from "@/lib/lateDeduction";
-import { explainDayLeave } from "@/lib/leaveDuration";
+import { explainDayLeave, halfDayLeaveLabel } from "@/lib/leaveDuration";
 
 function parseMonth(month: string | undefined): { year: number; monthIndex: number } {
   if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -285,6 +285,7 @@ export default async function EmployeeAttendanceDashboardPage({
                                 : (r.status === "late" && coveredLate.has(r.work_date)) || spareUses.has(r.work_date)
                                   ? coverNote(r.work_date, r.late_minutes ?? 0)
                                   : explainDayLeave(leavesForDate(r.work_date), r.status),
+                      halfDayLabel: halfDayLeaveLabel(leavesForDate(r.work_date)),
                       shiftId: r.shift_id,
                       workLocationId: r.work_location_id,
                     }}

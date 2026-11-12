@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signAvatarUrls } from "@/lib/avatars";
-import { explainDayLeave } from "@/lib/leaveDuration";
+import { explainDayLeave, halfDayLeaveLabel } from "@/lib/leaveDuration";
 
 // work_date is a plain YYYY-MM-DD with no time component, so parsing it as UTC midnight and
 // reading getUTCDay() back out is just calendar arithmetic — never affected by server/client
@@ -229,6 +229,7 @@ export interface AttendanceRow {
   clockOut: string | null;
   status: string;
   statusDetail: string | null;
+  halfDayLabel: string | null;
   lateMinutes: number;
   otMinutes: number;
   withinGeofence: boolean | null;
@@ -354,6 +355,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       // Ice / Kanin: shown as on time; the late minutes still drive the OT deduction.
       status: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? "on_time" : r.status,
       statusDetail,
+      halfDayLabel: halfDayLeaveLabel(leavesByEmployee.get(r.employee_id) ?? []),
       // Late minutes taken off OT are not shown (the number only confused: owner 2026-10-26).
       lateMinutes: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? 0 : r.late_minutes,
       otMinutes: r.ot_minutes,

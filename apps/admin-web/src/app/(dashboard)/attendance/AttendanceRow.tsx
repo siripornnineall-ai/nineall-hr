@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
 import { deleteAttendanceRecordAction, markDayOffAction, updateAttendanceTimeAction } from "./actions";
+import { halfDayBadge } from "@/lib/leaveDuration";
 
 const STATUS_BADGE: Record<string, { tone: "success" | "warning" | "danger" | "info" | "holiday" | "neutral"; label: string }> = {
   on_time: { tone: "success", label: "ตรงเวลา" },
@@ -63,6 +64,7 @@ interface AttendanceRowData {
   clockOut: string | null;
   status: string;
   statusDetail: string | null;
+  halfDayLabel?: string | null;
   lateMinutes: number;
   otMinutes: number;
   withinGeofence: boolean | null;
@@ -113,7 +115,7 @@ export function AttendanceRow({
   const baseBadge = STATUS_BADGE[row.status] ?? { tone: "neutral" as const, label: row.status };
   // A day off that came from a swap says so ("สลับวันหยุดนักขัตฤกษ์") instead of "หยุดประจำ".
   const swapDayOff = row.status === "day_off" && !!row.statusDetail?.startsWith("สลับ");
-  const badge = swapDayOff ? { ...baseBadge, label: row.statusDetail! } : baseBadge;
+  const badge = swapDayOff ? { ...baseBadge, label: row.statusDetail! } : (halfDayBadge(row.status, row.halfDayLabel) ?? baseBadge);
 
   function save() {
     setError(null);
