@@ -114,3 +114,4 @@ export function SwapEditForm({ firstLabel, firstOptional, substituteLabel, initi
     </div>
   );
 }
+// (rebuild trigger 2026-11-13: transient Vercel build failure)
