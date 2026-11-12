@@ -56,8 +56,7 @@ function computeHours(startTime: string, endTime: string): number {
 // pattern — rather than inserting straight as 'approved', since a plain insert bypasses
 // the create_first_approval_step trigger's approval_steps row entirely otherwise, leaving
 // it stuck as if still awaiting the first (never-created) approval step.
-// overtime_requests_insert_admin_hr (migration 0056) caps work_date at 3 days back, same
-// as the employee-facing cap from migration 0049.
+// Employees can only request OT up to 3 days back (migration 0049); admin / HR can record any date (migration 0145).
 export async function createBackdatedOvertimeAction(values: {
   employeeId: string;
   workDate: string;
@@ -97,6 +96,7 @@ export async function createBackdatedOvertimeAction(values: {
     })
     .select("id")
     .single();
+  if (insertError?.message.includes("row-level security")) return { error: "ไม่มีสิทธิ์บันทึก OT นี้ — ตรวจสอบว่าพนักงานอยู่ในบริษัทเดียวกับคุณ และบัญชีของคุณเป็นแอดมิน/HR" };
   if (insertError || !request) return { error: insertError?.message ?? "บันทึก OT ไม่สำเร็จ" };
 
   const { error: approveError } = await supabase.from("overtime_requests").update({ status: "approved", approved_hours: hours }).eq("id", request.id);
