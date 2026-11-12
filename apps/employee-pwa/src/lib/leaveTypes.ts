@@ -7,4 +7,4 @@ export const QUOTA_DISPLAY_LEAVE_CODES = new Set(["SICK", "PERSONAL", "VACATION"
 export function countsTowardLeaveQuota(code: string | null | undefined): boolean {
   return !!code && QUOTA_DISPLAY_LEAVE_CODES.has(code);
 }
-// (rebuild trigger 2026-11-13: transient Vercel build failure)
+// (rebuild trigger 2026-11-13: Vercel failed twice on a transient Google Fonts fetch)
