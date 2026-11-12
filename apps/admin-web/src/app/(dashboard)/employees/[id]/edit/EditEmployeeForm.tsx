@@ -25,6 +25,7 @@ interface EmployeeRow {
   title_prefix: string | null;
   gender: string | null;
   gender_identity: string | null;
+  nationality: string | null;
   phone: string | null;
   personal_email: string | null;
   hire_date: string;
@@ -123,6 +124,12 @@ export function EditEmployeeForm({
           name="genderIdentity"
           defaultValue={employee.gender_identity ?? ""}
           options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))}
+        />
+        <Select
+          label="สัญชาติ"
+          name="nationality"
+          defaultValue={employee.nationality ?? ""}
+          options={Array.from(new Set([...["ไทย", "ลาว", "เมียนมา", "กัมพูชา", "เวียดนาม", "อื่น ๆ"], ...(employee.nationality ? [employee.nationality] : [])])).map((v) => ({ value: v, label: v }))}
         />
         <Field label="เบอร์โทร" name="phone" defaultValue={employee.phone ?? ""} />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" defaultValue={employee.personal_email ?? ""} />

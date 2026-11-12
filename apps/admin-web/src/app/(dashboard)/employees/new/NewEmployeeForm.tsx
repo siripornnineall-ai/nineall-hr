@@ -103,6 +103,7 @@ export function NewEmployeeForm({
         <DateField label="วันเกิด" name="dateOfBirth" value={dateOfBirth} onChange={setDateOfBirth} />
         <Select label="เพศ" name="gender" options={GENDERS.map((v) => ({ value: v, label: v }))} />
         <Select label="เพศสภาพ" name="genderIdentity" options={GENDER_IDENTITIES.map((v) => ({ value: v, label: v }))} />
+        <Select label="สัญชาติ" name="nationality" options={["ไทย", "ลาว", "เมียนมา", "กัมพูชา", "เวียดนาม", "อื่น ๆ"].map((v) => ({ value: v, label: v }))} />
         <Field label="เบอร์โทร" name="phone" />
         <Field label="อีเมลส่วนตัว" name="personalEmail" type="email" />
         <ThaiIdField label="เลขบัตรประชาชน" name="nationalId" />

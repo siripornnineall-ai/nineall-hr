@@ -29,6 +29,7 @@ export interface EmployeeDetailData {
   titlePrefix: string | null;
   gender: string | null;
   genderIdentity: string | null;
+  nationality: string | null;
   phone: string | null;
   personalEmail: string | null;
   nationalId: string | null;
@@ -182,6 +183,7 @@ function EmployeeTab({
         <Info label="ชื่อ-นามสกุล (ภาษาอังกฤษ)" value={[employee.firstNameEn, employee.lastNameEn].filter(Boolean).join(" ") || "-"} />
         <Info label="ชื่อเล่น" value={employee.nickname ?? "-"} />
         <Info label="เพศ / เพศสภาพ" value={[employee.gender, employee.genderIdentity].filter(Boolean).join(" / ") || "-"} />
+        <Info label="สัญชาติ" value={employee.nationality ?? "-"} />
         <Info label="เบอร์โทร" value={employee.phone ?? "-"} />
         <Info label="อีเมล" value={employee.personalEmail ?? "-"} />
         {canSeeSalary && <Info label="เลขบัตรประชาชน" value={employee.nationalId ?? "-"} />}

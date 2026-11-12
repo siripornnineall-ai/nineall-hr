@@ -51,7 +51,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, first_name_en, last_name_en, nickname, title_prefix, gender, gender_identity, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, department_id, job_position_id, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, first_name_en, last_name_en, nickname, title_prefix, gender, gender_identity, nationality, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, department_id, job_position_id, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -243,6 +243,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             titlePrefix: employee.title_prefix,
             gender: employee.gender,
             genderIdentity: employee.gender_identity,
+            nationality: employee.nationality,
             phone: employee.phone,
             personalEmail: employee.personal_email,
             nationalId: employee.national_id,
