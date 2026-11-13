@@ -118,6 +118,7 @@ export default function TaskBoardPage() {
   const me = profile?.employeeId ?? "";
 
   const [depts, setDepts] = useState<Dept[]>([]);
+  const [myDeptId, setMyDeptId] = useState<string>("");
   const [deptId, setDeptId] = useState<string>("");
   const [members, setMembers] = useState<Member[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -142,9 +143,11 @@ export default function TaskBoardPage() {
 
   const dept = depts.find((d) => d.id === deptId) ?? null;
   const isHead = !!dept && !!me && dept.head_employee_id === me;
+  // Every department's board is visible to everyone (transparency), but only my own department (or one I head) is editable.
+  const readOnly = !!dept && !isHead && dept.id !== myDeptId;
   const memberById = useMemo(() => new Map(members.map((m) => [m.employee_id, m])), [members]);
 
-  // Departments I can open: my own, plus any I am the head of.
+  // All departments, read-only except my own / ones I head.
   useEffect(() => {
     if (!profile) return;
     (async () => {
@@ -152,10 +155,11 @@ export default function TaskBoardPage() {
         supabase.from("employees").select("department_id").eq("id", profile.employeeId).maybeSingle(),
         supabase.from("departments").select("id, name, head_employee_id").eq("org_id", profile.orgId).is("deleted_at", null).order("name"),
       ]);
-      const mine = (deptRows ?? []).filter((d) => d.id === meRow?.department_id || d.head_employee_id === profile.employeeId) as Dept[];
-      setDepts(mine);
-      setDeptId((cur) => cur || meRow?.department_id || mine[0]?.id || "");
-      if (mine.length === 0) setLoaded(true);
+      const all = (deptRows ?? []) as Dept[];
+      setMyDeptId(meRow?.department_id ?? "");
+      setDepts(all);
+      setDeptId((cur) => cur || meRow?.department_id || all[0]?.id || "");
+      if (all.length === 0) setLoaded(true);
     })();
   }, [profile, supabase]);
 
@@ -184,9 +188,9 @@ export default function TaskBoardPage() {
   }, [load]);
 
   const openCard = cards.find((c) => c.id === openId) ?? null;
-  const own = !!openCard && (openCard.assignee_employee_id === me || openCard.created_by_employee_id === me);
-  const canEditText = openId === "new" || isHead || (own && (openCard?.status === "todo" || openCard?.status === "doing"));
-  const canEditPlan = openId === "new" ? true : isHead; // due date / weight / assignee (members: only when creating)
+  const own = !readOnly && !!openCard && (openCard.assignee_employee_id === me || openCard.created_by_employee_id === me);
+  const canEditText = !readOnly && (openId === "new" || isHead || (own && (openCard?.status === "todo" || openCard?.status === "doing")));
+  const canEditPlan = !readOnly && (openId === "new" ? true : isHead); // due date / weight / assignee (members: only when creating)
 
   function startNew() {
     setOpenId("new");
@@ -343,9 +347,13 @@ export default function TaskBoardPage() {
               <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
               {t("เฉพาะงานของฉัน")}
             </label>
-            <button onClick={startNew} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">
-              + {t("เพิ่มการ์ด")}
-            </button>
+            {readOnly ? (
+              <span className="text-xs text-on-surface-variant">{t("ดูได้อย่างเดียว (แผนกอื่น)")}</span>
+            ) : (
+              <button onClick={startNew} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">
+                + {t("เพิ่มการ์ด")}
+              </button>
+            )}
           </div>
 
           <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
