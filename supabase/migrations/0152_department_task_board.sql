@@ -12,7 +12,7 @@
 --   Unfinished cards that are not yet due, or have no due date, do not count either way.
 -- All rules are enforced here (row-level security + triggers), not only in the apps.
 
-alter table public.departments add column if not exists head_employee_id uuid references public.employees(id) on delete set null;
+alter table public.departments add column if not exists head_employee_id uuid; -- no FK: a second employees<->departments FK makes PostgREST embeds ambiguous (see 0155)
 
 create table if not exists public.task_cards (
   id uuid primary key default gen_random_uuid(),
