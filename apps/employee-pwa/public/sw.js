@@ -55,25 +55,37 @@ self.addEventListener("push", (event) => {
   } catch {
     // non-JSON payload — fall back to the default text above
   }
-  // Clock-in / clock-out reminders (migration 0156) point at /attendance: make them loud — never silent, longer vibration,
-  // stay on screen until dismissed, and a fresh alert (sound) even if an earlier reminder is still showing.
+  // Clock-in / clock-out reminders (migration 0156) point at /attendance: make them loud (longer vibration, stay on
+  // screen until dismissed) and, if the app is open, ask it to SAY the reminder out loud (web push itself cannot carry
+  // custom audio). Every step is guarded: a push MUST always end in a visible notification, so if the richer options are
+  // rejected by a browser we fall back to the plain notification (iOS drops subscriptions that receive silent pushes).
   const isClockReminder = (payload.url || "").startsWith("/attendance");
+  const basic = {
+    body: payload.body,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    vibrate: [200, 100, 200],
+    data: { url: payload.url || "/" },
+  };
   event.waitUntil(
-    // If the app is open, ask it to SAY the reminder out loud (web push itself cannot carry custom audio).
-    (isClockReminder
-      ? self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    (async () => {
+      if (isClockReminder) {
+        try {
+          const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
           for (const c of clients) c.postMessage({ type: "clock-reminder", text: payload.title });
-        })
-      : Promise.resolve()
-    ).then(() => self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      silent: false,
-      vibrate: isClockReminder ? [400, 150, 400, 150, 400] : [200, 100, 200],
-      ...(isClockReminder ? { tag: "clock-reminder", renotify: true, requireInteraction: true } : {}),
-      data: { url: payload.url || "/" },
-    }))
+        } catch {
+          // voice is optional
+        }
+      }
+      try {
+        await self.registration.showNotification(
+          payload.title,
+          isClockReminder ? { ...basic, vibrate: [400, 150, 400, 150, 400], requireInteraction: true } : basic
+        );
+      } catch {
+        await self.registration.showNotification(payload.title, basic);
+      }
+    })()
   );
 });
 
