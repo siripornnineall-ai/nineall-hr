@@ -29,6 +29,8 @@ interface Card {
   submitted_at: string | null;
   parent_id: string | null;
   is_group: boolean;
+  link_url: string | null;
+  attachment_path: string | null;
 }
 
 interface Member {
@@ -75,6 +77,28 @@ function monthRange(month: string): { from: string; to: string } {
   const [y, m] = month.split("-").map(Number);
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+const normLink = (v: string): string | null => {
+  const x = v.trim();
+  if (!x) return null;
+  return /^https?:\/\//i.test(x) ? x : `https://${x}`;
+};
+const safeHref = (v: string) => (/^https?:\/\//i.test(v) ? v : "#");
+
+// Phone photos are several MB: shrink to 1600px JPEG before uploading (falls back to the original file).
+async function shrinkImage(file: File): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("resize"))), "image/jpeg", 0.82));
+  } catch {
+    return file;
+  }
 }
 
 function Stars({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
@@ -143,6 +167,10 @@ export default function TaskBoardPage() {
   const [saving, setSaving] = useState(false);
   const [draftItems, setDraftItems] = useState<string[]>([]); // checklist items typed while creating a new card
   const [draftText, setDraftText] = useState("");
+  const [link, setLink] = useState("");
+  const [attachPath, setAttachPath] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [groupOpenId, setGroupOpenId] = useState<string | null>(null); // a heading opened from the board
   const [groupItemText, setGroupItemText] = useState("");
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(false);
@@ -177,7 +205,7 @@ export default function TaskBoardPage() {
     const [{ data: cardRows, error: cardErr }, { data: memberRows }, { data: scoreRows }] = await Promise.all([
       supabase
         .from("task_cards")
-        .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, position, quality, is_late, review_note, submitted_at, parent_id, is_group")
+        .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, position, quality, is_late, review_note, submitted_at, parent_id, is_group, link_url, attachment_path")
         .eq("department_id", deptId)
         .neq("status", "cancelled")
         .order("position"),
@@ -202,10 +230,47 @@ export default function TaskBoardPage() {
   // (adding items turns the card into a heading; its items become the cards on the board).
   const canAddItems =
     !readOnly && (openId === "new" || (!!openCard && !openCard.parent_id && !openCard.is_group && openCard.status === "todo" && (isHead || own)));
+  // Proof of work (optional link / image): the assignee before sending for review, or the head.
+  const canEditProof = !readOnly && !!openCard && !openCard.is_group && (isHead || (own && (openCard.status === "todo" || openCard.status === "doing")));
+  const proofExtra = () => (canEditProof ? { link_url: normLink(link), attachment_path: attachPath || null } : {});
   const canEditPlan = !readOnly && (openId === "new" ? true : isHead); // due date / weight / assignee (members: only when creating)
+
+  useEffect(() => {
+    if (!attachPath) {
+      void Promise.resolve().then(() => setPreviewUrl(null));
+      return;
+    }
+    let cancelled = false;
+    supabase.storage
+      .from("task-attachments")
+      .createSignedUrl(attachPath, 3600)
+      .then(({ data }) => {
+        if (!cancelled) setPreviewUrl(data?.signedUrl ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attachPath, supabase]);
+
+  async function uploadProof(file: File) {
+    if (!profile || !openCard) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const blob = await shrinkImage(file);
+      const path = `${profile.orgId}/${openCard.department_id}/${openCard.id}/${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage.from("task-attachments").upload(path, blob, { contentType: blob.type || "image/jpeg" });
+      if (upErr) setError(upErr.message);
+      else setAttachPath(path);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function startNew() {
     setOpenId("new");
+    setLink("");
+    setAttachPath("");
     setDraftItems([]);
     setDraftText("");
     setTitle("");
@@ -228,6 +293,8 @@ export default function TaskBoardPage() {
       return;
     }
     setOpenId(c.id);
+    setLink(c.link_url ?? "");
+    setAttachPath(c.attachment_path ?? "");
     setDraftItems([]);
     setDraftText("");
     setTitle(c.title);
@@ -312,7 +379,7 @@ export default function TaskBoardPage() {
       if (ok) setOpenId(null);
       return;
     }
-    const patch: Record<string, unknown> = {};
+    const patch: Record<string, unknown> = { ...proofExtra() };
     if (canEditText) {
       patch.title = title.trim();
       patch.description = description.trim() || null;
@@ -677,7 +744,7 @@ export default function TaskBoardPage() {
                         </span>
                       </button>
                       {mine && it.status === "doing" && (
-                        <button type="button" disabled={saving} onClick={() => move(it, "review")} className="shrink-0 rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
+                        <button type="button" disabled={saving} onClick={() => startOpen(it)} className="shrink-0 rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
                           ➜ {t("ส่งตรวจ")}
                         </button>
                       )}
@@ -844,7 +911,7 @@ export default function TaskBoardPage() {
                         </button>
                         <span className="text-[11px] text-on-surface-variant">{t(COLUMNS.find((c) => c.status === it.status)?.label ?? "")}</span>
                         {mine && it.status === "doing" && (
-                          <button type="button" disabled={saving} onClick={() => move(it, "review")} className="rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
+                          <button type="button" disabled={saving} onClick={() => startOpen(it)} className="rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
                             ➜ {t("ส่งตรวจ")}
                           </button>
                         )}
@@ -894,6 +961,53 @@ export default function TaskBoardPage() {
                 ))}
               </div>
             </div>
+
+            {/* optional proof of work: a link and / or an image, so the head can see it while checking */}
+            {openCard && !openCard.is_group && (canEditProof || link || attachPath) && (
+              <div className="space-y-2 rounded-xl bg-surface-container p-3">
+                <p className="text-sm font-bold text-on-surface">
+                  {t("แนบผลงาน")} <span className="text-xs font-normal text-on-surface-variant">({t("ไม่บังคับ")})</span>
+                </p>
+                {canEditProof ? (
+                  <input value={link} onChange={(e) => setLink(e.target.value)} inputMode="url" className={field} placeholder={t("ลิงก์งาน เช่น https://...")} />
+                ) : (
+                  link && (
+                    <a href={safeHref(link)} target="_blank" rel="noopener noreferrer" className="block break-all text-sm font-semibold text-primary underline">
+                      🔗 {link}
+                    </a>
+                  )
+                )}
+                {attachPath && previewUrl && (
+                  <div className="relative">
+                    <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={previewUrl} alt={t("ผลงาน")} className="max-h-56 w-full rounded-xl object-contain bg-white" />
+                    </a>
+                    {canEditProof && (
+                      <button type="button" onClick={() => setAttachPath("")} className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-bold text-white">
+                        ✕ {t("เอารูปออก")}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {canEditProof && !attachPath && (
+                  <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-outline-variant bg-white py-3 text-sm font-semibold text-on-surface-variant">
+                    {uploading ? t("กำลังอัปโหลด...") : `📷 ${t("แนบรูป")}`}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) void uploadProof(f);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
 
             {openCard?.status === "done" && (
               <div className="rounded-xl bg-[#e9f8ee] p-3 text-sm">
@@ -945,7 +1059,7 @@ export default function TaskBoardPage() {
                 )}
                 {(own || isHead) && openCard.status === "doing" && (
                   <>
-                    <button onClick={() => move(openCard, "review")} disabled={saving} className="rounded-xl bg-[#eaf2ff] px-3 py-2 text-sm font-bold text-primary">
+                    <button onClick={() => move(openCard, "review", proofExtra())} disabled={saving || uploading} className="rounded-xl bg-[#eaf2ff] px-3 py-2 text-sm font-bold text-primary">
                       ➜ {t("ส่งให้หัวหน้าตรวจ")}
                     </button>
                     <button onClick={() => move(openCard, "todo")} disabled={saving} className="rounded-xl bg-surface-container px-3 py-2 text-sm font-semibold">
