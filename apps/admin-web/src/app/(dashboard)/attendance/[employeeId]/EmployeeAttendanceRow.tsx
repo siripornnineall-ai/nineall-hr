@@ -56,6 +56,7 @@ interface RowData {
   otMinutes: number;
   status: string;
   statusDetail: string | null;
+  swapNote?: string | null;
   halfDayLabel?: string | null;
   shiftId: string | null;
   workLocationId: string | null;
@@ -184,6 +185,7 @@ export function EmployeeAttendanceRow({
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
         {row.statusDetail && !swapDayOff && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
+        {row.swapNote && <div className="mt-1 text-xs font-semibold text-primary">{row.swapNote}</div>}
       </td>
       <td className="px-4 py-3 text-right">
         {confirmingDelete ? (

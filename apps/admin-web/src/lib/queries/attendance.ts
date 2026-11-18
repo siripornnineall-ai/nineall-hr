@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { originalDayInfo, substituteNote, type DayOffSwap } from "@/lib/dayOffSwapNotes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signAvatarUrls } from "@/lib/avatars";
 import { explainDayLeave, halfDayLeaveLabel } from "@/lib/leaveDuration";
@@ -229,6 +230,7 @@ export interface AttendanceRow {
   clockOut: string | null;
   status: string;
   statusDetail: string | null;
+  swapNote?: string | null;
   halfDayLabel: string | null;
   lateMinutes: number;
   otMinutes: number;
@@ -251,7 +253,7 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     .not("employees.employment_status", "in", "(resigned,terminated)")
     .order("clock_in_server_at", { ascending: true });
 
-  const [{ data, error }, { data: holiday }, { data: leaveRows }, { data: swapDayOffs }, { data: holidayWorkers }] = await Promise.all([
+  const [{ data, error }, { data: holiday }, { data: leaveRows }, { data: swapDayOffs }, { data: holidayWorkers }, { data: dayOffSwapRows }] = await Promise.all([
     query,
     supabase.from("company_holidays").select("name").eq("org_id", orgId).eq("holiday_date", workDate).maybeSingle(),
     // "ลา" alone doesn't say which kind — look up the approved leave covering this date per
@@ -267,8 +269,12 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
     supabase.from("shift_assignments").select("employee_id, source").eq("org_id", orgId).eq("work_date", workDate).eq("is_day_off", true).in("source", ["holiday_swap", "day_off_swap"]),
     // People who worked this public holiday because they swapped it for another day.
     supabase.from("holiday_swap_requests").select("employee_id").eq("org_id", orgId).eq("holiday_date", workDate).eq("status", "approved"),
+    // Day-off swaps touching this date (the day worked, or the day taken off) — for the swap notes.
+    supabase.from("day_off_swap_requests").select("employee_id, unit, period, original_date, substitute_date").eq("org_id", orgId).eq("status", "approved").or(`original_date.eq.${workDate},substitute_date.eq.${workDate}`),
   ]);
   if (error) throw error;
+  const swapsByEmployee = new Map<string, DayOffSwap[]>();
+  for (const sw of (dayOffSwapRows ?? []) as DayOffSwap[]) swapsByEmployee.set(sw.employee_id!, [...(swapsByEmployee.get(sw.employee_id!) ?? []), sw]);
   const swapLabelByEmployee = new Map((swapDayOffs ?? []).map((s) => [s.employee_id, s.source === "holiday_swap" ? "สลับวันหยุดนักขัตฤกษ์" : "สลับวันหยุดประจำ"]));
   const workedHolidayBySwap = new Set((holidayWorkers ?? []).map((s) => s.employee_id));
 
@@ -343,6 +349,9 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
               : emp?.hide_late_status && coverNoteByEmployee.has(r.employee_id)
                 ? coverNoteByEmployee.get(r.employee_id)!
                 : explainDayLeave(leavesByEmployee.get(r.employee_id) ?? [], r.status);
+    const empSwaps = swapsByEmployee.get(r.employee_id) ?? [];
+    const orig = originalDayInfo(empSwaps, r.work_date);
+    const swapNote = [substituteNote(empSwaps, r.work_date), orig?.note].filter(Boolean).join(" · ") || null;
     return {
       id: r.id,
       workDate: r.work_date,
@@ -353,8 +362,9 @@ export async function listAttendanceForDate(orgId: string, workDate: string) {
       clockIn: r.clock_in_server_at,
       clockOut: r.clock_out_server_at,
       // Ice / Kanin: shown as on time; the late minutes still drive the OT deduction.
-      status: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? "on_time" : r.status,
+      status: orig?.cut ? "day_off" : r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? "on_time" : r.status,
       statusDetail,
+      swapNote,
       halfDayLabel: halfDayLeaveLabel(leavesByEmployee.get(r.employee_id) ?? []),
       // Late minutes taken off OT are not shown (the number only confused: owner 2026-10-26).
       lateMinutes: r.status === "late" && emp?.hide_late_status && coveredLateEmployees.has(r.employee_id) ? 0 : r.late_minutes,

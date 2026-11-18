@@ -64,6 +64,7 @@ interface AttendanceRowData {
   clockOut: string | null;
   status: string;
   statusDetail: string | null;
+  swapNote?: string | null;
   halfDayLabel?: string | null;
   lateMinutes: number;
   otMinutes: number;
@@ -212,6 +213,7 @@ export function AttendanceRow({
       <td className="px-4 py-3">
         <Badge tone={badge.tone}>{badge.label}</Badge>
         {row.statusDetail && !swapDayOff && <div className="mt-1 text-xs text-on-surface-variant">{row.statusDetail}</div>}
+        {row.swapNote && <div className="mt-1 text-xs font-semibold text-primary">{row.swapNote}</div>}
       </td>
       <td className="px-4 py-3 text-right">
         {confirmingDelete ? (

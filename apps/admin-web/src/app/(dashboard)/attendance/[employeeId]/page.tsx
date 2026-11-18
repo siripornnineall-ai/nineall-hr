@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { originalDayInfo, substituteNote, type DayOffSwap } from "@/lib/dayOffSwapNotes";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -62,7 +63,7 @@ export default async function EmployeeAttendanceDashboardPage({
   // nightly job; run it for this month too so a day off that was scheduled late still shows.
   await supabase.rpc("sync_scheduled_days_off_attendance", { p_from: monthStart, p_to: monthEnd, p_employee_id: employeeId });
 
-  const [{ data: records }, { data: leaveRows }, { data: holidayRows }, { data: swapDayOffRows }, { data: holidaySwapRows }] = await Promise.all([
+  const [{ data: records }, { data: leaveRows }, { data: holidayRows }, { data: swapDayOffRows }, { data: holidaySwapRows }, { data: dayOffSwapRows }] = await Promise.all([
     supabase
       .from("attendance_records")
       .select("id, work_date, status, clock_in_server_at, clock_out_server_at, late_minutes, ot_minutes, shift_id, work_location_id")
@@ -91,7 +92,15 @@ export default async function EmployeeAttendanceDashboardPage({
       .gte("work_date", monthStart)
       .lte("work_date", monthEnd),
     supabase.from("holiday_swap_requests").select("holiday_date").eq("employee_id", employeeId).eq("status", "approved").gte("holiday_date", monthStart).lte("holiday_date", monthEnd),
+    // Day-off swaps touching this month (the day worked, or the day taken off) — for the swap notes.
+    supabase
+      .from("day_off_swap_requests")
+      .select("unit, period, original_date, substitute_date")
+      .eq("employee_id", employeeId)
+      .eq("status", "approved")
+      .or(`and(original_date.gte.${monthStart},original_date.lte.${monthEnd}),and(substitute_date.gte.${monthStart},substitute_date.lte.${monthEnd})`),
   ]);
+  const daySwaps = (dayOffSwapRows ?? []) as DayOffSwap[];
   const swapLabelByDate = new Map((swapDayOffRows ?? []).map((r) => [r.work_date, r.source === "holiday_swap" ? "สลับวันหยุดนักขัตฤกษ์" : "สลับวันหยุดประจำ"]));
   const workedHolidayBySwap = new Set((holidaySwapRows ?? []).map((r) => r.holiday_date));
 
@@ -266,13 +275,14 @@ export default async function EmployeeAttendanceDashboardPage({
                     key={r.id}
                     row={{
                       id: r.id,
+                      swapNote: [substituteNote(daySwaps, r.work_date), originalDayInfo(daySwaps, r.work_date)?.note].filter(Boolean).join(" · ") || null,
                       workDate: r.work_date,
                       workDateLabel: new Date(r.work_date).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }),
                       clockIn: r.clock_in_server_at,
                       clockOut: r.clock_out_server_at,
                       lateMinutes: r.status === "late" && coveredLate.has(r.work_date) ? 0 : (r.late_minutes ?? 0),
                       otMinutes: r.ot_minutes ?? 0,
-                      status: r.status === "late" && coveredLate.has(r.work_date) ? "on_time" : r.status,
+                      status: originalDayInfo(daySwaps, r.work_date)?.cut ? "day_off" : r.status === "late" && coveredLate.has(r.work_date) ? "on_time" : r.status,
                       statusDetail:
                         r.status === "leave"
                           ? leaveTypeForDate(r.work_date)
