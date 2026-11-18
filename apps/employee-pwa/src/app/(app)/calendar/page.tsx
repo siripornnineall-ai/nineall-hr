@@ -181,6 +181,7 @@ export default function CalendarPage() {
             const attendance = attendanceByDate.get(iso);
             const isToday = iso === todayIso;
             const isSelected = iso === selectedDate;
+            const hasSwap = !!substituteNote(daySwaps, iso) || !!originalDayInfo(daySwaps, iso);
             const dotClass = attendance ? ATTENDANCE_DOT_CLASS[attendance.status === "late" && coveredLate.has(attendance.work_date) ? "on_time" : attendance.status] : undefined;
             return (
               <button
@@ -200,6 +201,8 @@ export default function CalendarPage() {
                       so a working holiday-swap day and a genuine holiday read differently at a glance. */}
                   {holidayName && <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />}
                   {dotClass && <span className={clsx("h-1.5 w-1.5 rounded-full", dotClass)} />}
+                  {/* Day-off swap (the day worked or the day taken off): blue dot, explained in the list below. */}
+                  {hasSwap && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
                 </span>
               </button>
             );
@@ -298,7 +301,17 @@ export default function CalendarPage() {
             <span className="text-xs font-bold text-secondary">ลาแล้ว</span>
           </div>
         ))}
-        {holidays.length === 0 && leaveRanges.length === 0 && (
+        {Array.from(new Set(daySwaps.flatMap((sw) => [sw.original_date, sw.substitute_date]).filter((d): d is string => !!d && d >= toIso(new Date(viewDate.getFullYear(), viewDate.getMonth(), 1)) && d <= toIso(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0))))).sort().map((d) => (
+          <div key={`swap-${d}`} className="flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.05)]">
+            <span className="material-symbols-outlined text-[18px] text-primary">swap_horiz</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-on-surface">{new Date(d).toLocaleDateString("th-TH", { day: "numeric", month: "long" })}</p>
+              <p className="text-xs text-on-surface-variant">{[substituteNote(daySwaps, d), originalDayInfo(daySwaps, d)?.note].filter(Boolean).join(" · ")}</p>
+            </div>
+            <span className="text-xs font-bold text-primary">สลับวันหยุด</span>
+          </div>
+        ))}
+        {holidays.length === 0 && leaveRanges.length === 0 && daySwaps.length === 0 && (
           <p className="py-4 text-center text-sm text-on-surface-variant">ไม่มีวันหยุดหรือวันลาในเดือนนี้</p>
         )}
       </div>
