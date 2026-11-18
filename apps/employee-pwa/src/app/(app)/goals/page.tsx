@@ -194,6 +194,10 @@ export default function TaskBoardPage() {
   const openCard = cards.find((c) => c.id === openId) ?? null;
   const own = !readOnly && !!openCard && (openCard.assignee_employee_id === me || openCard.created_by_employee_id === me);
   const canEditText = !readOnly && (openId === "new" || isHead || (own && (openCard?.status === "todo" || openCard?.status === "doing")));
+  // The checklist builder: on a new card, or on an existing standalone card that has not been started yet
+  // (adding items turns the card into a heading; its items become the cards on the board).
+  const canAddItems =
+    !readOnly && (openId === "new" || (!!openCard && !openCard.parent_id && !openCard.is_group && openCard.status === "todo" && (isHead || own)));
   const canEditPlan = !readOnly && (openId === "new" ? true : isHead); // due date / weight / assignee (members: only when creating)
 
   function startNew() {
@@ -213,6 +217,8 @@ export default function TaskBoardPage() {
 
   function startOpen(c: Card) {
     setOpenId(c.id);
+    setDraftItems([]);
+    setDraftText("");
     setTitle(c.title);
     setDescription(c.description ?? "");
     setAssignee(c.assignee_employee_id);
@@ -273,6 +279,28 @@ export default function TaskBoardPage() {
       return;
     }
     if (!openCard) return;
+    const pendingItems = [...draftItems, ...(draftText.trim() ? [draftText.trim()] : [])];
+    if (canAddItems && pendingItems.length > 0) {
+      const ok = await run(async () => {
+        const base = {
+          org_id: profile.orgId,
+          department_id: openCard.department_id,
+          assignee_employee_id: isHead ? assignee || openCard.assignee_employee_id : openCard.assignee_employee_id,
+          weight: isHead ? weight : openCard.weight,
+          due_date: (isHead ? dueDate : openCard.due_date) || null,
+        };
+        const { error: uErr } = await supabase
+          .from("task_cards")
+          .update({ title: title.trim(), description: description.trim() || null, is_group: true })
+          .eq("id", openCard.id);
+        if (uErr) return { error: uErr };
+        const { error: iErr } = await supabase.from("task_cards").insert(pendingItems.map((it) => ({ ...base, title: it, parent_id: openCard.id })));
+        if (iErr) await supabase.from("task_cards").update({ is_group: false }).eq("id", openCard.id); // turn it back into a normal card
+        return { error: iErr };
+      });
+      if (ok) setOpenId(null);
+      return;
+    }
     const patch: Record<string, unknown> = {};
     if (canEditText) {
       patch.title = title.trim();
@@ -524,9 +552,9 @@ export default function TaskBoardPage() {
             </div>
 
             {/* new card: optional checklist — each item becomes its own card on the board */}
-            {openId === "new" && (
+            {canAddItems && (
               <div>
-                <label className={labelCls}>{t("รายการย่อย (ไม่บังคับ)")}</label>
+                <label className={labelCls}>{openId === "new" ? t("รายการย่อย (ไม่บังคับ)") : t("เพิ่มรายการย่อยในการ์ดนี้")}</label>
                 <p className="mb-2 text-xs text-on-surface-variant">{t("เพิ่มได้หลายรายการ แต่ละรายการจะเป็นการ์ดแยก ย้ายไปแต่ละช่องและส่งตรวจได้เอง")}</p>
                 <div className="space-y-1.5">
                   {draftItems.map((it, i) => (
