@@ -61,7 +61,7 @@ export default function NotificationTestPage() {
         if (p !== "granted") return add("ไม่ได้รับอนุญาตแจ้งเตือน (" + p + ")");
       }
       const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification("ทดสอบในเครื่อง", { body: "ถ้าเห็นข้อความนี้ แปลว่าเครื่องแสดงแจ้งเตือนได้", icon: "/icon-192.png", vibrate: [200, 100, 200] });
+      await reg.showNotification("ทดสอบในเครื่อง", { body: "ถ้าเห็นข้อความนี้ แปลว่าเครื่องแสดงแจ้งเตือนได้", icon: "/icon-192.png", vibrate: [200, 100, 200] } as NotificationOptions);
       add("สั่งแสดงแจ้งเตือนในเครื่องแล้ว (ถ้าไม่เห็น ให้เช็คตั้งค่าแจ้งเตือนของเครื่อง/โหมดห้ามรบกวน)");
     } catch (e) {
       add("ผิดพลาด: " + (e instanceof Error ? e.message : String(e)));
