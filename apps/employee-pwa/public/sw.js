@@ -55,12 +55,17 @@ self.addEventListener("push", (event) => {
   } catch {
     // non-JSON payload — fall back to the default text above
   }
+  // Clock-in / clock-out reminders (migration 0156) point at /attendance: make them loud — never silent, longer vibration,
+  // stay on screen until dismissed, and a fresh alert (sound) even if an earlier reminder is still showing.
+  const isClockReminder = (payload.url || "").startsWith("/attendance");
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
-      vibrate: [200, 100, 200],
+      silent: false,
+      vibrate: isClockReminder ? [400, 150, 400, 150, 400] : [200, 100, 200],
+      ...(isClockReminder ? { tag: "clock-reminder", renotify: true, requireInteraction: true } : {}),
       data: { url: payload.url || "/" },
     })
   );
