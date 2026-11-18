@@ -354,7 +354,17 @@ export function TaskBoardAdmin({
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {COLUMNS.map((col) => {
-              const list = cards.filter((c) => !c.is_group && c.status === col.status); // headings are containers, not cards
+              // The board shows standalone cards and headings; a heading's items are summarised on the heading card and sit in the column
+              // that matches them (all done -> done, all to do -> todo, only waiting for the head -> review, else doing).
+              const groupStatus = (c: Card): Status => {
+                if (!c.is_group) return c.status;
+                const its = cards.filter((x) => x.parent_id === c.id);
+                if (its.length === 0 || its.every((i) => i.status === "todo")) return "todo";
+                if (its.every((i) => i.status === "done")) return "done";
+                if (its.every((i) => i.status === "done" || i.status === "review")) return "review";
+                return "doing";
+              };
+              const list = cards.filter((c) => !c.parent_id && groupStatus(c) === col.status);
               return (
                 <div key={col.status} className={clsx("w-72 shrink-0 rounded-xl p-3", col.tone)}>
                   <p className="mb-2 text-sm font-bold">
@@ -365,12 +375,9 @@ export function TaskBoardAdmin({
                       const overdue = c.status !== "done" && !!c.due_date && c.due_date < today;
                       return (
                         <button key={c.id} onClick={() => startOpen(c)} className="block w-full space-y-1 rounded-lg bg-white p-3 text-left shadow-sm hover:shadow">
-                          {c.parent_id && cards.find((g) => g.id === c.parent_id) && (
+                          {c.is_group && (
                             <p className="text-[11px] font-bold text-primary">
-                              {cards.find((g) => g.id === c.parent_id)!.title} ›{" "}
-                              <span className="font-semibold text-on-surface-variant">
-                                {cards.filter((x) => x.parent_id === c.parent_id && x.status === "done").length}/{cards.filter((x) => x.parent_id === c.parent_id).length}
-                              </span>
+                              ☑ {cards.filter((x) => x.parent_id === c.id && x.status === "done").length}/{cards.filter((x) => x.parent_id === c.id).length} รายการ
                             </p>
                           )}
                           <p className="text-sm font-semibold">{c.title}</p>

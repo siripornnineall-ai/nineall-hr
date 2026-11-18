@@ -143,12 +143,16 @@ export default function TaskBoardPage() {
   const [saving, setSaving] = useState(false);
   const [draftItems, setDraftItems] = useState<string[]>([]); // checklist items typed while creating a new card
   const [draftText, setDraftText] = useState("");
+  const [groupOpenId, setGroupOpenId] = useState<string | null>(null); // a heading opened from the board
+  const [groupItemText, setGroupItemText] = useState("");
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const dept = depts.find((d) => d.id === deptId) ?? null;
   const isHead = !!dept && !!me && dept.head_employee_id === me;
   // Every department's board is visible to everyone (transparency), but only my own department (or one I head) is editable.
   const readOnly = !!dept && !isHead && dept.id !== myDeptId;
+  const itemsOf = (parentId: string) => cards.filter((c) => c.parent_id === parentId);
   const memberById = useMemo(() => new Map(members.map((m) => [m.employee_id, m])), [members]);
 
   // All departments, read-only except my own / ones I head.
@@ -216,6 +220,13 @@ export default function TaskBoardPage() {
   }
 
   function startOpen(c: Card) {
+    if (c.is_group) {
+      setGroupOpenId(c.id);
+      setGroupItemText("");
+      setConfirmDeleteGroup(false);
+      setError(null);
+      return;
+    }
     setOpenId(c.id);
     setDraftItems([]);
     setDraftText("");
@@ -271,7 +282,7 @@ export default function TaskBoardPage() {
           .select("id")
           .single();
         if (gErr || !group) return { error: gErr ?? { message: "สร้างหัวข้อไม่สำเร็จ" } };
-        const { error: iErr } = await supabase.from("task_cards").insert(pending.map((it) => ({ ...base, title: it, parent_id: group.id })));
+        const { error: iErr } = await supabase.from("task_cards").insert(pending.map((it, i) => ({ ...base, title: it, parent_id: group.id, position: Date.now() / 1000 + i * 0.001 })));
         if (iErr) await supabase.from("task_cards").delete().eq("id", group.id); // don't leave an empty heading behind
         return { error: iErr };
       });
@@ -294,7 +305,7 @@ export default function TaskBoardPage() {
           .update({ title: title.trim(), description: description.trim() || null, is_group: true })
           .eq("id", openCard.id);
         if (uErr) return { error: uErr };
-        const { error: iErr } = await supabase.from("task_cards").insert(pendingItems.map((it) => ({ ...base, title: it, parent_id: openCard.id })));
+        const { error: iErr } = await supabase.from("task_cards").insert(pendingItems.map((it, i) => ({ ...base, title: it, parent_id: openCard.id, position: Date.now() / 1000 + i * 0.001 })));
         if (iErr) await supabase.from("task_cards").update({ is_group: false }).eq("id", openCard.id); // turn it back into a normal card
         return { error: iErr };
       });
@@ -320,6 +331,40 @@ export default function TaskBoardPage() {
     if (ok) setOpenId(null);
   }
 
+  const openGroup = cards.find((c) => c.id === groupOpenId && c.is_group) ?? null;
+  const groupItems = openGroup ? itemsOf(openGroup.id) : [];
+  // the head, or the person who created the heading, can edit it and add items
+  const canEditGroup = !!openGroup && !readOnly && (isHead || openGroup.created_by_employee_id === me);
+
+  async function addGroupItem() {
+    if (!openGroup || !profile || !groupItemText.trim()) return;
+    const last = groupItems[groupItems.length - 1];
+    const ok = await run(() =>
+      supabase.from("task_cards").insert({
+        org_id: profile.orgId,
+        department_id: openGroup.department_id,
+        title: groupItemText.trim(),
+        assignee_employee_id: isHead ? openGroup.assignee_employee_id : me,
+        weight: isHead ? (last?.weight ?? 2) : 1,
+        due_date: isHead ? (last?.due_date ?? openGroup.due_date) : null,
+        parent_id: openGroup.id,
+        position: (last?.position ?? Date.now() / 1000) + 1,
+      })
+    );
+    if (ok) setGroupItemText("");
+  }
+
+  async function saveGroupTitle(titleText: string, descText: string) {
+    if (!openGroup || !titleText.trim()) return;
+    await run(() => supabase.from("task_cards").update({ title: titleText.trim(), description: descText.trim() || null }).eq("id", openGroup.id));
+  }
+
+  async function removeGroup() {
+    if (!openGroup) return;
+    const ok = await run(() => supabase.from("task_cards").delete().eq("id", openGroup.id));
+    if (ok) setGroupOpenId(null);
+  }
+
   async function remove(c: Card) {
     const ok = await run(() => supabase.from("task_cards").delete().eq("id", c.id));
     if (ok) setOpenId(null);
@@ -327,9 +372,19 @@ export default function TaskBoardPage() {
 
   const today = bangkokToday();
   const groupById = new Map(cards.filter((c) => c.is_group).map((c) => [c.id, c]));
-  const itemsOf = (parentId: string) => cards.filter((c) => c.parent_id === parentId);
-  const boardCards = cards.filter((c) => !c.is_group); // headings are containers, not shown as cards
-  const visible = onlyMine ? boardCards.filter((c) => c.assignee_employee_id === me) : boardCards;
+  // The board shows standalone cards and headings; a heading's items live inside it (opened by tapping the heading).
+  const boardCards = cards.filter((c) => !c.parent_id);
+  // A heading sits in the column that matches its items: all done -> done, all still to do -> todo,
+  // nothing left but items waiting for the head -> review, otherwise -> doing.
+  const statusOf = (c: Card): Status => {
+    if (!c.is_group) return c.status;
+    const its = itemsOf(c.id);
+    if (its.length === 0 || its.every((i) => i.status === "todo")) return "todo";
+    if (its.every((i) => i.status === "done")) return "done";
+    if (its.every((i) => i.status === "done" || i.status === "review")) return "review";
+    return "doing";
+  };
+  const visible = onlyMine ? boardCards.filter((c) => (c.is_group ? itemsOf(c.id).some((i) => i.assignee_employee_id === me) : c.assignee_employee_id === me)) : boardCards;
 
   const deptTotals = scores.reduce(
     (acc, s) => ({ earned: acc.earned + Number(s.earned), possible: acc.possible + Number(s.possible) }),
@@ -409,7 +464,7 @@ export default function TaskBoardPage() {
 
           <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
             {COLUMNS.map((col) => {
-              const list = visible.filter((c) => c.status === col.status);
+              const list = visible.filter((c) => statusOf(c) === col.status);
               return (
                 <div key={col.status} className={clsx("w-[78vw] max-w-[300px] shrink-0 snap-start rounded-2xl p-3", col.tone)}>
                   <p className="mb-2 text-sm font-bold text-on-surface">
@@ -418,6 +473,31 @@ export default function TaskBoardPage() {
                   <div className="space-y-2">
                     {list.length === 0 && <p className="py-4 text-center text-xs text-on-surface-variant">{t("ไม่มีการ์ด")}</p>}
                     {list.map((c) => {
+                      if (c.is_group) {
+                        const its = itemsOf(c.id);
+                        const done = its.filter((i) => i.status === "done").length;
+                        const waiting = its.filter((i) => i.status === "review").length;
+                        const names = Array.from(new Set(its.map((i) => memberName(memberById.get(i.assignee_employee_id)))));
+                        return (
+                          <button
+                            key={c.id}
+                            onClick={() => startOpen(c)}
+                            className="block w-full space-y-1.5 rounded-xl bg-white p-3 text-left shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+                          >
+                            <p className="text-sm font-semibold text-on-surface">{c.title}</p>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-outline-variant/50">
+                              <div className="h-full bg-status-success" style={{ width: `${its.length ? (done / its.length) * 100 : 0}%` }} />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-on-surface-variant">
+                              <span className="font-bold text-primary">
+                                ☑ {done}/{its.length} {t("รายการ")}
+                              </span>
+                              <span>{names.join(", ")}</span>
+                              {isHead && waiting > 0 && <span className="font-bold text-status-warning">· {waiting} {t("รอตรวจ")}</span>}
+                            </div>
+                          </button>
+                        );
+                      }
                       const overdue = c.status !== "done" && !!c.due_date && c.due_date < today;
                       return (
                         <button
@@ -528,6 +608,140 @@ export default function TaskBoardPage() {
             <p>• {t("คะแนนที่ได้ = น้ำหนัก × ดาวคุณภาพที่หัวหน้าให้ตอนอนุมัติ (ส่งเกินกำหนดได้ 80%)")}</p>
             <p>• {t("งานที่เลยกำหนดแล้วยังไม่เสร็จ นับเป็น 0 · งานที่ยังไม่ถึงกำหนดยังไม่นับ")}</p>
             <p>• {t("% = คะแนนที่ได้ ÷ คะแนนเต็มของงานที่ได้รับ ในเดือนที่ครบกำหนด")}</p>
+          </div>
+        </div>
+      )}
+
+      {openGroup && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={() => !saving && setGroupOpenId(null)}>
+          <div className="max-h-[90vh] w-full space-y-3 overflow-y-auto rounded-t-3xl bg-white p-5 pb-10" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-on-surface">{t("งานหัวข้อ")}</p>
+              <span className="text-xs font-bold text-on-surface-variant">
+                {groupItems.filter((i) => i.status === "done").length}/{groupItems.length} {t("รายการ")}
+              </span>
+            </div>
+
+            <div>
+              <label className={labelCls}>{t("ชื่องาน")}</label>
+              <input
+                key={`gt-${openGroup.id}-${openGroup.title}`}
+                defaultValue={openGroup.title}
+                disabled={!canEditGroup}
+                onBlur={(e) => e.target.value.trim() !== openGroup.title && saveGroupTitle(e.target.value, openGroup.description ?? "")}
+                className={field}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>{t("รายละเอียด")}</label>
+              <textarea
+                key={`gd-${openGroup.id}-${openGroup.description ?? ""}`}
+                defaultValue={openGroup.description ?? ""}
+                disabled={!canEditGroup}
+                rows={2}
+                onBlur={(e) => e.target.value.trim() !== (openGroup.description ?? "") && saveGroupTitle(openGroup.title, e.target.value)}
+                className={field}
+              />
+            </div>
+
+            <div>
+              <p className={labelCls}>{t("รายการย่อย (เรียงตามลำดับที่ต้องทำ)")}</p>
+              <div className="space-y-1.5">
+                {groupItems.length === 0 && <p className="text-xs text-on-surface-variant">{t("ยังไม่มีรายการ")}</p>}
+                {groupItems.map((it, idx) => {
+                  const mine = !readOnly && it.assignee_employee_id === me;
+                  const canTick = mine && it.status === "todo";
+                  return (
+                    <div key={it.id} className="flex items-center gap-2 rounded-xl bg-surface-container px-3 py-2 text-sm">
+                      <button
+                        type="button"
+                        disabled={!canTick || saving}
+                        onClick={() => move(it, "doing")}
+                        className={clsx(
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold",
+                          it.status === "done" ? "border-status-success bg-status-success text-white" : it.status === "todo" ? "border-outline-variant bg-white" : "border-primary bg-primary/10 text-primary"
+                        )}
+                        aria-label={t("เริ่มทำ")}
+                      >
+                        {it.status === "done" ? "✓" : it.status === "todo" ? "" : "…"}
+                      </button>
+                      <button type="button" onClick={() => startOpen(it)} className="min-w-0 flex-1 text-left">
+                        <span className={clsx("block", it.status === "done" && "text-on-surface-variant line-through")}>
+                          {idx + 1}. {it.title}
+                        </span>
+                        <span className="block text-[11px] text-on-surface-variant">
+                          {t(COLUMNS.find((c) => c.status === it.status)?.label ?? "")}
+                          {it.assignee_employee_id !== openGroup.assignee_employee_id && ` · ${memberName(memberById.get(it.assignee_employee_id))}`}
+                          {it.due_date && ` · ${fmtDay(it.due_date)}`}
+                        </span>
+                      </button>
+                      {mine && it.status === "doing" && (
+                        <button type="button" disabled={saving} onClick={() => move(it, "review")} className="shrink-0 rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
+                          ➜ {t("ส่งตรวจ")}
+                        </button>
+                      )}
+                      {isHead && it.status === "review" && (
+                        <button type="button" onClick={() => startOpen(it)} className="shrink-0 rounded-lg bg-status-warning/20 px-2 py-1 text-[11px] font-bold text-status-warning">
+                          {t("ตรวจ")}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {!isHead && groupItems.some((i) => i.status === "todo") && (
+                <p className="mt-2 text-[11px] text-on-surface-variant">{t("ติ๊กช่องว่างเพื่อเริ่มทำ (ย้ายไปกำลังทำ) แล้วกดส่งตรวจเมื่อเสร็จ")}</p>
+              )}
+            </div>
+
+            {canEditGroup && (
+              <div className="flex gap-2">
+                <input
+                  value={groupItemText}
+                  onChange={(e) => setGroupItemText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addGroupItem();
+                    }
+                  }}
+                  className={field}
+                  placeholder={t("เพิ่มรายการย่อย เช่น ศึกษาตลาด")}
+                />
+                <button
+                  type="button"
+                  disabled={saving || !groupItemText.trim()}
+                  onClick={addGroupItem}
+                  className="shrink-0 rounded-xl bg-primary px-4 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  + {t("เพิ่ม")}
+                </button>
+              </div>
+            )}
+            {canEditGroup && <p className="text-[11px] text-on-surface-variant">{t("กดที่รายการเพื่อแก้ไข ตั้งน้ำหนัก กำหนดส่ง หรือลบรายการนั้น")}</p>}
+
+            {error && <p className="text-sm text-status-danger">{error}</p>}
+
+            {isHead &&
+              (confirmDeleteGroup ? (
+                <span className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-status-danger">{t("ลบทั้งหัวข้อและรายการย่อยทั้งหมด?")}</span>
+                  <button onClick={removeGroup} className="font-bold text-status-danger">
+                    {t("ยืนยัน")}
+                  </button>
+                  <button onClick={() => setConfirmDeleteGroup(false)} className="text-on-surface-variant">
+                    {t("ไม่ลบ")}
+                  </button>
+                </span>
+              ) : (
+                <button onClick={() => setConfirmDeleteGroup(true)} className="rounded-xl px-3 py-2 text-sm font-semibold text-status-danger">
+                  {t("ลบทั้งหัวข้อ")}
+                </button>
+              ))}
+
+            <button onClick={() => setGroupOpenId(null)} disabled={saving} className="h-10 w-full text-sm font-semibold text-on-surface-variant">
+              {t("ปิด")}
+            </button>
           </div>
         </div>
       )}
