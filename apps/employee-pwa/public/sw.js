@@ -6,6 +6,7 @@
 // balance). A local IndexedDB queue for offline clock-in submissions is not implemented yet
 // (tracked in KNOWN_LIMITATIONS.md) — this SW only makes the app *open* offline, not *submit*.
 
+const SW_VERSION = "2026-11-18-v4";
 const CACHE_NAME = "nineall-hr-shell-v1";
 const SHELL_ASSETS = ["/offline.html", "/icon-192.png", "/icon-512.png", "/logo-mark.png"];
 
