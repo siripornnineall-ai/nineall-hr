@@ -23,6 +23,8 @@ interface Card {
   quality: number | null;
   is_late: boolean | null;
   review_note: string | null;
+  parent_id: string | null;
+  is_group: boolean;
 }
 
 interface Dept {
@@ -143,7 +145,7 @@ export function TaskBoardAdmin({
       view !== "overview"
         ? supabase
             .from("task_cards")
-            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note")
+            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, parent_id, is_group")
             .eq("department_id", view)
             .neq("status", "cancelled")
             .order("position")
@@ -352,7 +354,7 @@ export function TaskBoardAdmin({
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {COLUMNS.map((col) => {
-              const list = cards.filter((c) => c.status === col.status);
+              const list = cards.filter((c) => !c.is_group && c.status === col.status); // headings are containers, not cards
               return (
                 <div key={col.status} className={clsx("w-72 shrink-0 rounded-xl p-3", col.tone)}>
                   <p className="mb-2 text-sm font-bold">
@@ -363,6 +365,14 @@ export function TaskBoardAdmin({
                       const overdue = c.status !== "done" && !!c.due_date && c.due_date < today;
                       return (
                         <button key={c.id} onClick={() => startOpen(c)} className="block w-full space-y-1 rounded-lg bg-white p-3 text-left shadow-sm hover:shadow">
+                          {c.parent_id && cards.find((g) => g.id === c.parent_id) && (
+                            <p className="text-[11px] font-bold text-primary">
+                              {cards.find((g) => g.id === c.parent_id)!.title} ›{" "}
+                              <span className="font-semibold text-on-surface-variant">
+                                {cards.filter((x) => x.parent_id === c.parent_id && x.status === "done").length}/{cards.filter((x) => x.parent_id === c.parent_id).length}
+                              </span>
+                            </p>
+                          )}
                           <p className="text-sm font-semibold">{c.title}</p>
                           <p className="text-xs text-on-surface-variant">
                             {name(c.assignee_employee_id)} · น้ำหนัก {c.weight}

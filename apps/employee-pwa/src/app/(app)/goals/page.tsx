@@ -27,6 +27,8 @@ interface Card {
   is_late: boolean | null;
   review_note: string | null;
   submitted_at: string | null;
+  parent_id: string | null;
+  is_group: boolean;
 }
 
 interface Member {
@@ -139,6 +141,8 @@ export default function TaskBoardPage() {
   const [quality, setQuality] = useState(0);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draftItems, setDraftItems] = useState<string[]>([]); // checklist items typed while creating a new card
+  const [draftText, setDraftText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const dept = depts.find((d) => d.id === deptId) ?? null;
@@ -169,7 +173,7 @@ export default function TaskBoardPage() {
     const [{ data: cardRows, error: cardErr }, { data: memberRows }, { data: scoreRows }] = await Promise.all([
       supabase
         .from("task_cards")
-        .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, position, quality, is_late, review_note, submitted_at")
+        .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, position, quality, is_late, review_note, submitted_at, parent_id, is_group")
         .eq("department_id", deptId)
         .neq("status", "cancelled")
         .order("position"),
@@ -194,6 +198,8 @@ export default function TaskBoardPage() {
 
   function startNew() {
     setOpenId("new");
+    setDraftItems([]);
+    setDraftText("");
     setTitle("");
     setDescription("");
     setAssignee(me);
@@ -238,17 +244,31 @@ export default function TaskBoardPage() {
       return;
     }
     if (openId === "new") {
-      const ok = await run(() =>
-        supabase.from("task_cards").insert({
-          org_id: profile.orgId,
-          department_id: deptId,
-          title: title.trim(),
-          description: description.trim() || null,
-          assignee_employee_id: isHead ? assignee || me : me,
-          weight: isHead ? weight : 1,
-          due_date: dueDate || null,
-        })
-      );
+      const base = {
+        org_id: profile.orgId,
+        department_id: deptId,
+        assignee_employee_id: isHead ? assignee || me : me,
+        weight: isHead ? weight : 1,
+        due_date: dueDate || null,
+      };
+      const pending = [...draftItems, ...(draftText.trim() ? [draftText.trim()] : [])];
+      if (pending.length === 0) {
+        const ok = await run(() => supabase.from("task_cards").insert({ ...base, title: title.trim(), description: description.trim() || null }));
+        if (ok) setOpenId(null);
+        return;
+      }
+      // A heading with checklist items: the heading is a container row, every item is its own card on the board.
+      const ok = await run(async () => {
+        const { data: group, error: gErr } = await supabase
+          .from("task_cards")
+          .insert({ ...base, title: title.trim(), description: description.trim() || null, is_group: true, weight: 1 })
+          .select("id")
+          .single();
+        if (gErr || !group) return { error: gErr ?? { message: "สร้างหัวข้อไม่สำเร็จ" } };
+        const { error: iErr } = await supabase.from("task_cards").insert(pending.map((it) => ({ ...base, title: it, parent_id: group.id })));
+        if (iErr) await supabase.from("task_cards").delete().eq("id", group.id); // don't leave an empty heading behind
+        return { error: iErr };
+      });
       if (ok) setOpenId(null);
       return;
     }
@@ -278,7 +298,10 @@ export default function TaskBoardPage() {
   }
 
   const today = bangkokToday();
-  const visible = onlyMine ? cards.filter((c) => c.assignee_employee_id === me) : cards;
+  const groupById = new Map(cards.filter((c) => c.is_group).map((c) => [c.id, c]));
+  const itemsOf = (parentId: string) => cards.filter((c) => c.parent_id === parentId);
+  const boardCards = cards.filter((c) => !c.is_group); // headings are containers, not shown as cards
+  const visible = onlyMine ? boardCards.filter((c) => c.assignee_employee_id === me) : boardCards;
 
   const deptTotals = scores.reduce(
     (acc, s) => ({ earned: acc.earned + Number(s.earned), possible: acc.possible + Number(s.possible) }),
@@ -374,6 +397,14 @@ export default function TaskBoardPage() {
                           onClick={() => startOpen(c)}
                           className="block w-full space-y-1.5 rounded-xl bg-white p-3 text-left shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
                         >
+                          {c.parent_id && groupById.get(c.parent_id) && (
+                            <p className="text-[11px] font-bold text-primary">
+                              {groupById.get(c.parent_id)!.title} ›{" "}
+                              <span className="font-semibold text-on-surface-variant">
+                                {itemsOf(c.parent_id).filter((x) => x.status === "done").length}/{itemsOf(c.parent_id).length}
+                              </span>
+                            </p>
+                          )}
                           <p className="text-sm font-semibold text-on-surface">{c.title}</p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-on-surface-variant">
                             <span className={clsx(c.assignee_employee_id === me && "font-bold text-primary")}>
@@ -491,6 +522,90 @@ export default function TaskBoardPage() {
               <label className={labelCls}>{t("รายละเอียด")}</label>
               <textarea value={description} disabled={!canEditText} onChange={(e) => setDescription(e.target.value)} rows={3} className={field} />
             </div>
+
+            {/* new card: optional checklist — each item becomes its own card on the board */}
+            {openId === "new" && (
+              <div>
+                <label className={labelCls}>{t("รายการย่อย (ไม่บังคับ)")}</label>
+                <p className="mb-2 text-xs text-on-surface-variant">{t("เพิ่มได้หลายรายการ แต่ละรายการจะเป็นการ์ดแยก ย้ายไปแต่ละช่องและส่งตรวจได้เอง")}</p>
+                <div className="space-y-1.5">
+                  {draftItems.map((it, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-xl bg-surface-container px-3 py-2 text-sm">
+                      <span className="flex-1">{it}</span>
+                      <button type="button" onClick={() => setDraftItems((d) => d.filter((_, j) => j !== i))} className="text-status-danger" aria-label={t("ลบ")}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && draftText.trim()) {
+                        e.preventDefault();
+                        setDraftItems((d) => [...d, draftText.trim()]);
+                        setDraftText("");
+                      }
+                    }}
+                    className={field}
+                    placeholder={t("เช่น ยิงแอด")}
+                  />
+                  <button
+                    type="button"
+                    disabled={!draftText.trim()}
+                    onClick={() => {
+                      setDraftItems((d) => [...d, draftText.trim()]);
+                      setDraftText("");
+                    }}
+                    className="shrink-0 rounded-xl bg-primary px-4 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    + {t("เพิ่ม")}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* an item opened from the board: the whole checklist of its heading, tick to start / send for review */}
+            {openCard?.parent_id && groupById.get(openCard.parent_id) && (
+              <div className="rounded-xl bg-surface-container p-3">
+                <p className="mb-2 text-sm font-bold text-on-surface">{t("อยู่ในงาน")}: {groupById.get(openCard.parent_id)!.title}</p>
+                <div className="space-y-1.5">
+                  {itemsOf(openCard.parent_id).map((it) => {
+                    const mine = !readOnly && it.assignee_employee_id === me;
+                    const canTick = mine && it.status === "todo";
+                    return (
+                      <div key={it.id} className="flex items-center gap-2 text-sm">
+                        <button
+                          type="button"
+                          disabled={!canTick || saving}
+                          onClick={() => move(it, "doing")}
+                          className={clsx(
+                            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold",
+                            it.status === "done" ? "border-status-success bg-status-success text-white" : it.status === "todo" ? "border-outline-variant bg-white" : "border-primary bg-primary/10 text-primary",
+                            !canTick && "opacity-80"
+                          )}
+                          aria-label={t("เริ่มทำ")}
+                        >
+                          {it.status === "done" ? "✓" : it.status === "todo" ? "" : "…"}
+                        </button>
+                        <button type="button" onClick={() => startOpen(it)} className={clsx("flex-1 text-left", it.id === openCard.id && "font-bold")}>
+                          {it.title}
+                        </button>
+                        <span className="text-[11px] text-on-surface-variant">{t(COLUMNS.find((c) => c.status === it.status)?.label ?? "")}</span>
+                        {mine && it.status === "doing" && (
+                          <button type="button" disabled={saving} onClick={() => move(it, "review")} className="rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
+                            ➜ {t("ส่งตรวจ")}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {!isHead && <p className="mt-2 text-[11px] text-on-surface-variant">{t("ติ๊กช่องว่างเพื่อเริ่มทำ (ย้ายไปช่องกำลังทำ) แล้วกดส่งตรวจเมื่อเสร็จ")}</p>}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>{t("ผู้รับผิดชอบ")}</label>
