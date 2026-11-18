@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/AuthContext";
 import { createClient } from "@/lib/supabase/client";
+import { originalDayInfo, substituteNote, type DayOffSwap } from "@/lib/dayOffSwapNotes";
 
 interface Holiday {
   holiday_date: string;
@@ -72,12 +73,15 @@ export default function CalendarPage() {
   // Covered late days: which days' time after the shift paid for them; and the days whose time was used.
   const [coverDetails, setCoverDetails] = useState<{ late_date: string; source_date: string | null; minutes_used: number; is_wfh: boolean }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [daySwaps, setDaySwaps] = useState<DayOffSwap[]>([]);
 
   const load = useCallback(async () => {
     if (!profile) return;
     const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
     const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
-    const [{ data: h }, { data: l }, { data: a }] = await Promise.all([
+    const ms = toIso(monthStart);
+    const me = toIso(monthEnd);
+    const [{ data: h }, { data: l }, { data: a }, { data: sw }] = await Promise.all([
       supabase
         .from("company_holidays")
         .select("holiday_date, name")
@@ -97,7 +101,15 @@ export default function CalendarPage() {
         .eq("employee_id", profile.employeeId)
         .gte("work_date", toIso(monthStart))
         .lte("work_date", toIso(monthEnd)),
+      // Day-off swaps touching this month (the day worked, or the day taken off) — for the swap notes.
+      supabase
+        .from("day_off_swap_requests")
+        .select("unit, period, original_date, substitute_date")
+        .eq("employee_id", profile.employeeId)
+        .eq("status", "approved")
+        .or(`and(original_date.gte.${ms},original_date.lte.${me}),and(substitute_date.gte.${ms},substitute_date.lte.${me})`),
     ]);
+    setDaySwaps((sw ?? []) as DayOffSwap[]);
     setHolidays(h ?? []);
     setLeaveRanges((l ?? []) as unknown as LeaveRange[]);
     setAttendanceDays(a ?? []);
@@ -211,6 +223,9 @@ export default function CalendarPage() {
                 </button>
               </div>
               {holidayName && <p className="text-sm font-semibold text-status-danger">🎉 วันหยุดนักขัตฤกษ์: {holidayName}</p>}
+              {[substituteNote(daySwaps, selectedDate), originalDayInfo(daySwaps, selectedDate)?.note].filter(Boolean).map((note) => (
+                <p key={note} className="text-sm font-semibold text-primary">{note}</p>
+              ))}
               {leaveName && <p className="text-sm font-semibold text-secondary">ลา: {leaveName}</p>}
               {attendance ? (
                 <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
@@ -224,7 +239,7 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">สถานะ</p>
-                    <p className="font-semibold text-on-surface">{STATUS_TH[attendance.status === "late" && coveredLate.has(attendance.work_date) ? "on_time" : attendance.status] ?? attendance.status}</p>
+                    <p className="font-semibold text-on-surface">{STATUS_TH[originalDayInfo(daySwaps, attendance.work_date)?.cut ? "day_off" : attendance.status === "late" && coveredLate.has(attendance.work_date) ? "on_time" : attendance.status] ?? attendance.status}</p>
                   </div>
                   <div>
                     <p className="text-xs text-on-surface-variant">มาสาย</p>
