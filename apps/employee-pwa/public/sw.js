@@ -59,7 +59,13 @@ self.addEventListener("push", (event) => {
   // stay on screen until dismissed, and a fresh alert (sound) even if an earlier reminder is still showing.
   const isClockReminder = (payload.url || "").startsWith("/attendance");
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
+    // If the app is open, ask it to SAY the reminder out loud (web push itself cannot carry custom audio).
+    (isClockReminder
+      ? self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+          for (const c of clients) c.postMessage({ type: "clock-reminder", text: payload.title });
+        })
+      : Promise.resolve()
+    ).then(() => self.registration.showNotification(payload.title, {
       body: payload.body,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
@@ -67,7 +73,7 @@ self.addEventListener("push", (event) => {
       vibrate: isClockReminder ? [400, 150, 400, 150, 400] : [200, 100, 200],
       ...(isClockReminder ? { tag: "clock-reminder", renotify: true, requireInteraction: true } : {}),
       data: { url: payload.url || "/" },
-    })
+    }))
   );
 });
 
