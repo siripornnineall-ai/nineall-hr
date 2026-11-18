@@ -680,6 +680,8 @@ export default function TaskBoardPage() {
         </div>
       )}
 
+      <p className="pt-2 text-center text-[10px] text-on-surface-variant/60">v{process.env.NEXT_PUBLIC_BUILD_ID}</p>
+
       {openGroup && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={() => !saving && setGroupOpenId(null)}>
           <div className="max-h-[90vh] w-full space-y-3 overflow-y-auto rounded-t-3xl bg-white p-5 pb-10" onClick={(e) => e.stopPropagation()}>

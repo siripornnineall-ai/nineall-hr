@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Short commit id of this build, shown at the bottom of the task board so we can tell which version a phone is running.
+  env: { NEXT_PUBLIC_BUILD_ID: (process.env.VERCEL_GIT_COMMIT_SHA ?? "dev").slice(0, 7) },
   transpilePackages: ["@nineall-hr/design-tokens", "@nineall-hr/shared-types", "@nineall-hr/shared-validation"],
   serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   // @sparticuz/chromium's actual binary payload (bin/*.br) is resolved at runtime via
