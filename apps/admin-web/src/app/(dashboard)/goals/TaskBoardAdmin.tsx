@@ -354,17 +354,9 @@ export function TaskBoardAdmin({
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {COLUMNS.map((col) => {
-              // The board shows standalone cards and headings; a heading's items are summarised on the heading card and sit in the column
-              // that matches them (all done -> done, all to do -> todo, only waiting for the head -> review, else doing).
-              const groupStatus = (c: Card): Status => {
-                if (!c.is_group) return c.status;
-                const its = cards.filter((x) => x.parent_id === c.id);
-                if (its.length === 0 || its.every((i) => i.status === "todo")) return "todo";
-                if (its.every((i) => i.status === "done")) return "done";
-                if (its.every((i) => i.status === "done" || i.status === "review")) return "review";
-                return "doing";
-              };
-              const list = cards.filter((c) => !c.parent_id && groupStatus(c) === col.status);
+              // A heading card shows in every column that holds some of its items (only those items are listed).
+              const itemsHere = (c: Card) => cards.filter((x) => x.parent_id === c.id && x.status === col.status);
+              const list = cards.filter((c) => !c.parent_id && (c.is_group ? itemsHere(c).length > 0 || (col.status === "todo" && !cards.some((x) => x.parent_id === c.id)) : c.status === col.status));
               return (
                 <div key={col.status} className={clsx("w-72 shrink-0 rounded-xl p-3", col.tone)}>
                   <p className="mb-2 text-sm font-bold">
@@ -380,6 +372,9 @@ export function TaskBoardAdmin({
                               ☑ {cards.filter((x) => x.parent_id === c.id && x.status === "done").length}/{cards.filter((x) => x.parent_id === c.id).length} รายการ
                             </p>
                           )}
+                          {c.is_group && itemsHere(c).map((i) => (
+                            <p key={i.id} className="text-xs">• {i.title}</p>
+                          ))}
                           <p className="text-sm font-semibold">{c.title}</p>
                           <p className="text-xs text-on-surface-variant">
                             {name(c.assignee_employee_id)} · น้ำหนัก {c.weight}

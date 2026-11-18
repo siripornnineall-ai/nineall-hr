@@ -374,16 +374,6 @@ export default function TaskBoardPage() {
   const groupById = new Map(cards.filter((c) => c.is_group).map((c) => [c.id, c]));
   // The board shows standalone cards and headings; a heading's items live inside it (opened by tapping the heading).
   const boardCards = cards.filter((c) => !c.parent_id);
-  // A heading sits in the column that matches its items: all done -> done, all still to do -> todo,
-  // nothing left but items waiting for the head -> review, otherwise -> doing.
-  const statusOf = (c: Card): Status => {
-    if (!c.is_group) return c.status;
-    const its = itemsOf(c.id);
-    if (its.length === 0 || its.every((i) => i.status === "todo")) return "todo";
-    if (its.every((i) => i.status === "done")) return "done";
-    if (its.every((i) => i.status === "done" || i.status === "review")) return "review";
-    return "doing";
-  };
   const visible = onlyMine ? boardCards.filter((c) => (c.is_group ? itemsOf(c.id).some((i) => i.assignee_employee_id === me) : c.assignee_employee_id === me)) : boardCards;
 
   const deptTotals = scores.reduce(
@@ -464,7 +454,10 @@ export default function TaskBoardPage() {
 
           <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
             {COLUMNS.map((col) => {
-              const list = visible.filter((c) => statusOf(c) === col.status);
+              // A heading card shows up in every column that holds some of its items, listing only those items:
+              // ticking one item moves just that item, not the whole heading.
+              const itemsHere = (c: Card) => itemsOf(c.id).filter((i) => i.status === col.status && (!onlyMine || i.assignee_employee_id === me));
+              const list = visible.filter((c) => (c.is_group ? itemsHere(c).length > 0 || (col.status === "todo" && itemsOf(c.id).length === 0) : c.status === col.status));
               return (
                 <div key={col.status} className={clsx("w-[78vw] max-w-[300px] shrink-0 snap-start rounded-2xl p-3", col.tone)}>
                   <p className="mb-2 text-sm font-bold text-on-surface">
@@ -488,12 +481,20 @@ export default function TaskBoardPage() {
                             <div className="h-1.5 overflow-hidden rounded-full bg-outline-variant/50">
                               <div className="h-full bg-status-success" style={{ width: `${its.length ? (done / its.length) * 100 : 0}%` }} />
                             </div>
+                            <ul className="space-y-0.5 text-xs text-on-surface">
+                              {itemsHere(c).map((i) => (
+                                <li key={i.id} className={clsx("flex gap-1", i.status === "done" && "text-on-surface-variant line-through")}>
+                                  <span>•</span>
+                                  <span>{i.title}</span>
+                                </li>
+                              ))}
+                            </ul>
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-on-surface-variant">
                               <span className="font-bold text-primary">
                                 ☑ {done}/{its.length} {t("รายการ")}
                               </span>
                               <span>{names.join(", ")}</span>
-                              {isHead && waiting > 0 && <span className="font-bold text-status-warning">· {waiting} {t("รอตรวจ")}</span>}
+                              {isHead && col.status === "review" && waiting > 0 && <span className="font-bold text-status-warning">· {waiting} {t("รอตรวจ")}</span>}
                             </div>
                           </button>
                         );
