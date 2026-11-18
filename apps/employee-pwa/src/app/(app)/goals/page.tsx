@@ -268,7 +268,7 @@ export default function TaskBoardPage() {
         weight: isHead ? weight : 1,
         due_date: dueDate || null,
       };
-      const pending = [...draftItems, ...(draftText.trim() ? [draftText.trim()] : [])];
+      const pending = [...draftItems, draftText].map((x) => x.trim()).filter(Boolean);
       if (pending.length === 0) {
         const ok = await run(() => supabase.from("task_cards").insert({ ...base, title: title.trim(), description: description.trim() || null }));
         if (ok) setOpenId(null);
@@ -290,7 +290,7 @@ export default function TaskBoardPage() {
       return;
     }
     if (!openCard) return;
-    const pendingItems = [...draftItems, ...(draftText.trim() ? [draftText.trim()] : [])];
+    const pendingItems = [...draftItems, draftText].map((x) => x.trim()).filter(Boolean);
     if (canAddItems && pendingItems.length > 0) {
       const ok = await run(async () => {
         const base = {
@@ -770,11 +770,17 @@ export default function TaskBoardPage() {
             {canAddItems && (
               <div>
                 <label className={labelCls}>{openId === "new" ? t("รายการย่อย (ไม่บังคับ)") : t("เพิ่มรายการย่อยในการ์ดนี้")}</label>
-                <p className="mb-2 text-xs text-on-surface-variant">{t("เพิ่มได้หลายรายการ แต่ละรายการจะเป็นการ์ดแยก ย้ายไปแต่ละช่องและส่งตรวจได้เอง")}</p>
+                <p className="mb-2 text-xs text-on-surface-variant">{t("เพิ่มได้หลายรายการ เรียงตามลำดับที่ต้องทำ แตะที่รายการเพื่อแก้ไขข้อความได้ ติ๊กเริ่มทำและส่งตรวจทีละรายการได้")}</p>
                 <div className="space-y-1.5">
                   {draftItems.map((it, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-xl bg-surface-container px-3 py-2 text-sm">
-                      <span className="flex-1">{it}</span>
+                    <div key={i} className="flex items-center gap-2 rounded-xl bg-surface-container px-3 py-1.5 text-sm">
+                      <span className="text-xs font-bold text-on-surface-variant">{i + 1}.</span>
+                      <input
+                        value={it}
+                        onChange={(e) => setDraftItems((d) => d.map((x, j) => (j === i ? e.target.value : x)))}
+                        className="min-w-0 flex-1 bg-transparent py-1 outline-none"
+                        aria-label={t("แก้ไขรายการ")}
+                      />
                       <button type="button" onClick={() => setDraftItems((d) => d.filter((_, j) => j !== i))} className="text-status-danger" aria-label={t("ลบ")}>
                         ✕
                       </button>
