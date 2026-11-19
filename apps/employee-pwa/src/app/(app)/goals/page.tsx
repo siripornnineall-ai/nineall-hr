@@ -145,6 +145,7 @@ export default function TaskBoardPage() {
 
   const [depts, setDepts] = useState<Dept[]>([]);
   const [myDeptId, setMyDeptId] = useState<string>("");
+  const [isReviewer, setIsReviewer] = useState(false); // checks the work of everyone, in every department
   const [deptId, setDeptId] = useState<string>("");
   const [members, setMembers] = useState<Member[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -188,11 +189,12 @@ export default function TaskBoardPage() {
     if (!profile) return;
     (async () => {
       const [{ data: meRow }, { data: deptRows }] = await Promise.all([
-        supabase.from("employees").select("department_id").eq("id", profile.employeeId).maybeSingle(),
+        supabase.from("employees").select("department_id, task_reviewer").eq("id", profile.employeeId).maybeSingle(),
         supabase.from("departments").select("id, name, head_employee_id").eq("org_id", profile.orgId).is("deleted_at", null).order("name"),
       ]);
       const all = (deptRows ?? []) as Dept[];
       setMyDeptId(meRow?.department_id ?? "");
+      setIsReviewer(!!(meRow as { task_reviewer?: boolean } | null)?.task_reviewer);
       setDepts(all);
       setDeptId((cur) => cur || meRow?.department_id || all[0]?.id || "");
       if (all.length === 0) setLoaded(true);
@@ -231,6 +233,8 @@ export default function TaskBoardPage() {
   const canAddItems =
     !readOnly && (openId === "new" || (!!openCard && !openCard.parent_id && !openCard.is_group && openCard.status === "todo" && (isHead || own)));
   // Proof of work (optional link / image): the assignee before sending for review, or the head.
+  // Checking work: the department head or the reviewer — never on their own card (a head's own work goes to the reviewer).
+  const canReviewCard = (c: Card) => (isHead || isReviewer) && c.assignee_employee_id !== me;
   const canEditProof = !readOnly && !!openCard && !openCard.is_group && (isHead || (own && (openCard.status === "todo" || openCard.status === "doing")));
   const proofExtra = () => (canEditProof ? { link_url: normLink(link), attachment_path: attachPath || null } : {});
   const canEditPlan = !readOnly && (openId === "new" ? true : isHead); // due date / weight / assignee (members: only when creating)
@@ -561,7 +565,7 @@ export default function TaskBoardPage() {
                                 ☑ {done}/{its.length} {t("รายการ")}
                               </span>
                               <span>{names.join(", ")}</span>
-                              {isHead && col.status === "review" && waiting > 0 && <span className="font-bold text-status-warning">· {waiting} {t("รอตรวจ")}</span>}
+                              {(isHead || isReviewer) && col.status === "review" && waiting > 0 && <span className="font-bold text-status-warning">· {waiting} {t("รอตรวจ")}</span>}
                             </div>
                           </button>
                         );
@@ -750,7 +754,7 @@ export default function TaskBoardPage() {
                           ➜ {t("ส่งตรวจ")}
                         </button>
                       )}
-                      {isHead && it.status === "review" && (
+                      {canReviewCard(it) && it.status === "review" && (
                         <button type="button" onClick={() => startOpen(it)} className="shrink-0 rounded-lg bg-status-warning/20 px-2 py-1 text-[11px] font-bold text-status-warning">
                           {t("ตรวจ")}
                         </button>
@@ -1019,7 +1023,7 @@ export default function TaskBoardPage() {
             )}
 
             {/* the head checks a card that was sent for review */}
-            {openCard?.status === "review" && isHead && (
+            {openCard?.status === "review" && canReviewCard(openCard) && (
               <div className="space-y-2 rounded-xl bg-[#eaf2ff] p-3">
                 <p className="text-sm font-bold text-on-surface">{t("ตรวจงาน: ให้คะแนนคุณภาพ")}</p>
                 <Stars value={quality} onChange={setQuality} />
@@ -1042,6 +1046,10 @@ export default function TaskBoardPage() {
                 </div>
                 {quality === 0 && <p className="text-xs text-on-surface-variant">{t("เลือกดาวก่อนกดอนุมัติ")}</p>}
               </div>
+            )}
+
+            {openCard?.status === "review" && !canReviewCard(openCard) && isHead && openCard.assignee_employee_id === me && (
+              <p className="rounded-xl bg-[#eaf2ff] p-3 text-xs text-on-surface-variant">{t("งานของคุณเอง ต้องให้ผู้ตรวจงานเป็นผู้ตรวจและอนุมัติ")}</p>
             )}
 
             {error && <p className="text-sm text-status-danger">{error}</p>}
