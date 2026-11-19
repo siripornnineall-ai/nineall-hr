@@ -400,8 +400,23 @@ export default function TaskBoardPage() {
       patch.weight = weight;
       patch.due_date = dueDate || null;
     }
-    const ok = await run(() => supabase.from("task_cards").update(patch).eq("id", openCard.id));
+    const ok = await run(async () => {
+      const { data, error: uErr } = await supabase.from("task_cards").update(patch).eq("id", openCard.id).select("id");
+      if (!uErr && (data?.length ?? 0) === 0) return { error: { message: t("บันทึกไม่สำเร็จ: ไม่พบรายการนี้หรือคุณไม่มีสิทธิ์แก้ไข") } };
+      return { error: uErr };
+    });
     if (ok) setOpenId(null);
+  }
+
+  // Quick text fix straight from the checklist (no need to open the item and scroll down to Save).
+  async function saveItemTitle(it: Card, text: string) {
+    const next = text.trim();
+    if (!next || next === it.title) return;
+    await run(async () => {
+      const { data, error: uErr } = await supabase.from("task_cards").update({ title: next }).eq("id", it.id).select("id");
+      if (!uErr && (data?.length ?? 0) === 0) return { error: { message: t("บันทึกไม่สำเร็จ: ไม่พบรายการนี้หรือคุณไม่มีสิทธิ์แก้ไข") } };
+      return { error: uErr };
+    });
   }
 
   async function move(c: Card, status: Status, extra: Record<string, unknown> = {}) {
@@ -790,16 +805,32 @@ export default function TaskBoardPage() {
                       >
                         {it.status === "done" ? "✓" : it.status === "todo" ? "" : "…"}
                       </button>
-                      <button type="button" onClick={() => startOpen(it)} className="min-w-0 flex-1 text-left">
-                        <span className={clsx("block", it.status === "done" && "text-on-surface-variant line-through")}>
-                          {idx + 1}. {it.title}
-                        </span>
+                      <div role="button" tabIndex={0} onClick={() => startOpen(it)} className="min-w-0 flex-1 cursor-pointer text-left">
+                        {!readOnly && (isHead || (it.assignee_employee_id === me && (it.status === "todo" || it.status === "doing"))) ? (
+                          <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-on-surface-variant">{idx + 1}.</span>
+                            <input
+                              key={`it-${it.id}-${it.title}`}
+                              defaultValue={it.title}
+                              onBlur={(e) => void saveItemTitle(it, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-0.5 focus:border-outline-variant focus:bg-white"
+                              aria-label={t("แก้ไขชื่อรายการ")}
+                            />
+                          </span>
+                        ) : (
+                          <span className={clsx("block", it.status === "done" && "text-on-surface-variant line-through")}>
+                            {idx + 1}. {it.title}
+                          </span>
+                        )}
                         <span className="block text-[11px] text-on-surface-variant">
                           {t(COLUMNS.find((c) => c.status === it.status)?.label ?? "")}
                           {it.assignee_employee_id !== openGroup.assignee_employee_id && ` · ${memberName(memberById.get(it.assignee_employee_id))}`}
                           {it.due_date && ` · ${fmtDay(it.due_date)}`}
                         </span>
-                      </button>
+                      </div>
                       {mine && it.status === "doing" && (
                         <button type="button" disabled={saving} onClick={() => startOpen(it)} className="shrink-0 rounded-lg bg-[#eaf2ff] px-2 py-1 text-[11px] font-bold text-primary">
                           ➜ {t("ส่งตรวจ")}
@@ -843,7 +874,7 @@ export default function TaskBoardPage() {
                 </button>
               </div>
             )}
-            {canEditGroup && <p className="text-[11px] text-on-surface-variant">{t("กดที่รายการเพื่อแก้ไข ตั้งน้ำหนัก กำหนดส่ง หรือลบรายการนั้น")}</p>}
+            {canEditGroup && <p className="text-[11px] text-on-surface-variant">{t("แตะที่ชื่อรายการเพื่อแก้ข้อความได้เลย (แก้เสร็จแตะที่อื่น หรือกด Enter เพื่อบันทึก) · กดที่แถวรายการเพื่อเปิดรายละเอียด ตั้งน้ำหนัก กำหนดส่ง หรือลบ")}</p>}
 
             {error && <p className="text-sm text-status-danger">{error}</p>}
 
