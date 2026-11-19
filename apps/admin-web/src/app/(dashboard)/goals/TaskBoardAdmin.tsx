@@ -27,6 +27,7 @@ interface Card {
   is_group: boolean;
   link_url: string | null;
   attachment_path: string | null;
+  attachment_paths: string[];
 }
 
 interface Dept {
@@ -133,7 +134,7 @@ export function TaskBoardAdmin({
   const [quality, setQuality] = useState(0);
   const [note, setNote] = useState("");
   const [groupOpenId, setGroupOpenId] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
@@ -152,7 +153,7 @@ export function TaskBoardAdmin({
       view !== "overview"
         ? supabase
             .from("task_cards")
-            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, parent_id, is_group, link_url, attachment_path")
+            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, parent_id, is_group, link_url, attachment_path, attachment_paths")
             .eq("department_id", view)
             .neq("status", "cancelled")
             .order("position")
@@ -191,29 +192,29 @@ export function TaskBoardAdmin({
   const openGroup = cards.find((c) => c.id === groupOpenId && c.is_group) ?? null;
   const groupItems = openGroup ? cards.filter((x) => x.parent_id === openGroup.id) : [];
 
-  // proof of work attached by the assignee (link + one image) so the reviewer can see it while checking
-  const proofPath = openCard?.attachment_path ?? null;
+  // proof of work attached by the assignee (link + up to 10 images) so the reviewer can see it while checking
+  const proofPaths = useMemo(() => openCard?.attachment_paths ?? [], [openCard]);
   useEffect(() => {
-    if (!proofPath) {
-      void Promise.resolve().then(() => {
-        setPreviewUrl(null);
-        setPreviewError(null);
-      });
-      return;
-    }
+    const missing = proofPaths.filter((p) => !(p in previewUrls));
+    if (missing.length === 0) return;
     let cancelled = false;
     supabase.storage
       .from("task-attachments")
-      .createSignedUrl(proofPath, 3600)
+      .createSignedUrls(missing, 3600)
       .then(({ data, error: sErr }) => {
         if (cancelled) return;
-        setPreviewUrl(data?.signedUrl ?? null);
-        setPreviewError(sErr ? sErr.message : data?.signedUrl ? null : "ไม่ได้รับลิงก์รูป");
+        if (sErr) return setPreviewError(sErr.message);
+        setPreviewError(null);
+        setPreviewUrls((cur) => {
+          const next = { ...cur };
+          for (const row of data ?? []) if (row.path && row.signedUrl) next[row.path] = row.signedUrl;
+          return next;
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [proofPath, supabase]);
+  }, [proofPaths, previewUrls, supabase]);
 
   function startNew() {
     setOpenId("new");
@@ -456,7 +457,7 @@ export function TaskBoardAdmin({
                     <p className="text-[11px] text-on-surface-variant">
                       {COLUMNS.find((c) => c.status === it.status)?.label} · {name(it.assignee_employee_id)}
                       {it.due_date && ` · ${fmtDay(it.due_date)}`}
-                      {(it.link_url || it.attachment_path) && " · 📎 มีผลงานแนบ"}
+                      {(it.link_url || (it.attachment_paths?.length ?? 0) > 0) && " · 📎 มีผลงานแนบ"}
                     </p>
                   </div>
                   <button
@@ -526,7 +527,7 @@ export function TaskBoardAdmin({
             )}
 
             {/* optional proof of work: link and / or image attached by the assignee */}
-            {openCard && !openCard.is_group && (openCard.link_url || openCard.attachment_path) && (
+            {openCard && !openCard.is_group && (openCard.link_url || (openCard.attachment_paths?.length ?? 0) > 0) && (
               <div className="space-y-2 rounded-lg bg-surface-container p-3">
                 <p className="text-sm font-bold">แนบผลงาน</p>
                 {openCard.link_url && (
@@ -534,22 +535,21 @@ export function TaskBoardAdmin({
                     🔗 {openCard.link_url}
                   </a>
                 )}
-                {openCard.attachment_path && !previewUrl && (
-                  <p className="rounded-lg bg-white p-3 text-xs text-on-surface-variant">{previewError ? `โหลดรูปไม่สำเร็จ: ${previewError}` : "กำลังโหลดรูป..."}</p>
-                )}
-                {previewUrl && (
-                  <a href={previewUrl} target="_blank" rel="noopener noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={previewUrl}
-                      alt="ผลงาน"
-                      onError={() => {
-                        setPreviewUrl(null);
-                        setPreviewError("เปิดไฟล์รูปไม่ได้ (ไฟล์อาจเสียหรือหมดอายุ)");
-                      }}
-                      className="max-h-72 w-full rounded-lg bg-white object-contain"
-                    />
-                  </a>
+                {(openCard.attachment_paths?.length ?? 0) > 0 && (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {openCard.attachment_paths.map((path) =>
+                      previewUrls[path] ? (
+                        <a key={path} href={previewUrls[path]} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={previewUrls[path]} alt="ผลงาน" onError={() => setPreviewUrls((cur) => ({ ...cur, [path]: "" }))} className="h-40 w-full rounded-lg bg-white object-contain" />
+                        </a>
+                      ) : (
+                        <p key={path} className="flex h-40 items-center justify-center rounded-lg bg-white p-2 text-center text-xs text-on-surface-variant">
+                          {previewError ? `โหลดรูปไม่สำเร็จ: ${previewError}` : "กำลังโหลดรูป..."}
+                        </p>
+                      )
+                    )}
+                  </div>
                 )}
               </div>
             )}

@@ -31,6 +31,7 @@ interface Card {
   is_group: boolean;
   link_url: string | null;
   attachment_path: string | null;
+  attachment_paths: string[];
 }
 
 interface Member {
@@ -176,9 +177,9 @@ export default function TaskBoardPage() {
   const [draftItems, setDraftItems] = useState<string[]>([]); // checklist items typed while creating a new card
   const [draftText, setDraftText] = useState("");
   const [link, setLink] = useState("");
-  const [attachPath, setAttachPath] = useState("");
+  const [attachPaths, setAttachPaths] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [groupOpenId, setGroupOpenId] = useState<string | null>(null); // a heading opened from the board
   const [groupItemText, setGroupItemText] = useState("");
@@ -215,7 +216,7 @@ export default function TaskBoardPage() {
     const [{ data: cardRows, error: cardErr }, { data: memberRows }, { data: scoreRows }] = await Promise.all([
       supabase
         .from("task_cards")
-        .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, position, quality, is_late, review_note, submitted_at, parent_id, is_group, link_url, attachment_path")
+        .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, position, quality, is_late, review_note, submitted_at, parent_id, is_group, link_url, attachment_path, attachment_paths")
         .eq("department_id", deptId)
         .neq("status", "cancelled")
         .order("position"),
@@ -244,44 +245,55 @@ export default function TaskBoardPage() {
   // Checking work: the department head or the reviewer — never on their own card (a head's own work goes to the reviewer).
   const canReviewCard = (c: Card) => (isHead || isReviewer) && c.assignee_employee_id !== me;
   const canEditProof = !readOnly && !!openCard && !openCard.is_group && (isHead || (own && (openCard.status === "todo" || openCard.status === "doing")));
-  const proofExtra = () => (canEditProof ? { link_url: normLink(link), attachment_path: attachPath || null } : {});
+  const proofExtra = () => (canEditProof ? { link_url: normLink(link), attachment_paths: attachPaths } : {});
   // No lock on due dates: the person the card belongs to can set / change it while the card is still to-do or doing
   // (the head can always change it). After sending for review it is frozen for staff.
   const canSetFirstDue = !readOnly && !isHead && !!openCard && !openCard.is_group && own && (openCard.status === "todo" || openCard.status === "doing");
   const canEditPlan = !readOnly && (openId === "new" ? true : isHead); // due date / weight / assignee (members: only when creating)
 
+  // signed (temporary) links for the images of the open card — fetched for the ones we do not have yet
   useEffect(() => {
-    if (!attachPath) {
-      void Promise.resolve().then(() => {
-        setPreviewUrl(null);
-        setPreviewError(null);
-      });
-      return;
-    }
+    const missing = attachPaths.filter((p) => !(p in previewUrls));
+    if (missing.length === 0) return;
     let cancelled = false;
     supabase.storage
       .from("task-attachments")
-      .createSignedUrl(attachPath, 3600)
+      .createSignedUrls(missing, 3600)
       .then(({ data, error: sErr }) => {
         if (cancelled) return;
-        setPreviewUrl(data?.signedUrl ?? null);
-        setPreviewError(sErr ? sErr.message : data?.signedUrl ? null : "ไม่ได้รับลิงก์รูป");
+        if (sErr) return setPreviewError(sErr.message);
+        setPreviewError(null);
+        setPreviewUrls((cur) => {
+          const next = { ...cur };
+          for (const row of data ?? []) if (row.path && row.signedUrl) next[row.path] = row.signedUrl;
+          return next;
+        });
       });
     return () => {
       cancelled = true;
     };
-  }, [attachPath, supabase]);
+  }, [attachPaths, previewUrls, supabase]);
 
-  async function uploadProof(file: File) {
+  async function uploadProof(files: File[]) {
     if (!profile || !openCard) return;
+    const room = 10 - attachPaths.length;
+    if (room <= 0) return setError(t("แนบรูปได้ไม่เกิน 10 รูปต่อรายการ"));
     setUploading(true);
     setError(null);
     try {
-      const blob = await shrinkImage(file);
-      const path = `${profile.orgId}/${openCard.department_id}/${openCard.id}/${Date.now()}.jpg`;
-      const { error: upErr } = await supabase.storage.from("task-attachments").upload(path, blob, { contentType: blob.type || "image/jpeg" });
-      if (upErr) setError(upErr.message);
-      else setAttachPath(path);
+      const added: string[] = [];
+      for (const file of files.slice(0, room)) {
+        const blob = await shrinkImage(file);
+        const path = `${profile.orgId}/${openCard.department_id}/${openCard.id}/${Date.now()}-${added.length}.jpg`;
+        const { error: upErr } = await supabase.storage.from("task-attachments").upload(path, blob, { contentType: blob.type || "image/jpeg" });
+        if (upErr) {
+          setError(upErr.message);
+          break;
+        }
+        added.push(path);
+      }
+      if (added.length) setAttachPaths((cur) => [...cur, ...added]);
+      if (files.length > room) setError(t("แนบรูปได้ไม่เกิน 10 รูปต่อรายการ"));
     } finally {
       setUploading(false);
     }
@@ -290,7 +302,7 @@ export default function TaskBoardPage() {
   function startNew() {
     setOpenId("new");
     setLink("");
-    setAttachPath("");
+    setAttachPaths([]);
     setDraftItems([]);
     setDraftText("");
     setTitle("");
@@ -314,7 +326,7 @@ export default function TaskBoardPage() {
     }
     setOpenId(c.id);
     setLink(c.link_url ?? "");
-    setAttachPath(c.attachment_path ?? "");
+    setAttachPaths(c.attachment_paths ?? []);
     setDraftItems([]);
     setDraftText("");
     setTitle(c.title);
@@ -1082,7 +1094,7 @@ export default function TaskBoardPage() {
             </div>
 
             {/* optional proof of work: a link and / or an image, so the head can see it while checking */}
-            {openCard && !openCard.is_group && (canEditProof || link || attachPath) && (
+            {openCard && !openCard.is_group && (canEditProof || link || attachPaths.length > 0) && (
               <div className="space-y-2 rounded-xl bg-surface-container p-3">
                 <p className="text-sm font-bold text-on-surface">
                   {t("แนบผลงาน")} <span className="text-xs font-normal text-on-surface-variant">({t("ไม่บังคับ")})</span>
@@ -1096,44 +1108,52 @@ export default function TaskBoardPage() {
                     </a>
                   )
                 )}
-                {attachPath && !previewUrl && (
-                  <p className="rounded-xl bg-white p-3 text-xs text-on-surface-variant">
-                    {previewError ? `${t("โหลดรูปไม่สำเร็จ")}: ${previewError}` : t("กำลังโหลดรูป...")}
-                  </p>
-                )}
-                {attachPath && previewUrl && (
-                  <div className="relative">
-                    <a href={previewUrl} target="_blank" rel="noopener noreferrer">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={previewUrl}
-                        alt={t("ผลงาน")}
-                        onError={() => {
-                          setPreviewUrl(null);
-                          setPreviewError(t("เปิดไฟล์รูปไม่ได้ (ไฟล์อาจเสียหรือหมดอายุ ลองปิดแล้วเปิดใหม่)"));
-                        }}
-                        className="max-h-56 w-full rounded-xl object-contain bg-white"
-                      />
-                    </a>
-                    {canEditProof && (
-                      <button type="button" onClick={() => setAttachPath("")} className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-bold text-white">
-                        ✕ {t("เอารูปออก")}
-                      </button>
-                    )}
+                {attachPaths.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {attachPaths.map((path) => (
+                      <div key={path} className="relative">
+                        {previewUrls[path] ? (
+                          <a href={previewUrls[path]} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={previewUrls[path]}
+                              alt={t("ผลงาน")}
+                              onError={() => setPreviewUrls((cur) => ({ ...cur, [path]: "" }))}
+                              className="h-36 w-full rounded-xl bg-white object-contain"
+                            />
+                          </a>
+                        ) : (
+                          <p className="flex h-36 items-center justify-center rounded-xl bg-white p-2 text-center text-xs text-on-surface-variant">
+                            {previewError ? `${t("โหลดรูปไม่สำเร็จ")}: ${previewError}` : t("กำลังโหลดรูป...")}
+                          </p>
+                        )}
+                        {canEditProof && (
+                          <button
+                            type="button"
+                            onClick={() => setAttachPaths((cur) => cur.filter((x) => x !== path))}
+                            className="absolute right-1.5 top-1.5 rounded-full bg-black/60 px-2 py-0.5 text-xs font-bold text-white"
+                            aria-label={t("เอารูปออก")}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
-                {canEditProof && !attachPath && (
+                {canEditProof && attachPaths.length < 10 && (
                   <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-outline-variant bg-white py-3 text-sm font-semibold text-on-surface-variant">
-                    {uploading ? t("กำลังอัปโหลด...") : `📷 ${t("แนบรูป")}`}
+                    {uploading ? t("กำลังอัปโหลด...") : `📷 ${attachPaths.length ? t("เพิ่มรูป") : t("แนบรูป")} (${attachPaths.length}/10)`}
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       className="hidden"
                       disabled={uploading}
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
+                        const files = Array.from(e.target.files ?? []);
                         e.target.value = "";
-                        if (f) void uploadProof(f);
+                        if (files.length) void uploadProof(files);
                       }}
                     />
                   </label>
