@@ -449,6 +449,9 @@ export default function TaskBoardPage() {
 
   const openGroup = cards.find((c) => c.id === groupOpenId && c.is_group) ?? null;
   const groupItems = openGroup ? itemsOf(openGroup.id) : [];
+  // finished items are moved out of the main list into their own "เสร็จแล้ว" section
+  const openItems = groupItems.filter((i) => i.status !== "done");
+  const doneItems = groupItems.filter((i) => i.status === "done");
   // the head, or the person who created the heading, can edit it and add items
   const canEditGroup = !!openGroup && !readOnly && (isHead || openGroup.created_by_employee_id === me);
 
@@ -811,7 +814,10 @@ export default function TaskBoardPage() {
               <p className={labelCls}>{t("รายการย่อย (เรียงตามลำดับที่ต้องทำ)")}</p>
               <div className="space-y-1.5">
                 {groupItems.length === 0 && <p className="text-xs text-on-surface-variant">{t("ยังไม่มีรายการ")}</p>}
-                {groupItems.map((it, idx) => {
+                {groupItems.length > 0 && openItems.length === 0 && (
+                  <p className="rounded-xl bg-[#e9f8ee] px-3 py-2 text-sm font-semibold text-status-success">🎉 {t("ทำครบทุกรายการแล้ว")}</p>
+                )}
+                {openItems.map((it, idx) => {
                   const mine = !readOnly && it.assignee_employee_id === me;
                   const canTick = mine && it.status === "todo";
                   return (
@@ -868,6 +874,25 @@ export default function TaskBoardPage() {
                   );
                 })}
               </div>
+              {doneItems.length > 0 && (
+                <details className="mt-3 rounded-xl bg-[#e9f8ee] p-3">
+                  <summary className="cursor-pointer text-sm font-bold text-status-success">
+                    ✓ {t("เสร็จแล้ว")} ({doneItems.length} {t("รายการ")})
+                  </summary>
+                  <div className="mt-2 space-y-1.5">
+                    {doneItems.map((it) => (
+                      <button key={it.id} type="button" onClick={() => startOpen(it)} className="flex w-full items-center gap-2 rounded-lg bg-white px-3 py-2 text-left text-sm">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-status-success text-xs font-bold text-white">✓</span>
+                        <span className="min-w-0 flex-1 text-on-surface-variant line-through">{it.title}</span>
+                        <Stars value={it.quality ?? 0} />
+                        {it.assignee_employee_id !== openGroup.assignee_employee_id && (
+                          <span className="text-[11px] text-on-surface-variant">{memberName(memberById.get(it.assignee_employee_id))}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
               {!isHead && groupItems.some((i) => i.status === "todo") && (
                 <p className="mt-2 text-[11px] text-on-surface-variant">{t("ติ๊กช่องว่างเพื่อเริ่มทำ (ย้ายไปกำลังทำ) แล้วกดส่งตรวจเมื่อเสร็จ")}</p>
               )}
@@ -997,9 +1022,14 @@ export default function TaskBoardPage() {
             {/* an item opened from the board: the whole checklist of its heading, tick to start / send for review */}
             {openCard?.parent_id && groupById.get(openCard.parent_id) && (
               <div className="rounded-xl bg-surface-container p-3">
-                <p className="mb-2 text-sm font-bold text-on-surface">{t("อยู่ในงาน")}: {groupById.get(openCard.parent_id)!.title}</p>
+                <p className="mb-2 text-sm font-bold text-on-surface">
+                  {t("อยู่ในงาน")}: {groupById.get(openCard.parent_id)!.title}
+                  <span className="ml-2 text-xs font-semibold text-status-success">
+                    ✓ {itemsOf(openCard.parent_id).filter((i) => i.status === "done").length}/{itemsOf(openCard.parent_id).length} {t("เสร็จแล้ว")}
+                  </span>
+                </p>
                 <div className="space-y-1.5">
-                  {itemsOf(openCard.parent_id).map((it) => {
+                  {itemsOf(openCard.parent_id).filter((i) => i.status !== "done" || i.id === openCard.id).map((it) => {
                     const mine = !readOnly && it.assignee_employee_id === me;
                     const canTick = mine && it.status === "todo";
                     return (
