@@ -457,6 +457,12 @@ export default function TaskBoardPage() {
   const groupById = new Map(cards.filter((c) => c.is_group).map((c) => [c.id, c]));
   // The board shows standalone cards and headings; a heading's items live inside it (opened by tapping the heading).
   const boardCards = cards.filter((c) => !c.parent_id);
+  // One lane per person ("ของใครของมัน"): me first, then the others by name. Each lane has its own four columns.
+  const laneIds = Array.from(
+    new Set(boardCards.flatMap((c) => (c.is_group ? itemsOf(c.id).map((i) => i.assignee_employee_id) : [c.assignee_employee_id])))
+  )
+    .filter((id) => !onlyMine || id === me)
+    .sort((a, b) => (a === me ? -1 : b === me ? 1 : memberName(memberById.get(a)).localeCompare(memberName(memberById.get(b)), "th")));
   const visible = onlyMine ? boardCards.filter((c) => (c.is_group ? itemsOf(c.id).some((i) => i.assignee_employee_id === me) : c.assignee_employee_id === me)) : boardCards;
 
   const deptTotals = scores.reduce(
@@ -535,12 +541,26 @@ export default function TaskBoardPage() {
             )}
           </div>
 
+          {laneIds.length === 0 && <p className="py-6 text-center text-sm text-on-surface-variant">{t("ยังไม่มีการ์ด")}</p>}
+          {laneIds.map((lane) => (
+          <section key={lane} className="space-y-2">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-on-surface">
+              <span className={clsx("rounded-full px-3 py-1", lane === me ? "bg-primary text-white" : "bg-surface-container")}>
+                {memberName(memberById.get(lane))}
+                {lane === me && ` (${t("ฉัน")})`}
+              </span>
+              {memberById.get(lane)?.is_head && <span className="text-xs font-semibold text-on-surface-variant">{t("หัวหน้า")}</span>}
+            </h3>
           <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
             {COLUMNS.map((col) => {
               // A heading card shows up in every column that holds some of its items, listing only those items:
               // ticking one item moves just that item, not the whole heading.
-              const itemsHere = (c: Card) => itemsOf(c.id).filter((i) => i.status === col.status && (!onlyMine || i.assignee_employee_id === me));
-              const list = visible.filter((c) => (c.is_group ? itemsHere(c).length > 0 || (col.status === "todo" && itemsOf(c.id).length === 0) : c.status === col.status));
+              const itemsHere = (c: Card) => itemsOf(c.id).filter((i) => i.status === col.status && i.assignee_employee_id === lane);
+              const list = visible.filter((c) =>
+                c.is_group
+                  ? itemsHere(c).length > 0 || (col.status === "todo" && itemsOf(c.id).length === 0 && c.assignee_employee_id === lane)
+                  : c.status === col.status && c.assignee_employee_id === lane
+              );
               return (
                 <div key={col.status} className={clsx("w-[78vw] max-w-[300px] shrink-0 snap-start rounded-2xl p-3", col.tone)}>
                   <p className="mb-2 text-sm font-bold text-on-surface">
@@ -550,10 +570,9 @@ export default function TaskBoardPage() {
                     {list.length === 0 && <p className="py-4 text-center text-xs text-on-surface-variant">{t("ไม่มีการ์ด")}</p>}
                     {list.map((c) => {
                       if (c.is_group) {
-                        const its = itemsOf(c.id);
+                        const its = itemsOf(c.id).filter((i) => i.assignee_employee_id === lane);
                         const done = its.filter((i) => i.status === "done").length;
                         const waiting = its.filter((i) => i.status === "review").length;
-                        const names = Array.from(new Set(its.map((i) => memberName(memberById.get(i.assignee_employee_id)))));
                         return (
                           <button
                             key={c.id}
@@ -576,7 +595,6 @@ export default function TaskBoardPage() {
                               <span className="font-bold text-primary">
                                 ☑ {done}/{its.length} {t("รายการ")}
                               </span>
-                              <span>{names.join(", ")}</span>
                               {(isHead || isReviewer) && col.status === "review" && waiting > 0 && <span className="font-bold text-status-warning">· {waiting} {t("รอตรวจ")}</span>}
                             </div>
                           </button>
@@ -627,6 +645,8 @@ export default function TaskBoardPage() {
               );
             })}
           </div>
+          </section>
+          ))}
         </>
       )}
 
