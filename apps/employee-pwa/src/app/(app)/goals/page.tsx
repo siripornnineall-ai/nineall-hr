@@ -245,6 +245,8 @@ export default function TaskBoardPage() {
   const canReviewCard = (c: Card) => (isHead || isReviewer) && c.assignee_employee_id !== me;
   const canEditProof = !readOnly && !!openCard && !openCard.is_group && (isHead || (own && (openCard.status === "todo" || openCard.status === "doing")));
   const proofExtra = () => (canEditProof ? { link_url: normLink(link), attachment_path: attachPath || null } : {});
+  // The assignee may set the due date ONCE, while the card has none (after that only the head changes it).
+  const canSetFirstDue = !readOnly && !isHead && !!openCard && !openCard.is_group && !openCard.due_date && openCard.assignee_employee_id === me && (openCard.status === "todo" || openCard.status === "doing");
   const canEditPlan = !readOnly && (openId === "new" ? true : isHead); // due date / weight / assignee (members: only when creating)
 
   useEffect(() => {
@@ -405,6 +407,8 @@ export default function TaskBoardPage() {
       patch.assignee_employee_id = assignee;
       patch.weight = weight;
       patch.due_date = dueDate || null;
+    } else if (canSetFirstDue && dueDate) {
+      patch.due_date = dueDate;
     }
     const ok = await run(async () => {
       const { data, error: uErr } = await supabase.from("task_cards").update(patch).eq("id", openCard.id).select("id");
@@ -1030,8 +1034,8 @@ export default function TaskBoardPage() {
               </div>
               <div>
                 <label className={labelCls}>{t("กำหนดส่ง")}</label>
-                <input type="date" value={dueDate} disabled={!canEditPlan} onChange={(e) => setDueDate(e.target.value)} className={field} />
-                {canEditPlan && (
+                <input type="date" value={dueDate} disabled={!canEditPlan && !canSetFirstDue} onChange={(e) => setDueDate(e.target.value)} className={field} />
+                {(canEditPlan || canSetFirstDue) && (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {[
                       { label: t("วันนี้"), v: addDaysIso(0) },
@@ -1042,7 +1046,7 @@ export default function TaskBoardPage() {
                         {q.label}
                       </button>
                     ))}
-                    {dueDate && (
+                    {dueDate && canEditPlan && (
                       <button type="button" onClick={() => setDueDate("")} className="rounded-full border border-status-danger px-2.5 py-1 text-xs font-semibold text-status-danger">
                         {t("ล้างวันที่")}
                       </button>
@@ -1050,6 +1054,7 @@ export default function TaskBoardPage() {
                   </div>
                 )}
                 {dueDate && <p className="mt-1 text-[11px] text-on-surface-variant">{fmtFullDay(dueDate)}</p>}
+                {canSetFirstDue && <p className="mt-1 text-[11px] text-on-surface-variant">{t("ตั้งวันที่ได้ครั้งเดียว หลังบันทึกแล้วหัวหน้าเป็นผู้แก้")}</p>}
               </div>
             </div>
             <div>
