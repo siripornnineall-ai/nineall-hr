@@ -79,6 +79,13 @@ function monthRange(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
 }
 
+const addDaysIso = (n: number) => {
+  const d = new Date(`${new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date())}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const fmtFullDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+
 const normLink = (v: string): string | null => {
   const x = v.trim();
   if (!x) return null;
@@ -425,6 +432,11 @@ export default function TaskBoardPage() {
     if (ok) setGroupItemText("");
   }
 
+  async function setAllDue(date: string | null) {
+    if (!openGroup) return;
+    await run(() => supabase.from("task_cards").update({ due_date: date }).or(`id.eq.${openGroup.id},parent_id.eq.${openGroup.id}`).neq("status", "done"));
+  }
+
   async function saveGroupTitle(titleText: string, descText: string) {
     if (!openGroup || !titleText.trim()) return;
     await run(() => supabase.from("task_cards").update({ title: titleText.trim(), description: descText.trim() || null }).eq("id", openGroup.id));
@@ -718,6 +730,25 @@ export default function TaskBoardPage() {
               />
             </div>
 
+            {isHead && groupItems.length > 0 && (
+              <div>
+                <label className={labelCls}>{t("กำหนดส่งทั้งหัวข้อ (ใช้กับรายการที่ยังไม่เสร็จทุกอัน)")}</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    key={`gdue-${openGroup.id}-${groupItems.find((i) => i.status !== "done")?.due_date ?? ""}`}
+                    type="date"
+                    defaultValue={groupItems.find((i) => i.status !== "done")?.due_date ?? ""}
+                    onChange={(e) => e.target.value && setAllDue(e.target.value)}
+                    className={field}
+                  />
+                  <button type="button" disabled={saving} onClick={() => setAllDue(null)} className="shrink-0 rounded-xl border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface-variant">
+                    {t("ล้างวันที่")}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-on-surface-variant">{t("ตั้งวันที่รายการใดรายการหนึ่งโดยเฉพาะ ให้กดที่รายการนั้น")}</p>
+              </div>
+            )}
+
             <div>
               <p className={labelCls}>{t("รายการย่อย (เรียงตามลำดับที่ต้องทำ)")}</p>
               <div className="space-y-1.5">
@@ -943,6 +974,25 @@ export default function TaskBoardPage() {
               <div>
                 <label className={labelCls}>{t("กำหนดส่ง")}</label>
                 <input type="date" value={dueDate} disabled={!canEditPlan} onChange={(e) => setDueDate(e.target.value)} className={field} />
+                {canEditPlan && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {[
+                      { label: t("วันนี้"), v: addDaysIso(0) },
+                      { label: t("พรุ่งนี้"), v: addDaysIso(1) },
+                      { label: t("+7 วัน"), v: addDaysIso(7) },
+                    ].map((q) => (
+                      <button key={q.label} type="button" onClick={() => setDueDate(q.v)} className="rounded-full border border-outline-variant px-2.5 py-1 text-xs font-semibold text-on-surface-variant">
+                        {q.label}
+                      </button>
+                    ))}
+                    {dueDate && (
+                      <button type="button" onClick={() => setDueDate("")} className="rounded-full border border-status-danger px-2.5 py-1 text-xs font-semibold text-status-danger">
+                        {t("ล้างวันที่")}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {dueDate && <p className="mt-1 text-[11px] text-on-surface-variant">{fmtFullDay(dueDate)}</p>}
               </div>
             </div>
             <div>
