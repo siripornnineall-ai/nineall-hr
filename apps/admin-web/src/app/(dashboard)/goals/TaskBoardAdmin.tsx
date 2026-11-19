@@ -25,6 +25,8 @@ interface Card {
   review_note: string | null;
   parent_id: string | null;
   is_group: boolean;
+  link_url: string | null;
+  attachment_path: string | null;
 }
 
 interface Dept {
@@ -102,12 +104,14 @@ export function TaskBoardAdmin({
   orgId,
   myEmployeeId,
   canManage,
+  isReviewer,
   departments,
   employees,
 }: {
   orgId: string;
   myEmployeeId: string | null;
   canManage: boolean;
+  isReviewer: boolean;
   departments: Dept[];
   employees: Emp[];
 }) {
@@ -128,6 +132,9 @@ export function TaskBoardAdmin({
   const [dueDate, setDueDate] = useState("");
   const [quality, setQuality] = useState(0);
   const [note, setNote] = useState("");
+  const [groupOpenId, setGroupOpenId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const empById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const name = (id: string | null | undefined) => {
@@ -145,7 +152,7 @@ export function TaskBoardAdmin({
       view !== "overview"
         ? supabase
             .from("task_cards")
-            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, parent_id, is_group")
+            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, parent_id, is_group, link_url, attachment_path")
             .eq("department_id", view)
             .neq("status", "cancelled")
             .order("position")
@@ -180,6 +187,33 @@ export function TaskBoardAdmin({
 
   const openCard = cards.find((c) => c.id === openId) ?? null;
   const canEdit = canManage || isHead;
+  const canReviewCard = (c: Card) => (isHead || isReviewer) && c.assignee_employee_id !== myEmployeeId;
+  const openGroup = cards.find((c) => c.id === groupOpenId && c.is_group) ?? null;
+  const groupItems = openGroup ? cards.filter((x) => x.parent_id === openGroup.id) : [];
+
+  // proof of work attached by the assignee (link + one image) so the reviewer can see it while checking
+  const proofPath = openCard?.attachment_path ?? null;
+  useEffect(() => {
+    if (!proofPath) {
+      void Promise.resolve().then(() => {
+        setPreviewUrl(null);
+        setPreviewError(null);
+      });
+      return;
+    }
+    let cancelled = false;
+    supabase.storage
+      .from("task-attachments")
+      .createSignedUrl(proofPath, 3600)
+      .then(({ data, error: sErr }) => {
+        if (cancelled) return;
+        setPreviewUrl(data?.signedUrl ?? null);
+        setPreviewError(sErr ? sErr.message : data?.signedUrl ? null : "ไม่ได้รับลิงก์รูป");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [proofPath, supabase]);
 
   function startNew() {
     setOpenId("new");
@@ -194,6 +228,10 @@ export function TaskBoardAdmin({
   }
 
   function startOpen(c: Card) {
+    if (c.is_group) {
+      setGroupOpenId(c.id);
+      return;
+    }
     setOpenId(c.id);
     setTitle(c.title);
     setDescription(c.description ?? "");
@@ -398,6 +436,49 @@ export function TaskBoardAdmin({
         </>
       )}
 
+      {openGroup && dept && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => setGroupOpenId(null)}>
+          <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-bold">{openGroup.title}</p>
+              <span className="text-xs font-bold text-on-surface-variant">
+                {groupItems.filter((i) => i.status === "done").length}/{groupItems.length} รายการ
+              </span>
+            </div>
+            {openGroup.description && <p className="text-sm text-on-surface-variant">{openGroup.description}</p>}
+            <div className="space-y-1.5">
+              {groupItems.map((it, idx) => (
+                <div key={it.id} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className={clsx(it.status === "done" && "text-on-surface-variant line-through")}>
+                      {idx + 1}. {it.title}
+                    </p>
+                    <p className="text-[11px] text-on-surface-variant">
+                      {COLUMNS.find((c) => c.status === it.status)?.label} · {name(it.assignee_employee_id)}
+                      {it.due_date && ` · ${fmtDay(it.due_date)}`}
+                      {(it.link_url || it.attachment_path) && " · 📎 มีผลงานแนบ"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => startOpen(it)}
+                    className={clsx(
+                      "shrink-0 rounded-lg px-3 py-1 text-xs font-bold",
+                      it.status === "review" && canReviewCard(it) ? "bg-status-warning/20 text-status-warning" : "bg-white text-on-surface-variant"
+                    )}
+                  >
+                    {it.status === "review" && canReviewCard(it) ? "ตรวจ" : "เปิด"}
+                  </button>
+                </div>
+              ))}
+              {groupItems.length === 0 && <p className="text-xs text-on-surface-variant">ยังไม่มีรายการย่อย</p>}
+            </div>
+            <button onClick={() => setGroupOpenId(null)} className="h-10 w-full text-sm font-semibold text-on-surface-variant">
+              ปิด
+            </button>
+          </div>
+        </div>
+      )}
+
       {openId !== null && dept && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !saving && setOpenId(null)}>
           <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
@@ -444,8 +525,37 @@ export function TaskBoardAdmin({
               </div>
             )}
 
+            {/* optional proof of work: link and / or image attached by the assignee */}
+            {openCard && !openCard.is_group && (openCard.link_url || openCard.attachment_path) && (
+              <div className="space-y-2 rounded-lg bg-surface-container p-3">
+                <p className="text-sm font-bold">แนบผลงาน</p>
+                {openCard.link_url && (
+                  <a href={/^https?:\/\//i.test(openCard.link_url) ? openCard.link_url : "#"} target="_blank" rel="noopener noreferrer" className="block break-all text-sm font-semibold text-primary underline">
+                    🔗 {openCard.link_url}
+                  </a>
+                )}
+                {openCard.attachment_path && !previewUrl && (
+                  <p className="rounded-lg bg-white p-3 text-xs text-on-surface-variant">{previewError ? `โหลดรูปไม่สำเร็จ: ${previewError}` : "กำลังโหลดรูป..."}</p>
+                )}
+                {previewUrl && (
+                  <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewUrl}
+                      alt="ผลงาน"
+                      onError={() => {
+                        setPreviewUrl(null);
+                        setPreviewError("เปิดไฟล์รูปไม่ได้ (ไฟล์อาจเสียหรือหมดอายุ)");
+                      }}
+                      className="max-h-72 w-full rounded-lg bg-white object-contain"
+                    />
+                  </a>
+                )}
+              </div>
+            )}
+
             {openCard?.status === "review" &&
-              (isHead ? (
+              (canReviewCard(openCard) ? (
                 <div className="space-y-2 rounded-lg bg-[#eaf2ff] p-3">
                   <p className="text-sm font-bold">ตรวจงาน: ให้คะแนนคุณภาพ</p>
                   <Stars value={quality} onChange={setQuality} />
@@ -469,7 +579,9 @@ export function TaskBoardAdmin({
                 </div>
               ) : (
                 <p className="rounded-lg bg-[#eaf2ff] p-3 text-xs text-on-surface-variant">
-                  รอหัวหน้าแผนก ({dept.head_employee_id ? name(dept.head_employee_id) : "ยังไม่กำหนด"}) ตรวจและอนุมัติ — HR / แอดมินอนุมัติแทนไม่ได้
+                  {openCard.assignee_employee_id === myEmployeeId
+                    ? "งานของคุณเอง ต้องให้ผู้ตรวจงานเป็นผู้ตรวจและอนุมัติ"
+                    : `รอหัวหน้าแผนก (${dept.head_employee_id ? name(dept.head_employee_id) : "ยังไม่กำหนด"}) หรือผู้ตรวจงานตรวจและอนุมัติ — HR / แอดมินทั่วไปอนุมัติแทนไม่ได้`}
                 </p>
               ))}
 
