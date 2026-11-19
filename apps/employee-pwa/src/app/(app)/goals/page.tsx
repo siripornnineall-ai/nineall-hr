@@ -179,6 +179,7 @@ export default function TaskBoardPage() {
   const [attachPath, setAttachPath] = useState("");
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [groupOpenId, setGroupOpenId] = useState<string | null>(null); // a heading opened from the board
   const [groupItemText, setGroupItemText] = useState("");
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(false);
@@ -248,15 +249,20 @@ export default function TaskBoardPage() {
 
   useEffect(() => {
     if (!attachPath) {
-      void Promise.resolve().then(() => setPreviewUrl(null));
+      void Promise.resolve().then(() => {
+        setPreviewUrl(null);
+        setPreviewError(null);
+      });
       return;
     }
     let cancelled = false;
     supabase.storage
       .from("task-attachments")
       .createSignedUrl(attachPath, 3600)
-      .then(({ data }) => {
-        if (!cancelled) setPreviewUrl(data?.signedUrl ?? null);
+      .then(({ data, error: sErr }) => {
+        if (cancelled) return;
+        setPreviewUrl(data?.signedUrl ?? null);
+        setPreviewError(sErr ? sErr.message : data?.signedUrl ? null : "ไม่ได้รับลิงก์รูป");
       });
     return () => {
       cancelled = true;
@@ -1084,11 +1090,24 @@ export default function TaskBoardPage() {
                     </a>
                   )
                 )}
+                {attachPath && !previewUrl && (
+                  <p className="rounded-xl bg-white p-3 text-xs text-on-surface-variant">
+                    {previewError ? `${t("โหลดรูปไม่สำเร็จ")}: ${previewError}` : t("กำลังโหลดรูป...")}
+                  </p>
+                )}
                 {attachPath && previewUrl && (
                   <div className="relative">
                     <a href={previewUrl} target="_blank" rel="noopener noreferrer">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={previewUrl} alt={t("ผลงาน")} className="max-h-56 w-full rounded-xl object-contain bg-white" />
+                      <img
+                        src={previewUrl}
+                        alt={t("ผลงาน")}
+                        onError={() => {
+                          setPreviewUrl(null);
+                          setPreviewError(t("เปิดไฟล์รูปไม่ได้ (ไฟล์อาจเสียหรือหมดอายุ ลองปิดแล้วเปิดใหม่)"));
+                        }}
+                        className="max-h-56 w-full rounded-xl object-contain bg-white"
+                      />
                     </a>
                     {canEditProof && (
                       <button type="button" onClick={() => setAttachPath("")} className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-bold text-white">
