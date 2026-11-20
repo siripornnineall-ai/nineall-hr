@@ -106,6 +106,7 @@ export function TaskBoardAdmin({
   myEmployeeId,
   canManage,
   isReviewer,
+  extraDepts,
   departments,
   employees,
 }: {
@@ -113,6 +114,7 @@ export function TaskBoardAdmin({
   myEmployeeId: string | null;
   canManage: boolean;
   isReviewer: boolean;
+  extraDepts: { employee_id: string; department_id: string }[];
   departments: Dept[];
   employees: Emp[];
 }) {
@@ -144,7 +146,9 @@ export function TaskBoardAdmin({
   };
   const dept = depts.find((d) => d.id === view) ?? null;
   const isHead = !!dept && !!myEmployeeId && dept.head_employee_id === myEmployeeId;
-  const deptMembers = dept ? employees.filter((e) => e.department_id === dept.id || e.id === dept.head_employee_id) : [];
+  const deptMembers = dept
+    ? employees.filter((e) => e.department_id === dept.id || e.id === dept.head_employee_id || extraDepts.some((x) => x.employee_id === e.id && x.department_id === dept.id))
+    : [];
 
   const load = useCallback(async () => {
     const { from, to } = monthRange(month);

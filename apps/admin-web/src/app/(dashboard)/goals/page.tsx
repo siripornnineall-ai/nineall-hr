@@ -10,7 +10,7 @@ export default async function GoalsPage() {
   const supabase = await createClient();
   const canManage = ["super_admin", "hr"].includes(user.role);
 
-  const [{ data: departments }, { data: employees }, { data: me }] = await Promise.all([
+  const [{ data: departments }, { data: employees }, { data: me }, { data: extraDepts }] = await Promise.all([
     supabase.from("departments").select("id, name, head_employee_id").eq("org_id", user.orgId).is("deleted_at", null).order("name"),
     supabase
       .from("employees")
@@ -21,6 +21,8 @@ export default async function GoalsPage() {
       .order("employee_code"),
     // the reviewer (checks every card in every department) — see migration 0159
     user.employeeId ? supabase.from("employees").select("task_reviewer").eq("id", user.employeeId).maybeSingle() : Promise.resolve({ data: null }),
+    // people who also work in another department (e.g. HR + accounting)
+    supabase.from("employee_departments").select("employee_id, department_id").eq("org_id", user.orgId),
   ]);
 
   return (
@@ -34,6 +36,7 @@ export default async function GoalsPage() {
           isReviewer={!!(me as { task_reviewer?: boolean } | null)?.task_reviewer}
           departments={departments ?? []}
           employees={employees ?? []}
+          extraDepts={extraDepts ?? []}
         />
       </div>
     </>

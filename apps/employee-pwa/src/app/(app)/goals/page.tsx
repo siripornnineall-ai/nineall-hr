@@ -153,6 +153,7 @@ export default function TaskBoardPage() {
 
   const [depts, setDepts] = useState<Dept[]>([]);
   const [myDeptId, setMyDeptId] = useState<string>("");
+  const [extraDeptIds, setExtraDeptIds] = useState<string[]>([]); // other departments I also work in (e.g. HR + accounting)
   const [isReviewer, setIsReviewer] = useState(false); // checks the work of everyone, in every department
   const [deptId, setDeptId] = useState<string>("");
   const [members, setMembers] = useState<Member[]>([]);
@@ -189,7 +190,7 @@ export default function TaskBoardPage() {
   const dept = depts.find((d) => d.id === deptId) ?? null;
   const isHead = !!dept && !!me && dept.head_employee_id === me;
   // Every department's board is visible to everyone (transparency), but only my own department (or one I head) is editable.
-  const readOnly = !!dept && !isHead && dept.id !== myDeptId;
+  const readOnly = !!dept && !isHead && dept.id !== myDeptId && !extraDeptIds.includes(dept.id);
   const itemsOf = (parentId: string) => cards.filter((c) => c.parent_id === parentId);
   const memberById = useMemo(() => new Map(members.map((m) => [m.employee_id, m])), [members]);
 
@@ -197,11 +198,13 @@ export default function TaskBoardPage() {
   useEffect(() => {
     if (!profile) return;
     (async () => {
-      const [{ data: meRow }, { data: deptRows }] = await Promise.all([
+      const [{ data: meRow }, { data: deptRows }, { data: extraRows }] = await Promise.all([
         supabase.from("employees").select("department_id, task_reviewer").eq("id", profile.employeeId).maybeSingle(),
         supabase.from("departments").select("id, name, head_employee_id").eq("org_id", profile.orgId).is("deleted_at", null).order("name"),
+        supabase.from("employee_departments").select("department_id").eq("employee_id", profile.employeeId),
       ]);
       const all = (deptRows ?? []) as Dept[];
+      setExtraDeptIds(((extraRows ?? []) as { department_id: string }[]).map((r) => r.department_id));
       setMyDeptId(meRow?.department_id ?? "");
       setIsReviewer(!!(meRow as { task_reviewer?: boolean } | null)?.task_reviewer);
       setDepts(all);
