@@ -3,8 +3,10 @@
 -- HR / admin maintain the list. Everything that used "my department" for the task board now uses all of a person's departments.
 
 create table if not exists public.employee_departments (
-  employee_id uuid not null references public.employees(id) on delete cascade,
-  department_id uuid not null references public.departments(id) on delete cascade,
+  -- NO foreign keys to employees / departments on purpose: a junction table with FKs to both makes every PostgREST embed
+  -- like employees?select=...,departments(name) ambiguous (HTTP 300 -> pages 404). Same trap as 0155.
+  employee_id uuid not null,
+  department_id uuid not null,
   org_id uuid not null references public.organizations(id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (employee_id, department_id)
