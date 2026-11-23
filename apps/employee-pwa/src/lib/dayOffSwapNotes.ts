@@ -1,7 +1,7 @@
 // Owner 2026-11-18: day-off swaps (work on a regular day off, take another day / half day off instead).
 //  * the DAY TAKEN OFF carries a note saying which day was swapped in ("ใช้วันที่ 7 พ.ย. มาสลับวันหยุด");
-//  * the DAY OFF THAT WAS WORKED is cut back to a regular day off once its credit is fully used (1 full day, or 2 halves);
-//    while only half is used it stays a worked day, noted as "used half, half left".
+//  * the DAY OFF THAT WAS WORKED stays a working day (owner 2026-11-23, replacing the earlier "cut back to a day off"):
+//    only a note says which day it was swapped to / how much of it is used.
 // Display only — attendance rows, hours and payroll are never changed by this.
 
 export interface DayOffSwap {
@@ -22,12 +22,12 @@ export function substituteNote(swaps: DayOffSwap[], date: string): string | null
   return mine.map((s) => `${s.unit === "half_day" ? `หยุด${periodTh(s)} · ` : ""}ใช้วันที่ ${fmt(s.original_date!)} มาสลับวันหยุด`).join(" · ");
 }
 
-/** For a day off that was worked and swapped away: cut back to a day off when fully used. */
+/** For a day off that was worked and swapped away: it stays a WORKING day (owner 2026-11-23); only a note says where the credit went. */
 export function originalDayInfo(swaps: DayOffSwap[], date: string): { cut: boolean; note: string } | null {
   const mine = swaps.filter((s) => s.original_date === date);
   if (mine.length === 0) return null;
   const used = mine.reduce((sum, s) => sum + (s.unit === "half_day" ? 0.5 : 1), 0);
   const where = mine.map((s) => `${fmt(s.substitute_date)}${s.unit === "half_day" ? ` (${periodTh(s)})` : ""}`).join(", ");
-  if (used >= 1) return { cut: true, note: `ทำงานวันหยุดแล้วสลับไปหยุด ${where} → นับเป็นวันหยุดประจำเหมือนเดิม` };
+  if (used >= 1) return { cut: false, note: `ทำงานวันหยุด · สลับไปหยุด ${where}` };
   return { cut: false, note: `ทำงานวันหยุด · ใช้สลับไปแล้วครึ่งวัน (${where}) · เหลืออีกครึ่งวัน` };
 }
