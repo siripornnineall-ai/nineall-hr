@@ -239,7 +239,7 @@ export default function TaskBoardPage() {
 
   const openCard = cards.find((c) => c.id === openId) ?? null;
   const own = !readOnly && !!openCard && (openCard.assignee_employee_id === me || openCard.created_by_employee_id === me);
-  const canEditText = !readOnly && (openId === "new" || isHead || (own && (openCard?.status === "todo" || openCard?.status === "doing")));
+  const canEditText = !readOnly && (openId === "new" || isHead || own); // also after the check is done (typo fixes)
   // The checklist builder: on a new card, or on an existing standalone card that has not been started yet
   // (adding items turns the card into a heading; its items become the cards on the board).
   const canAddItems =
@@ -1194,10 +1194,34 @@ export default function TaskBoardPage() {
               </div>
             )}
 
-            {openCard?.status === "done" && (
+            {openCard?.status === "done" && !canReviewCard(openCard) && (
               <div className="rounded-xl bg-[#e9f8ee] p-3 text-sm">
                 <Stars value={openCard.quality ?? 0} /> {openCard.is_late && <span className="ml-2 text-xs font-bold text-status-warning">{t("ส่งเกินกำหนด (ได้ 80%)")}</span>}
                 {openCard.review_note && <p className="mt-1 text-xs text-on-surface-variant">{openCard.review_note}</p>}
+              </div>
+            )}
+            {/* the head / reviewer can still correct the stars and the note after approving */}
+            {openCard?.status === "done" && canReviewCard(openCard) && (
+              <div className="space-y-2 rounded-xl bg-[#e9f8ee] p-3 text-sm">
+                <p className="font-bold text-on-surface">
+                  {t("ผลการตรวจ (แก้ไขได้)")} {openCard.is_late && <span className="ml-2 text-xs font-bold text-status-warning">{t("ส่งเกินกำหนด (ได้ 80%)")}</span>}
+                </p>
+                <Stars value={quality} onChange={setQuality} />
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={field} placeholder={t("ความเห็นถึงผู้รับผิดชอบ (ไม่บังคับ)")} />
+                <button
+                  disabled={saving || quality === 0}
+                  onClick={async () => {
+                    const ok = await run(async () => {
+                      const { data, error: uErr } = await supabase.from("task_cards").update({ quality, review_note: note.trim() || null }).eq("id", openCard.id).select("id");
+                      if (!uErr && (data?.length ?? 0) === 0) return { error: { message: t("บันทึกไม่สำเร็จ: ไม่มีสิทธิ์แก้ไข") } };
+                      return { error: uErr };
+                    });
+                    if (ok) setOpenId(null);
+                  }}
+                  className="h-10 w-full rounded-xl bg-status-success font-bold text-white disabled:opacity-50"
+                >
+                  {t("บันทึกคะแนน")}
+                </button>
               </div>
             )}
 
@@ -1233,7 +1257,7 @@ export default function TaskBoardPage() {
 
             {error && <p className="text-sm text-status-danger">{error}</p>}
 
-            {(openId === "new" || canEditText || isHead) && openCard?.status !== "done" && (
+            {(openId === "new" || canEditText || isHead) && (
               <button onClick={saveDetails} disabled={saving} className="h-11 w-full rounded-2xl bg-primary font-bold text-white disabled:opacity-60">
                 {saving ? t("กำลังบันทึก...") : openId === "new" ? t("เพิ่มการ์ด") : t("บันทึกการแก้ไข")}
               </button>

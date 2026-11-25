@@ -23,6 +23,7 @@ interface Card {
   quality: number | null;
   is_late: boolean | null;
   review_note: string | null;
+  position: number;
   parent_id: string | null;
   is_group: boolean;
   link_url: string | null;
@@ -136,6 +137,7 @@ export function TaskBoardAdmin({
   const [quality, setQuality] = useState(0);
   const [note, setNote] = useState("");
   const [groupOpenId, setGroupOpenId] = useState<string | null>(null);
+  const [newItemText, setNewItemText] = useState("");
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -157,7 +159,7 @@ export function TaskBoardAdmin({
       view !== "overview"
         ? supabase
             .from("task_cards")
-            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, parent_id, is_group, link_url, attachment_path, attachment_paths")
+            .select("id, department_id, title, description, status, assignee_employee_id, created_by_employee_id, weight, due_date, quality, is_late, review_note, position, parent_id, is_group, link_url, attachment_path, attachment_paths")
             .eq("department_id", view)
             .neq("status", "cancelled")
             .order("position")
@@ -258,6 +260,24 @@ export function TaskBoardAdmin({
         ? await run(() => supabase.from("task_cards").insert({ org_id: orgId, department_id: dept.id, ...values }))
         : await run(() => supabase.from("task_cards").update(values).eq("id", openId!));
     if (ok) setOpenId(null);
+  }
+
+  async function addGroupItem() {
+    if (!openGroup || !dept || !newItemText.trim()) return;
+    const last = groupItems[groupItems.length - 1];
+    const ok = await run(() =>
+      supabase.from("task_cards").insert({
+        org_id: orgId,
+        department_id: openGroup.department_id,
+        title: newItemText.trim(),
+        assignee_employee_id: openGroup.assignee_employee_id,
+        weight: last?.weight ?? 2,
+        due_date: last?.due_date ?? openGroup.due_date,
+        parent_id: openGroup.id,
+        position: (last?.position ?? Date.now() / 1000) + 1,
+      })
+    );
+    if (ok) setNewItemText("");
   }
 
   async function move(c: Card, status: Status, extra: Record<string, unknown> = {}) {
@@ -450,7 +470,28 @@ export function TaskBoardAdmin({
                 {groupItems.filter((i) => i.status === "done").length}/{groupItems.length} รายการ
               </span>
             </div>
-            {openGroup.description && <p className="text-sm text-on-surface-variant">{openGroup.description}</p>}
+            {canEdit ? (
+              <>
+                <input
+                  key={`gt-${openGroup.id}-${openGroup.title}`}
+                  defaultValue={openGroup.title}
+                  onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== openGroup.title && void run(() => supabase.from("task_cards").update({ title: e.target.value.trim() }).eq("id", openGroup.id))}
+                  className={field}
+                  aria-label="ชื่อหัวข้อ"
+                />
+                <textarea
+                  key={`gd-${openGroup.id}-${openGroup.description ?? ""}`}
+                  defaultValue={openGroup.description ?? ""}
+                  rows={2}
+                  onBlur={(e) => e.target.value.trim() !== (openGroup.description ?? "") && void run(() => supabase.from("task_cards").update({ description: e.target.value.trim() || null }).eq("id", openGroup.id))}
+                  className={field}
+                  placeholder="รายละเอียด"
+                  aria-label="รายละเอียดหัวข้อ"
+                />
+              </>
+            ) : (
+              openGroup.description && <p className="text-sm text-on-surface-variant">{openGroup.description}</p>
+            )}
             <div className="space-y-1.5">
               {groupItems.map((it, idx) => (
                 <div key={it.id} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-2 text-sm">
@@ -477,6 +518,26 @@ export function TaskBoardAdmin({
               ))}
               {groupItems.length === 0 && <p className="text-xs text-on-surface-variant">ยังไม่มีรายการย่อย</p>}
             </div>
+            {canEdit && (
+              <div className="flex gap-2">
+                <input
+                  value={newItemText}
+                  onChange={(e) => setNewItemText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addGroupItem();
+                    }
+                  }}
+                  className={field}
+                  placeholder="เพิ่มรายการย่อย"
+                />
+                <button type="button" disabled={saving || !newItemText.trim()} onClick={addGroupItem} className="shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-white disabled:opacity-50">
+                  + เพิ่ม
+                </button>
+              </div>
+            )}
+            {error && <p className="text-sm font-semibold text-status-danger">{error}</p>}
             <button onClick={() => setGroupOpenId(null)} className="h-10 w-full text-sm font-semibold text-on-surface-variant">
               ปิด
             </button>
@@ -523,10 +584,30 @@ export function TaskBoardAdmin({
               </div>
             </div>
 
-            {openCard?.status === "done" && (
+            {openCard?.status === "done" && !canReviewCard(openCard) && (
               <div className="rounded-lg bg-[#e9f8ee] p-3 text-sm">
                 <Stars value={openCard.quality ?? 0} /> {openCard.is_late && <span className="ml-2 text-xs font-bold text-status-warning">ส่งเกินกำหนด (ได้ 80%)</span>}
                 {openCard.review_note && <p className="mt-1 text-xs text-on-surface-variant">{openCard.review_note}</p>}
+              </div>
+            )}
+            {/* the head / reviewer can still correct the stars and the note after approving */}
+            {openCard?.status === "done" && canReviewCard(openCard) && (
+              <div className="space-y-2 rounded-lg bg-[#e9f8ee] p-3">
+                <p className="text-sm font-bold">
+                  ผลการตรวจ (แก้ไขได้) {openCard.is_late && <span className="ml-2 text-xs font-bold text-status-warning">ส่งเกินกำหนด (ได้ 80%)</span>}
+                </p>
+                <Stars value={quality} onChange={setQuality} />
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={field} placeholder="ความเห็นถึงผู้รับผิดชอบ (ไม่บังคับ)" />
+                <button
+                  disabled={saving || quality === 0}
+                  onClick={async () => {
+                    const ok = await run(() => supabase.from("task_cards").update({ quality, review_note: note.trim() || null }).eq("id", openCard.id));
+                    if (ok) setOpenId(null);
+                  }}
+                  className="h-10 w-full rounded-lg bg-status-success font-bold text-white disabled:opacity-50"
+                >
+                  บันทึกคะแนน
+                </button>
               </div>
             )}
 
@@ -592,7 +673,7 @@ export function TaskBoardAdmin({
             {error && <p className="text-sm font-semibold text-status-danger">{error}</p>}
 
             <div className="flex flex-wrap gap-2">
-              {canEdit && openCard?.status !== "done" && (
+              {canEdit && (
                 <button onClick={save} disabled={saving} className="h-10 rounded-lg bg-primary px-5 font-bold text-white disabled:opacity-60">
                   {saving ? "กำลังบันทึก..." : openId === "new" ? "เพิ่มการ์ด" : "บันทึก"}
                 </button>
