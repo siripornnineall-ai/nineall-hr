@@ -138,6 +138,8 @@ export function TaskBoardAdmin({
   const [note, setNote] = useState("");
   const [groupOpenId, setGroupOpenId] = useState<string | null>(null);
   const [newItemText, setNewItemText] = useState("");
+  const [draftItems, setDraftItems] = useState<string[]>([]); // checklist items typed while creating / extending a card
+  const [draftText, setDraftText] = useState("");
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -224,6 +226,8 @@ export function TaskBoardAdmin({
 
   function startNew() {
     setOpenId("new");
+    setDraftItems([]);
+    setDraftText("");
     setTitle("");
     setDescription("");
     setAssignee(deptMembers[0]?.id ?? "");
@@ -240,6 +244,8 @@ export function TaskBoardAdmin({
       return;
     }
     setOpenId(c.id);
+    setDraftItems([]);
+    setDraftText("");
     setTitle(c.title);
     setDescription(c.description ?? "");
     setAssignee(c.assignee_employee_id);
@@ -255,10 +261,38 @@ export function TaskBoardAdmin({
     if (!title.trim()) return setError("กรุณากรอกชื่องาน");
     if (!assignee) return setError("กรุณาเลือกผู้รับผิดชอบ");
     const values = { title: title.trim(), description: description.trim() || null, assignee_employee_id: assignee, weight, due_date: dueDate || null };
-    const ok =
-      openId === "new"
-        ? await run(() => supabase.from("task_cards").insert({ org_id: orgId, department_id: dept.id, ...values }))
-        : await run(() => supabase.from("task_cards").update(values).eq("id", openId!));
+    const pending = [...draftItems, draftText].map((x) => x.trim()).filter(Boolean);
+    const itemRows = (parentId: string) =>
+      pending.map((it, i) => ({ org_id: orgId, department_id: dept.id, title: it, assignee_employee_id: assignee, weight, due_date: dueDate || null, parent_id: parentId, position: Date.now() / 1000 + i * 0.001 }));
+
+    let ok: boolean;
+    if (openId === "new" && pending.length > 0) {
+      // a heading with checklist items: the heading is a container row, every item is its own card
+      ok = await run(async () => {
+        const { data: group, error: gErr } = await supabase
+          .from("task_cards")
+          .insert({ org_id: orgId, department_id: dept.id, ...values, weight: 1, is_group: true })
+          .select("id")
+          .single();
+        if (gErr || !group) return { error: gErr ?? { message: "สร้างหัวข้อไม่สำเร็จ" } };
+        const { error: iErr } = await supabase.from("task_cards").insert(itemRows(group.id));
+        if (iErr) await supabase.from("task_cards").delete().eq("id", group.id);
+        return { error: iErr };
+      });
+    } else if (openId === "new") {
+      ok = await run(() => supabase.from("task_cards").insert({ org_id: orgId, department_id: dept.id, ...values }));
+    } else if (pending.length > 0 && openCard && !openCard.parent_id && !openCard.is_group && openCard.status === "todo") {
+      // adding items to an existing not-yet-started card turns it into a heading
+      ok = await run(async () => {
+        const { error: uErr } = await supabase.from("task_cards").update({ ...values, is_group: true }).eq("id", openId!);
+        if (uErr) return { error: uErr };
+        const { error: iErr } = await supabase.from("task_cards").insert(itemRows(openId!));
+        if (iErr) await supabase.from("task_cards").update({ is_group: false }).eq("id", openId!);
+        return { error: iErr };
+      });
+    } else {
+      ok = await run(() => supabase.from("task_cards").update(values).eq("id", openId!));
+    }
     if (ok) setOpenId(null);
   }
 
@@ -557,6 +591,56 @@ export function TaskBoardAdmin({
               <label className={labelCls}>รายละเอียด</label>
               <textarea value={description} disabled={!canEdit} onChange={(e) => setDescription(e.target.value)} rows={3} className={field} />
             </div>
+
+            {/* checklist: on a new card, or on an existing card that has not been started (turns it into a heading with items) */}
+            {canEdit && (openId === "new" || (openCard && !openCard.parent_id && !openCard.is_group && openCard.status === "todo")) && (
+              <div>
+                <label className={labelCls}>{openId === "new" ? "รายการย่อย (ไม่บังคับ)" : "เพิ่มรายการย่อยในการ์ดนี้"}</label>
+                <p className="mb-2 text-xs text-on-surface-variant">เพิ่มได้หลายรายการ เรียงตามลำดับที่ต้องทำ แต่ละรายการติ๊กเริ่มทำ ส่งตรวจ และให้คะแนนแยกกัน</p>
+                <div className="space-y-1.5">
+                  {draftItems.map((it, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-surface-container px-3 py-1.5 text-sm">
+                      <span className="text-xs font-bold text-on-surface-variant">{i + 1}.</span>
+                      <input
+                        value={it}
+                        onChange={(e) => setDraftItems((d) => d.map((x, j) => (j === i ? e.target.value : x)))}
+                        className="min-w-0 flex-1 bg-transparent py-1 outline-none"
+                        aria-label="แก้ไขรายการ"
+                      />
+                      <button type="button" onClick={() => setDraftItems((d) => d.filter((_, j) => j !== i))} className="text-status-danger" aria-label="ลบ">
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && draftText.trim()) {
+                        e.preventDefault();
+                        setDraftItems((d) => [...d, draftText.trim()]);
+                        setDraftText("");
+                      }
+                    }}
+                    className={field}
+                    placeholder="เช่น ตรวจเวลาเข้างาน"
+                  />
+                  <button
+                    type="button"
+                    disabled={!draftText.trim()}
+                    onClick={() => {
+                      setDraftItems((d) => [...d, draftText.trim()]);
+                      setDraftText("");
+                    }}
+                    className="shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    + เพิ่ม
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={labelCls}>ผู้รับผิดชอบ</label>
