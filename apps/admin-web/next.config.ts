@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Short commit id of this build, shown at the bottom of the task board to tell which version a browser is running.
+  env: { NEXT_PUBLIC_BUILD_ID: (process.env.VERCEL_GIT_COMMIT_SHA ?? "dev").slice(0, 7) },
   transpilePackages: [
     "@nineall-hr/design-tokens",
     "@nineall-hr/payroll-engine",

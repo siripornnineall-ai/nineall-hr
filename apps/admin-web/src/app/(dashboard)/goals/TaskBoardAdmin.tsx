@@ -495,6 +495,8 @@ export function TaskBoardAdmin({
         </>
       )}
 
+      <p className="pt-2 text-center text-[10px] text-on-surface-variant/60">v{process.env.NEXT_PUBLIC_BUILD_ID}</p>
+
       {openGroup && dept && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => setGroupOpenId(null)}>
           <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
