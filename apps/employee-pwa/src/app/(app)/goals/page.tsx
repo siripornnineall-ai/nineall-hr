@@ -1126,6 +1126,13 @@ export default function TaskBoardPage() {
               </div>
             </div>
 
+            {openCard?.status === "doing" && openCard.review_note && (
+              <div className="rounded-xl border border-status-danger bg-status-danger/5 p-3 text-sm">
+                <p className="text-xs font-bold text-status-danger">↩ {t("ถูกส่งกลับให้แก้ไข")}</p>
+                <p className="mt-1 whitespace-pre-line text-on-surface">{openCard.review_note}</p>
+              </div>
+            )}
+
             {/* optional proof of work: a link and / or an image, so the head can see it while checking */}
             {openCard && !openCard.is_group && (canEditProof || link || attachPaths.length > 0) && (
               <div className="space-y-2 rounded-xl bg-surface-container p-3">
@@ -1222,6 +1229,14 @@ export default function TaskBoardPage() {
                 >
                   {t("บันทึกคะแนน")}
                 </button>
+                <button
+                  disabled={saving || !note.trim()}
+                  onClick={() => move(openCard, "doing", { review_note: note.trim() })}
+                  className="h-10 w-full rounded-xl border border-status-danger font-bold text-status-danger disabled:opacity-50"
+                >
+                  ↺ {t("ส่งกลับไปแก้ไข (เปิดงานใหม่)")}
+                </button>
+                {!note.trim() && <p className="text-xs text-on-surface-variant">{t("พิมพ์เหตุผลในช่องความเห็นก่อน ปุ่มส่งกลับจึงจะกดได้")}</p>}
               </div>
             )}
 
@@ -1230,7 +1245,8 @@ export default function TaskBoardPage() {
               <div className="space-y-2 rounded-xl bg-[#eaf2ff] p-3">
                 <p className="text-sm font-bold text-on-surface">{t("ตรวจงาน: ให้คะแนนคุณภาพ")}</p>
                 <Stars value={quality} onChange={setQuality} />
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={field} placeholder={t("ความเห็นถึงผู้รับผิดชอบ (ไม่บังคับ)")} />
+                <label className="block text-xs font-semibold text-on-surface-variant">{t("ความเห็น / เหตุผลที่ส่งกลับ (ถ้าส่งกลับแก้ไข ต้องระบุเหตุผล)")}</label>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className={field} placeholder={t("เช่น รูปไม่ชัด ขอแนบลิงก์เพิ่ม / แก้ข้อความให้ตรงกับแคมเปญ")} />
                 <div className="flex gap-2">
                   <button
                     disabled={saving || quality === 0}
@@ -1240,14 +1256,15 @@ export default function TaskBoardPage() {
                     ✓ {t("อนุมัติเสร็จ")}
                   </button>
                   <button
-                    disabled={saving}
-                    onClick={() => move(openCard, "doing", { review_note: note.trim() || null })}
+                    disabled={saving || !note.trim()}
+                    onClick={() => move(openCard, "doing", { review_note: note.trim() })}
                     className="h-11 flex-1 rounded-2xl border border-status-danger font-bold text-status-danger disabled:opacity-50"
                   >
                     ↩ {t("ส่งกลับแก้ไข")}
                   </button>
                 </div>
                 {quality === 0 && <p className="text-xs text-on-surface-variant">{t("เลือกดาวก่อนกดอนุมัติ")}</p>}
+                {!note.trim() && <p className="text-xs text-on-surface-variant">{t("พิมพ์เหตุผลก่อน ปุ่มส่งกลับแก้ไขจึงจะกดได้")}</p>}
               </div>
             )}
 
@@ -1285,7 +1302,7 @@ export default function TaskBoardPage() {
                     ← {t("ดึงกลับมาแก้")}
                   </button>
                 )}
-                {isHead && openCard.status === "done" && (
+                {isHead && openCard.status === "done" && !canReviewCard(openCard) && (
                   <button onClick={() => move(openCard, "doing")} disabled={saving} className="rounded-xl bg-surface-container px-3 py-2 text-sm font-semibold">
                     ↺ {t("เปิดงานใหม่")}
                   </button>

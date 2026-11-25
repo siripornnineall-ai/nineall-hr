@@ -608,6 +608,21 @@ export function TaskBoardAdmin({
                 >
                   บันทึกคะแนน
                 </button>
+                <button
+                  disabled={saving || !note.trim()}
+                  onClick={() => move(openCard, "doing", { review_note: note.trim() })}
+                  className="h-10 w-full rounded-lg border border-status-danger font-bold text-status-danger disabled:opacity-50"
+                >
+                  ↺ ส่งกลับไปแก้ไข (เปิดงานใหม่)
+                </button>
+                {!note.trim() && <p className="text-xs text-on-surface-variant">พิมพ์เหตุผลในช่องความเห็นก่อน ปุ่มส่งกลับจึงจะกดได้</p>}
+              </div>
+            )}
+
+            {openCard?.status === "doing" && openCard.review_note && (
+              <div className="rounded-lg border border-status-danger bg-status-danger/5 p-3 text-sm">
+                <p className="text-xs font-bold text-status-danger">↩ ถูกส่งกลับให้แก้ไข</p>
+                <p className="mt-1 whitespace-pre-line">{openCard.review_note}</p>
               </div>
             )}
 
@@ -644,7 +659,8 @@ export function TaskBoardAdmin({
                 <div className="space-y-2 rounded-lg bg-[#eaf2ff] p-3">
                   <p className="text-sm font-bold">ตรวจงาน: ให้คะแนนคุณภาพ</p>
                   <Stars value={quality} onChange={setQuality} />
-                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={field} placeholder="ความเห็นถึงผู้รับผิดชอบ (ไม่บังคับ)" />
+                  <label className="block text-xs font-semibold text-on-surface-variant">ความเห็น / เหตุผลที่ส่งกลับ (ถ้าส่งกลับแก้ไข ต้องระบุเหตุผล)</label>
+                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className={field} placeholder="เช่น รูปไม่ชัด ขอแนบลิงก์เพิ่ม / แก้ข้อความให้ตรงกับแคมเปญ" />
                   <div className="flex gap-2">
                     <button
                       disabled={saving || quality === 0}
@@ -654,13 +670,14 @@ export function TaskBoardAdmin({
                       ✓ อนุมัติเสร็จ
                     </button>
                     <button
-                      disabled={saving}
-                      onClick={() => move(openCard, "doing", { review_note: note.trim() || null })}
+                      disabled={saving || !note.trim()}
+                      onClick={() => move(openCard, "doing", { review_note: note.trim() })}
                       className="h-10 flex-1 rounded-lg border border-status-danger font-bold text-status-danger disabled:opacity-50"
                     >
                       ↩ ส่งกลับแก้ไข
                     </button>
                   </div>
+                  {!note.trim() && <p className="text-xs text-on-surface-variant">พิมพ์เหตุผลก่อน ปุ่มส่งกลับแก้ไขจึงจะกดได้</p>}
                 </div>
               ) : (
                 <p className="rounded-lg bg-[#eaf2ff] p-3 text-xs text-on-surface-variant">
@@ -678,7 +695,7 @@ export function TaskBoardAdmin({
                   {saving ? "กำลังบันทึก..." : openId === "new" ? "เพิ่มการ์ด" : "บันทึก"}
                 </button>
               )}
-              {openCard && isHead && openCard.status === "done" && (
+              {openCard && isHead && openCard.status === "done" && !canReviewCard(openCard) && (
                 <button onClick={() => move(openCard, "doing")} disabled={saving} className="h-10 rounded-lg border border-outline-variant px-4 text-sm font-semibold">
                   ↺ เปิดงานใหม่
                 </button>
