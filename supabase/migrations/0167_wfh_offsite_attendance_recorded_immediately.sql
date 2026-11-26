@@ -1,0 +1,6 @@
+-- WFH / off-site leave (owner 2026-11-26): when HR enters or EDITS an approved WFH / off-site request, the attendance rows are
+-- recorded right away (shift times, status work_from_home / off_site), not at the end of the day. Before, only the approval step
+-- wrote the rows, so a day added by editing the dates afterwards (e.g. ภูมิ 24-25 Nov extended to 26) had no row until the
+-- nightly job. fill_wfh_offsite_attendance() is the same logic as the approval step, idempotent (never overwrites a real clock-in/out);
+-- a trigger runs it whenever an approved request's dates / times / unit change. Applied to production, with a 60-day backfill.
+-- (Function bodies as applied: see the database; summary above.)
