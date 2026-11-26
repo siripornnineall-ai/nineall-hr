@@ -48,7 +48,8 @@ export default async function LeavePage({
   // A request is in range when it overlaps [from, to].
   if (fromFilter) leaveQuery = leaveQuery.gte("end_date", fromFilter);
   if (toFilter) leaveQuery = leaveQuery.lte("start_date", toFilter);
-  leaveQuery = leaveQuery.order("created_at", { ascending: false }).limit(rowLimit);
+  // Sorted by leave date (latest first, owner 2026-11-26); requests on the same day keep newest-submitted first.
+  leaveQuery = leaveQuery.order("start_date", { ascending: false }).order("created_at", { ascending: false }).limit(rowLimit);
 
   // employees must be disambiguated: leave_requests has two FKs to employees
   // (employee_id and delegate_employee_id), so a bare `employees(...)` embed is
