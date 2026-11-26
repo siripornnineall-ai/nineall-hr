@@ -36,8 +36,29 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   // (no row either way) falls through both and simply never appears here, indistinguishable
   // from the page just not loading them. Surface that gap explicitly instead of hiding it.
   const presentIds = new Set(rows.map((r) => r.employeeId));
-  const missingEmployees = (allEmployees ?? []).filter((e) => !presentIds.has(e.id));
-  const missingPhotoMap = await signAvatarUrls(supabase, missingEmployees.map((e) => e.photo_url));
+  const notPresent = (allEmployees ?? []).filter((e) => !presentIds.has(e.id));
+
+  // Approved WFH / off-site leave covering this date: those people have no attendance row yet (it is filled when the day is over, or
+  // when they clock in), but they are NOT "missing" — show them as working from home / off-site (owner 2026-11-26).
+  const { data: remoteLeaves } = notPresent.length
+    ? await supabase
+        .from("leave_requests")
+        .select("employee_id, unit, start_time, end_time, leave_types!inner(code, name_th)")
+        .eq("org_id", user.orgId)
+        .eq("status", "approved")
+        .lte("start_date", workDate)
+        .gte("end_date", workDate)
+        .in("leave_types.code", ["WFH", "OFFSITE"])
+    : { data: [] };
+  const remoteByEmployee = new Map<string, string>();
+  for (const l of (remoteLeaves ?? []) as unknown as { employee_id: string; unit: string; start_time: string | null; end_time: string | null; leave_types: { code: string; name_th: string } }[]) {
+    const label = l.leave_types.code === "WFH" ? "Work From Home" : "ทำงานนอกสถานที่";
+    const part = l.unit !== "full_day" && l.start_time && l.end_time ? ` ${l.start_time.slice(0, 5)}–${l.end_time.slice(0, 5)}` : "";
+    remoteByEmployee.set(l.employee_id, `${label}${part}`);
+  }
+  const remoteEmployees = notPresent.filter((e) => remoteByEmployee.has(e.id));
+  const missingEmployees = notPresent.filter((e) => !remoteByEmployee.has(e.id));
+  const missingPhotoMap = await signAvatarUrls(supabase, [...remoteEmployees, ...missingEmployees].map((e) => e.photo_url));
 
   return (
     <>
@@ -99,6 +120,29 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
             </table>
           </div>
         </div>
+
+        {remoteEmployees.length > 0 && (
+          <div className="overflow-hidden rounded-xl border border-blue-200 bg-blue-50 shadow-sm">
+            <div className="border-b border-blue-200 px-4 py-3">
+              <p className="text-sm font-bold text-blue-900">WFH / ทำงานนอกสถานที่ (อนุมัติแล้ว) — {remoteEmployees.length} คน</p>
+              <p className="text-xs text-blue-800">ยังไม่มีข้อมูลเข้า–ออกงานของวันนี้ ระบบจะบันทึกให้เมื่อพนักงานกดเข้างาน หรือเมื่อสิ้นวัน</p>
+            </div>
+            <ul className="divide-y divide-blue-100">
+              {remoteEmployees.map((e) => (
+                <li key={e.id} className="flex items-center justify-between px-4 py-2.5">
+                  <Link href={`/attendance/${e.id}`} className="flex items-center gap-2 hover:text-primary hover:underline">
+                    <Avatar url={e.photo_url ? (missingPhotoMap.get(e.photo_url) ?? null) : null} size={28} />
+                    <span className="text-sm font-semibold">
+                      {e.first_name} {e.last_name}
+                      <span className="ml-2 text-xs font-normal text-on-surface-variant">{e.employee_code}</span>
+                    </span>
+                  </Link>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-800">{remoteByEmployee.get(e.id)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {missingEmployees.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
