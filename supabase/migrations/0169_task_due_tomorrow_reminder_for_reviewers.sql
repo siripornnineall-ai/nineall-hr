@@ -1,0 +1,5 @@
+-- Reviewer reminder (owner 2026-11-27): the day before cards are due, the admins / reviewers get a push + in-app notification
+-- listing what is due tomorrow (how many wait for the check, how many are still open, up to 6 titles with the assignee).
+-- send_task_due_reminders(p_date, p_dry_run) runs daily at 02:00 UTC = 09:00 Bangkok (cron 'task-due-tomorrow-reminder'); recipients =
+-- active profiles with role super_admin / hr or employees.task_reviewer; once per recipient per due date (type 'task_due_tomorrow').
+-- Nothing is sent on days without cards due tomorrow. Applied to production; the function body is in the database.
