@@ -1,0 +1,9 @@
+-- Scheduled resignation (owner 2026-11-27): a resignation / termination whose last day is today or in the future must NOT remove the
+-- person yet. offboard_employee() now only records the plan (employees.pending_exit_status + resignation_date / termination_date),
+-- the person stays active (login, attendance, leave, OT...) and apply_scheduled_offboarding() (cron 17:15 UTC = 00:15 Bangkok)
+-- flips them to resigned / terminated and closes the login after the last day has passed (the existing trigger
+-- employee_leave_cleanup does the ban / session / placeholder cleanup). A past last day is applied immediately as before.
+-- cancel_scheduled_offboarding() lets HR undo a plan. Applied to production; the function bodies are in the database.
+--   alter table employees add column pending_exit_status text check (pending_exit_status in ('resigned','terminated'));
+--   finish_offboarding(uuid), apply_scheduled_offboarding(), offboard_employee(...) (replaced), cancel_scheduled_offboarding(uuid)
+--   select cron.schedule('apply-scheduled-offboarding', '15 17 * * *', 'select public.apply_scheduled_offboarding()');

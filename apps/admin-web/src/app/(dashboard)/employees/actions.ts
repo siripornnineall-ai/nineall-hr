@@ -591,6 +591,17 @@ export async function offboardEmployeeAction(
   revalidatePath(`/employees/${employeeId}`);
 }
 
+// Cancels a scheduled (future-dated) resignation / termination: the person simply carries on.
+export async function cancelScheduledOffboardingAction(employeeId: string) {
+  const user = await requireUser();
+  requireRole(user, ["super_admin", "hr"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_scheduled_offboarding", { p_employee_id: employeeId });
+  if (error) throw new Error(error.message);
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${employeeId}`);
+}
+
 type LeaveBalanceValues = Record<string, string | boolean>;
 const lbStr = (v: LeaveBalanceValues, key: string) => (typeof v[key] === "string" ? (v[key] as string).trim() : "");
 const lbNum = (v: LeaveBalanceValues, key: string, fallback = 0) => {

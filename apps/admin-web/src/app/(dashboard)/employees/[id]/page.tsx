@@ -51,7 +51,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const { data: employee } = await supabase
     .from("employees")
     .select(
-      "id, employee_code, first_name, last_name, first_name_en, last_name_en, nickname, title_prefix, gender, gender_identity, nationality, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, photo_url, national_id, id_card_address, current_address, department_id, job_position_id, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
+      "id, employee_code, first_name, last_name, first_name_en, last_name_en, nickname, title_prefix, gender, gender_identity, nationality, bio, phone, personal_email, hire_date, probation_end_date, employment_type, employment_status, pending_exit_status, resignation_date, termination_date, photo_url, national_id, id_card_address, current_address, department_id, job_position_id, departments(name), job_positions(title), teams!employees_team_id_fkey(name)"
     )
     .eq("org_id", user.orgId)
     .eq("id", id)
@@ -225,7 +225,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
                 />
               )}
               {hasLoginAccount && <ResetPasswordButton employeeId={employee.id} loginEmail={existingProfile?.email ?? null} />}
-              <OffboardButton employeeId={employee.id} currentStatus={employee.employment_status} />
+              <OffboardButton
+                employeeId={employee.id}
+                currentStatus={employee.employment_status}
+                pendingExitStatus={(employee as unknown as { pending_exit_status: string | null }).pending_exit_status ?? null}
+                pendingExitDate={
+                  ((employee as unknown as { pending_exit_status: string | null; resignation_date: string | null; termination_date: string | null }).pending_exit_status === "terminated"
+                    ? (employee as unknown as { termination_date: string | null }).termination_date
+                    : (employee as unknown as { resignation_date: string | null }).resignation_date) ?? null
+                }
+              />
               <DeleteEmployeeButton employeeId={employee.id} />
             </>
           )}
